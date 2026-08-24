@@ -6,7 +6,7 @@ import SystemConfiguration from '../components/admin/SystemConfiguration';
 import UserManagement from '../components/admin/UserManagement';
 import InstitutionalAnalytics from '../components/admin/InstitutionalAnalytics';
 import SecurityLogs from '../components/admin/SecurityLogs';
-import { useToast } from '../hooks/use-toast'; // Import ang useToast
+import { useToast } from '../hooks/use-toast';
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -16,7 +16,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [commandOpen, setCommandOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { toast } = useToast(); // Initialize toast
+  const { toast } = useToast();
 
   const navigationItems = [
     { label: 'Configuration', path: '/admin', icon: 'Settings' },
@@ -30,29 +30,32 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     setCommandOpen(false);
   };
 
-  // Wrapper function para sa Logout na may Toast
   const handleLogoutWithToast = () => {
     toast({
-      title: "Logout Successful",
-      description: "You have been logged out.",
-      className: "bg-green-600 text-white border-none", // Green color
+      title: "GLOBAL ADMIN LOGOUT",
+      description: "Master root authentication token cleared.",
+      className: "bg-emerald-600 text-white font-black uppercase tracking-tight border-none rounded-3xl shadow-2xl py-6",
     });
-    onLogout();
+    
+    setTimeout(() => {
+      onLogout();
+    }, 1200);
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-slate-50/50 antialiased selection:bg-emerald-600 selection:text-white">
       <TopNavBar
         role="admin"
-        userName="Admin User"
+        userName="Admin Configuration Root"
         campus="System Wide"
-        onLogout={handleLogoutWithToast} // Pinalitan ang original onLogout
+        onLogout={handleLogoutWithToast}
         onCommandOpen={() => setCommandOpen(true)}
         navigationItems={navigationItems}
         currentPath={location.pathname}
       />
 
-      <main className="max-w-[1440px] mx-auto px-6 py-8 mt-[72px]">
+      {/* Global Config Frame */}
+      <main className="max-w-[1440px] mx-auto px-8 py-10 mt-[80px] animate-in fade-in slide-in-from-bottom-4 duration-700">
         <Routes>
           <Route path="/" element={<SystemConfiguration />} />
           <Route path="/users" element={<UserManagement />} />

@@ -1,7 +1,9 @@
+import 'dotenv/config';
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import cors from 'cors';
 import bcrypt from 'bcryptjs'; // ← bcryptjs, hindi bcrypt (mas stable sa Vercel serverless)
+
 
 const app = express();
 
@@ -164,3 +166,8 @@ app.get('/api/admin/security-logs', async (req, res) => {
 });
 
 export default app;
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`✅ Backend running on http://localhost:${PORT}`);
+});

@@ -1,371 +1,1675 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '../../components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
 import { Label } from '../../components/ui/label';
-import { ToastAction } from "../../components/ui/toast";
-import { 
-  Upload, Search, FileText, Trash2, Loader2, Calendar, 
-  Download, Eye, Image as ImageIcon, Globe, TrendingUp, X, ArrowLeft, FileCheck, Youtube, Link as LinkIcon, Film
-} from 'lucide-react';
+import { Textarea } from '../../components/ui/textarea';
 import { useToast } from '../../hooks/use-toast';
 
-export default function MaterialLibrary() {
-  const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const [materials, setMaterials] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+import {
+  FileText,
+  Download,
+  Eye,
+  Loader2,
+  HardDrive,
+  Search,
+  Calendar,
+  Maximize2,
+  Youtube,
+  Plus,
+  Edit,
+  Trash2,
+  Camera,
+  AlertCircle,
+  Tag,
+  Filter,
+} from 'lucide-react';
 
-  // Modals & States
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [isYoutubeMode, setIsYoutubeMode] = useState(false);
-  const [previewFile, setPreviewFile] = useState<any | null>(null);
-  const [tempFile, setTempFile] = useState<File | null>(null);
-  
-  // Form States
-  const [editTitle, setEditTitle] = useState('');
-  const [editCategory, setEditCategory] = useState('General Awareness');
-  const [editDescription, setEditDescription] = useState('');
-  const [youtubeUrl, setYoutubeUrl] = useState('');
+type MaterialType = 'PDF' | 'Image' | 'Video';
+
+const IEC_CATEGORIES = [
+  'Guidance Services',
+  'Academic Development',
+  'Career Development',
+  'Personal & Social Development',
+  'Mental Health & Wellness',
+  'Psychological Testing & Assessment',
+  'Safe & Positive Learning Environment',
+  'Student Programs & Resources',
+] as const;
+
+const PROGRAM_COMPONENTS = [
+  'Group Guidance',
+  'Individual Student Planning',
+  'Responsive Services',
+  'System Support',
+] as const;
+
+interface Material {
+  id: number;
+  title: string;
+  type: MaterialType;
+  category: string;
+  program_component?: string | null;
+  tags?: string[] | null;
+  description?: string | null;
+  image_url?: string | null;
+  file_url?: string | null;
+  created_at?: string;
+}
+
+interface FormData {
+  title: string;
+  type: MaterialType;
+  category: string;
+  program_component: string;
+  tags: string;
+  description: string;
+  file_url: string;
+}
+
+const DEFAULT_FORM: FormData = {
+  title: '',
+  type: 'PDF',
+  category: IEC_CATEGORIES[0],
+  program_component: PROGRAM_COMPONENTS[0],
+  tags: '',
+  description: '',
+  file_url: '',
+};
+
+export default function IECMaterials() {
+  const { toast } = useToast();
+
+  const [activeTab, setActiveTab] = useState('articles');
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedComponent, setSelectedComponent] = useState('All');
+  const [selectedTag, setSelectedTag] = useState('All');
+
+  // Preview
+  const [previewItem, setPreviewItem] = useState<Material | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  // Add / Edit
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+
+  // Delete
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [deleteTargetTitle, setDeleteTargetTitle] = useState('');
+
+  // Files
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
+
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState('');
+  const [attachedDocument, setAttachedDocument] = useState<File | null>(null);
+
+  const [formData, setFormData] = useState<FormData>(DEFAULT_FORM);
 
   useEffect(() => {
     fetchMaterials();
   }, []);
 
+  // =========================================================
+  // FETCH
+  // =========================================================
+
   async function fetchMaterials() {
     try {
       setLoading(true);
-      const { data, error } = await supabase.from('materials').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      setMaterials(data || []);
+
+      const { data, error } = await supabase
+        .from('materials')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      setMaterials((data || []) as Material[]);
     } catch (error: any) {
-      toast({ title: "SYNC ERROR", description: "Failed to load library.", variant: "destructive" });
+      toast({
+        variant: 'destructive',
+        title: 'Fetch Error',
+        description: error?.message || 'Unable to load materials.',
+      });
     } finally {
       setLoading(false);
     }
   }
 
-  const onFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  // =========================================================
+  // OPEN ADD / EDIT
+  // =========================================================
+
+  const handleOpenDialog = (material?: Material) => {
+    if (material) {
+      setEditingId(material.id);
+
+      setFormData({
+        title: material.title || '',
+        type: material.type || 'PDF',
+        category: IEC_CATEGORIES.includes(material.category as any)
+          ? material.category
+          : IEC_CATEGORIES[0],
+        program_component: material.program_component || PROGRAM_COMPONENTS[0],
+        tags: (material.tags || []).join(', '),
+        description: material.description || '',
+        file_url: material.type === 'Video' ? material.file_url || '' : '',
+      });
+
+      setPreviewImageUrl(material.image_url || '');
+    } else {
+      setEditingId(null);
+      setFormData({ ...DEFAULT_FORM });
+      setPreviewImageUrl('');
+    }
+
+    setSelectedImage(null);
+    setAttachedDocument(null);
+
+    if (imageInputRef.current) {
+      imageInputRef.current.value = '';
+    }
+
+    if (documentInputRef.current) {
+      documentInputRef.current.value = '';
+    }
+
+    setIsDialogOpen(true);
+  };
+
+  // =========================================================
+  // FILE VALIDATION
+  // =========================================================
+
+  const validateImage = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast({
+        variant: 'destructive',
+        title: 'Invalid Image',
+        description: 'Please select a valid image file.',
+      });
+
+      return false;
+    }
+
+    return true;
+  };
+
+  const validatePdf = (file: File) => {
+    const isPdf =
+      file.type === 'application/pdf' ||
+      file.name.toLowerCase().endsWith('.pdf');
+
+    if (!isPdf) {
+      toast({
+        variant: 'destructive',
+        title: 'Invalid Document',
+        description: 'Only PDF files are allowed.',
+      });
+
+      return false;
+    }
+
+    return true;
+  };
+
+  // =========================================================
+  // IMAGE SELECT
+  // =========================================================
+
+  const handleImageSelect = (
+    event: React.ChangeEvent<HTMLInputElement>,
+    isMainImage = false
+  ) => {
     const file = event.target.files?.[0];
-    if (file) {
-      setTempFile(file);
-      setIsYoutubeMode(false);
-      setEditTitle(file.name.split('.')[0]);
-      setIsUploadModalOpen(true);
+
+    if (!file) return;
+
+    if (!validateImage(file)) {
+      event.target.value = '';
+      return;
+    }
+
+    setSelectedImage(file);
+
+    // Preview only for image material
+    if (isMainImage || formData.type === 'Image') {
+      const objectUrl = URL.createObjectURL(file);
+      setPreviewImageUrl(objectUrl);
     }
   };
 
-  const handleFinalUpload = async () => {
-    if (!isYoutubeMode && !tempFile) {
-        toast({ title: "NO FILE SELECTED", variant: "destructive", className: "font-black uppercase" });
-        return;
+  // =========================================================
+  // PDF SELECT
+  // =========================================================
+
+  const handleDocumentSelect = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    if (!validatePdf(file)) {
+      event.target.value = '';
+      return;
     }
-    if (isYoutubeMode && !youtubeUrl) {
-        toast({ title: "YOUTUBE LINK REQUIRED", variant: "destructive", className: "font-black uppercase" });
-        return;
+
+    setAttachedDocument(file);
+  };
+
+  // =========================================================
+  // UPLOAD STORAGE FILE
+  // =========================================================
+
+  const uploadFile = async (
+    bucket: string,
+    folder: string,
+    file: File
+  ): Promise<string> => {
+    const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+    const path = `${folder}/${Date.now()}_${safeFileName}`;
+
+    const { error } = await supabase.storage
+      .from(bucket)
+      .upload(path, file, {
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    const { data } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(path);
+
+    return data.publicUrl;
+  };
+
+  // =========================================================
+  // SAVE
+  // =========================================================
+
+  const handleSave = async () => {
+    if (!formData.title.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Missing Title',
+        description: 'Please enter a material title.',
+      });
+
+      return;
+    }
+
+    if (formData.type === 'Video' && !formData.file_url.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Missing Video URL',
+        description: 'Please enter a YouTube URL.',
+      });
+
+      return;
+    }
+
+    if (formData.type === 'PDF' && !editingId && !attachedDocument) {
+      toast({
+        variant: 'destructive',
+        title: 'Missing PDF',
+        description: 'Please attach a PDF document.',
+      });
+
+      return;
+    }
+
+    if (formData.type === 'Image' && !editingId && !selectedImage) {
+      toast({
+        variant: 'destructive',
+        title: 'Missing Image',
+        description: 'Please select an infographic image.',
+      });
+
+      return;
     }
 
     try {
-      setUploading(true);
-      let finalUrl = youtubeUrl;
-      let fileExt = 'LINK';
-      let size = '0 MB';
-      let type = 'Video';
+      setLoading(true);
 
-      if (!isYoutubeMode && tempFile) {
-        fileExt = tempFile.name.split('.').pop()?.toLowerCase() || '';
-        const fileName = `${Date.now()}.${fileExt}`;
-        const filePath = `public/${fileName}`;
+      const existingMaterial = editingId
+        ? materials.find((material) => material.id === editingId)
+        : null;
 
-        // Pag-upload sa Supabase Storage
-        const { error: uploadError } = await supabase.storage.from('library').upload(filePath, tempFile);
-        if (uploadError) throw uploadError;
+      let finalImageUrl = existingMaterial?.image_url || '';
+      let finalFileUrl = existingMaterial?.file_url || '';
 
-        const { data: { publicUrl } } = supabase.storage.from('library').getPublicUrl(filePath);
-        finalUrl = publicUrl;
-        
-        // Dynamic Type Checking
-        const videoExtensions = ['mp4', 'webm', 'ogg', 'mov'];
-        const imageExtensions = ['webp', 'png', 'jpg', 'jpeg'];
-        
-        if (videoExtensions.includes(fileExt)) {
-          type = 'Video';
-        } else if (imageExtensions.includes(fileExt)) {
-          type = 'Image';
-        } else {
-          type = tempFile.type.includes('pdf') ? 'PDF' : 'Document';
+      // -------------------------------------------------------
+      // IMAGE UPLOAD
+      // -------------------------------------------------------
+
+      if (selectedImage) {
+        finalImageUrl = await uploadFile(
+          'material-covers',
+          'covers',
+          selectedImage
+        );
+
+        // For Image type, the image itself is the main file
+        if (formData.type === 'Image') {
+          finalFileUrl = finalImageUrl;
         }
-
-        size = (tempFile.size / (1024 * 1024)).toFixed(1) + ' MB';
       }
 
-      const { error: dbError } = await supabase.from('materials').insert([{
-        title: editTitle,
-        description: editDescription,
-        category: editCategory,
-        file_url: finalUrl,
-        type: type,
-        format: fileExt.toUpperCase(),
-        size: size,
-        campus: 'Universal',
-        downloads: 0
-      }]);
+      // -------------------------------------------------------
+      // PDF UPLOAD
+      // -------------------------------------------------------
 
-      if (dbError) throw dbError;
+      if (formData.type === 'PDF' && attachedDocument) {
+        finalFileUrl = await uploadFile(
+          'material-files',
+          'documents',
+          attachedDocument
+        );
+      }
 
-      toast({ 
-        title: "CONTENT PUBLISHED", 
-        description: isYoutubeMode ? "Video link is now live." : "Material added to library.",
-        className: "bg-emerald-600 text-white font-black rounded-2xl"
-      });
-      
-      setIsUploadModalOpen(false);
-      setTempFile(null);
-      setYoutubeUrl('');
-      setEditTitle('');
-      setEditDescription('');
-      fetchMaterials();
+      // -------------------------------------------------------
+      // VIDEO URL
+      // -------------------------------------------------------
+
+      if (formData.type === 'Video') {
+        finalFileUrl = formData.file_url.trim();
+      }
+
+      // -------------------------------------------------------
+      // PAYLOAD
+      // -------------------------------------------------------
+
+      const normalizedTags = formData.tags
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+        .filter((tag, index, list) => list.indexOf(tag) === index);
+
+      const payload = {
+        title: formData.title.trim(),
+        type: formData.type,
+        category: formData.category,
+        program_component: formData.program_component,
+        tags: normalizedTags,
+        description: formData.description.trim(),
+        image_url: finalImageUrl || null,
+        file_url: finalFileUrl || null,
+      };
+
+      // -------------------------------------------------------
+      // UPDATE
+      // -------------------------------------------------------
+
+      if (editingId) {
+        const { error } = await supabase
+          .from('materials')
+          .update(payload)
+          .eq('id', editingId);
+
+        if (error) {
+          throw error;
+        }
+
+        toast({
+          title: 'Material Updated',
+          description: 'The material has been updated successfully.',
+        });
+      }
+
+      // -------------------------------------------------------
+      // INSERT
+      // -------------------------------------------------------
+
+      else {
+        const { error } = await supabase
+          .from('materials')
+          .insert([payload]);
+
+        if (error) {
+          throw error;
+        }
+
+        toast({
+          title: 'Material Published',
+          description: 'The new material has been added successfully.',
+        });
+      }
+
+      setIsDialogOpen(false);
+
+      setFormData({ ...DEFAULT_FORM });
+      setSelectedImage(null);
+      setAttachedDocument(null);
+      setPreviewImageUrl('');
+      setEditingId(null);
+
+      await fetchMaterials();
     } catch (error: any) {
-      toast({ title: "PUBLISH FAILED", description: error.message, variant: "destructive" });
+      toast({
+        variant: 'destructive',
+        title: 'Save Error',
+        description:
+          error?.message || 'Unable to save material.',
+      });
     } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      setLoading(false);
     }
   };
 
-  const getEmbedUrl = (url: string) => {
-    if (url.includes('youtube.com/watch?v=')) return url.replace('watch?v=', 'embed/');
-    if (url.includes('youtu.be/')) return url.replace('youtu.be/', 'youtube.com/embed/');
+  // =========================================================
+  // DELETE
+  // =========================================================
+
+  const triggerDeleteConfirm = (
+    id: number,
+    title: string
+  ) => {
+    setDeleteTargetId(id);
+    setDeleteTargetTitle(title);
+    setIsDeleteOpen(true);
+  };
+
+  const handleExecuteDelete = async () => {
+    if (deleteTargetId === null) return;
+
+    try {
+      setLoading(true);
+
+      const { error } = await supabase
+        .from('materials')
+        .delete()
+        .eq('id', deleteTargetId);
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: 'Deleted Successfully',
+        description: 'The material was removed successfully.',
+      });
+
+      setIsDeleteOpen(false);
+      setDeleteTargetId(null);
+      setDeleteTargetTitle('');
+
+      await fetchMaterials();
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Delete Error',
+        description:
+          error?.message || 'Unable to delete material.',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =========================================================
+  // PREVIEW
+  // =========================================================
+
+  const handlePreview = (item: Material) => {
+    setPreviewItem(item);
+    setIsPreviewOpen(true);
+  };
+
+  // =========================================================
+  // DOWNLOAD
+  // =========================================================
+
+  const downloadFile = async (
+    url: string,
+    filename: string
+  ) => {
+    if (!url) return;
+
+    try {
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error('Download failed.');
+      }
+
+      const blob = await response.blob();
+
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+
+      link.href = blobUrl;
+      link.download = filename || 'material';
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      window.URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(url, '_blank');
+    }
+  };
+
+  // =========================================================
+  // YOUTUBE
+  // =========================================================
+
+  const getYouTubeEmbedUrl = (url: string) => {
+    if (!url) return '';
+
+    try {
+      const parsedUrl = new URL(url);
+
+      // youtube.com/watch?v=
+      if (parsedUrl.hostname.includes('youtube.com')) {
+        const videoId = parsedUrl.searchParams.get('v');
+
+        if (videoId) {
+          return `https://www.youtube.com/embed/${videoId}`;
+        }
+      }
+
+      // youtu.be/VIDEO_ID
+      if (parsedUrl.hostname === 'youtu.be') {
+        const videoId = parsedUrl.pathname.substring(1);
+
+        if (videoId) {
+          return `https://www.youtube.com/embed/${videoId}`;
+        }
+      }
+    } catch {
+      // Invalid URL
+    }
+
     return url;
   };
 
-  const handleAction = async (item: any, mode: 'view' | 'download') => {
-    await supabase.from('materials').update({ downloads: (item.downloads || 0) + 1 }).eq('id', item.id);
-    setMaterials(materials.map(m => m.id === item.id ? { ...m, downloads: (m.downloads || 0) + 1 } : m));
+  // =========================================================
+  // FILTER
+  // =========================================================
 
-    if (mode === 'download' && item.format !== 'LINK') {
-      toast({ title: "DOWNLOADING...", description: "Please wait while we fetch your file.", className: "font-black uppercase" });
-      const link = document.createElement('a');
-      link.href = item.file_url;
-      link.setAttribute('download', `${item.title}`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } else {
-      setPreviewFile(item);
-    }
-  };
+  const allTags = Array.from(
+    new Set(materials.flatMap((material) => material.tags || []))
+  ).sort((a, b) => a.localeCompare(b));
 
-  const handleDelete = (id: number) => {
-    toast({
-      title: "DELETE THIS ITEM?",
-      description: "This will permanently remove the material from the library.",
-      variant: "destructive",
-      className: "bg-slate-900 text-white font-black rounded-2xl border-none p-6 shadow-2xl",
-      action: (
-        <div className="flex gap-2">
-          <ToastAction altText="No" className="bg-slate-700 text-white font-black rounded-xl text-[10px] uppercase">No</ToastAction>
-          <ToastAction 
-            altText="Yes"
-            className="bg-red-600 text-white font-black rounded-xl px-4 py-2 text-[10px] uppercase shadow-lg shadow-red-500/20"
-            onClick={async () => {
-              try {
-                const { error } = await supabase.from('materials').delete().eq('id', id);
-                if (error) throw error;
-                setMaterials(prev => prev.filter(m => m.id !== id));
-                toast({ title: "DELETED", description: "Item removed from library.", className: "bg-slate-800 text-white font-black rounded-2xl" });
-              } catch (error: any) {
-                toast({ variant: "destructive", title: "DELETE FAILED", description: error.message });
-              }
-            }}
-          >
-            Yes, Delete
-          </ToastAction>
-        </div>
-      ),
-    });
-  };
+  const normalizedSearch = searchQuery.trim().toLowerCase();
 
-  if (loading) return (
-    <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
-      <Loader2 className="animate-spin text-indigo-600 w-12 h-12" />
-      <p className="font-black uppercase text-[10px] tracking-[0.3em] text-slate-400">Syncing Materials...</p>
-    </div>
+  const filteredData = materials.filter((material) => {
+    const searchableText = [
+      material.title,
+      material.description || '',
+      material.category,
+      material.program_component || '',
+      ...(material.tags || []),
+    ]
+      .join(' ')
+      .toLowerCase();
+
+    const matchesSearch =
+      !normalizedSearch || searchableText.includes(normalizedSearch);
+    const matchesCategory =
+      selectedCategory === 'All' || material.category === selectedCategory;
+    const matchesComponent =
+      selectedComponent === 'All' ||
+      material.program_component === selectedComponent;
+    const matchesTag =
+      selectedTag === 'All' || (material.tags || []).includes(selectedTag);
+
+    return matchesSearch && matchesCategory && matchesComponent && matchesTag;
+  });
+
+  const articles = filteredData.filter(
+    (material) =>
+      material.type === 'PDF' ||
+      material.file_url
+        ?.toLowerCase()
+        .split('?')[0]
+        .endsWith('.pdf')
   );
 
+  const infographics = filteredData.filter(
+    (material) =>
+      material.type === 'Image' ||
+      /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(material.file_url || '')
+  );
+
+  const videos = filteredData.filter(
+    (material) =>
+      material.type === 'Video' ||
+      material.file_url?.includes('youtube.com') ||
+      material.file_url?.includes('youtu.be')
+  );
+
+  // =========================================================
+  // RENDER
+  // =========================================================
+
   return (
-    <div className="space-y-8 p-6 max-w-7xl mx-auto relative min-h-screen font-sans">
-      {/* File input accepting videos now */}
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={onFileSelect} 
-        className="hidden" 
-        accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.mp4,.webm,.mov" 
-      />
+    <div className="space-y-8 p-6 max-w-7xl mx-auto animate-in fade-in duration-700">
 
-      {/* --- PREVIEWER --- */}
-      {previewFile && (
-        <div className="fixed inset-0 z-[200] bg-slate-900 flex flex-col animate-in fade-in duration-300">
-          <div className="h-20 bg-white/5 backdrop-blur-xl flex items-center justify-between px-8 border-b border-white/10">
-            <div className="flex items-center gap-6 text-white">
-              <button onClick={() => setPreviewFile(null)} className="p-3 hover:bg-white/10 rounded-2xl transition-all"><ArrowLeft /></button>
-              <h2 className="font-black uppercase text-sm tracking-widest">{previewFile.title}</h2>
-            </div>
-          </div>
-          <div className="flex-1 bg-slate-950 flex items-center justify-center p-6">
-            {previewFile.type === 'Video' ? (
-              previewFile.format === 'LINK' ? (
-                <iframe src={getEmbedUrl(previewFile.file_url)} className="w-full max-w-5xl aspect-video rounded-3xl shadow-2xl border-none" allowFullScreen title="YouTube Video" />
-              ) : (
-                <video 
-                  src={previewFile.file_url} 
-                  controls 
-                  className="w-full max-w-5xl aspect-video rounded-3xl shadow-2xl bg-black"
-                  controlsList="nodownload"
-                >
-                  Your browser does not support the video tag.
-                </video>
-              )
-            ) : previewFile.type === 'Image' ? (
-              <img src={previewFile.file_url} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" />
-            ) : (
-              <iframe src={previewFile.file_url} className="w-full h-full rounded-2xl bg-white" title="Preview" />
-            )}
-          </div>
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+
+        <div className="space-y-1">
+          <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">
+            IEC{' '}
+            <span className="text-indigo-600">
+              Materials
+            </span>
+          </h1>
+
+          <p className="text-slate-500 font-medium flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-indigo-400" />
+            Guidance Resources Library
+          </p>
         </div>
-      )}
 
-      {/* --- UPLOAD MODAL --- */}
-      {isUploadModalOpen && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in zoom-in duration-300">
-          <Card className="w-full max-w-lg bg-white rounded-[3rem] p-10 shadow-2xl border-none relative">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-3xl font-black uppercase tracking-tighter">Publish Content</h2>
-              <button onClick={() => setIsUploadModalOpen(false)} className="p-2 hover:bg-slate-50 rounded-full transition-all"><X /></button>
+        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-center">
+
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+
+            <Input
+              placeholder="Search materials..."
+              value={searchQuery}
+              onChange={(event) =>
+                setSearchQuery(event.target.value)
+              }
+              className="pl-11 h-12 bg-slate-50 border-none rounded-2xl"
+            />
+          </div>
+
+          <Button
+            onClick={() => handleOpenDialog()}
+            className="h-12 w-full sm:w-auto px-6 rounded-2xl font-black bg-indigo-600 hover:bg-indigo-700 text-white uppercase text-[10px] tracking-wider"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Upload Material
+          </Button>
+        </div>
+      </div>
+
+      {/* FILTERS */}
+      <Card className="p-5 bg-white border-none shadow-sm rounded-[2rem]">
+        <div className="flex items-center gap-2 mb-4">
+          <Filter className="w-4 h-4 text-indigo-600" />
+          <h2 className="text-xs font-black uppercase tracking-widest text-slate-700">
+            Filter IEC Materials
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)} className="select-field">
+            <option value="All">All IEC Categories</option>
+            {IEC_CATEGORIES.map((category) => (
+              <option key={category} value={category}>{category}</option>
+            ))}
+          </select>
+
+          <select value={selectedComponent} onChange={(event) => setSelectedComponent(event.target.value)} className="select-field">
+            <option value="All">All Program Components</option>
+            {PROGRAM_COMPONENTS.map((component) => (
+              <option key={component} value={component}>{component}</option>
+            ))}
+          </select>
+
+          <select value={selectedTag} onChange={(event) => setSelectedTag(event.target.value)} className="select-field">
+            <option value="All">All Tags</option>
+            {allTags.map((tag) => (
+              <option key={tag} value={tag}>{tag}</option>
+            ))}
+          </select>
+        </div>
+      </Card>
+
+      {/* TABS */}
+
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="w-full"
+      >
+        <TabsList className="bg-slate-100/50 p-1.5 rounded-2xl mb-8 border border-slate-100">
+
+          <TabsTrigger
+            value="articles"
+            className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs"
+          >
+            Articles
+          </TabsTrigger>
+
+          <TabsTrigger
+            value="infographics"
+            className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs"
+          >
+            Infographics
+          </TabsTrigger>
+
+          <TabsTrigger
+            value="videos"
+            className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs"
+          >
+            Videos & Links
+          </TabsTrigger>
+
+        </TabsList>
+
+        {loading ? (
+          <div className="h-64 flex flex-col items-center justify-center gap-4">
+            <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
+
+            <p className="text-slate-400 font-bold uppercase text-xs tracking-widest">
+              Loading Materials
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* =====================================================
+                ARTICLES
+            ====================================================== */}
+
+            <TabsContent
+              value="articles"
+              className="grid grid-cols-1 md:grid-cols-2 gap-6 outline-none"
+            >
+              {articles.length > 0 ? (
+                articles.map((item) => (
+                  <Card
+                    key={item.id}
+                    className="p-6 bg-white border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all group relative"
+                  >
+                    <MaterialActions
+                      onEdit={() =>
+                        handleOpenDialog(item)
+                      }
+                      onDelete={() =>
+                        triggerDeleteConfirm(
+                          item.id,
+                          item.title
+                        )
+                      }
+                    />
+
+                    <div className="flex gap-5">
+
+                      <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-50">
+                        <FileText className="w-8 h-8 text-indigo-600" />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+
+                        <MaterialCategory
+                          category={item.category}
+                        />
+                        <MaterialMeta item={item} />
+
+                        <h3 className="text-xl font-black text-slate-800 truncate uppercase mt-1">
+                          {item.title}
+                        </h3>
+
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">
+                          {item.description
+                            ? item.description.substring(
+                                0,
+                                60
+                              ) +
+                              (item.description.length >
+                              60
+                                ? '...'
+                                : '')
+                            : 'Handout Document'}
+                        </p>
+
+                        <div className="flex gap-2">
+
+                          <Button
+                            onClick={() =>
+                              handlePreview(item)
+                            }
+                            className="flex-1 h-11 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs text-white"
+                          >
+                            <Eye className="w-3 h-3 mr-2" />
+                            Preview
+                          </Button>
+
+                          {item.file_url && (
+                            <Button
+                              onClick={() =>
+                                downloadFile(
+                                  item.file_url!,
+                                  item.title
+                                )
+                              }
+                              variant="outline"
+                              className="flex-1 h-11 border-slate-200 rounded-xl font-black uppercase text-xs"
+                            >
+                              <Download className="w-3 h-3 mr-2" />
+                              Save
+                            </Button>
+                          )}
+
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                ))
+              ) : (
+                <EmptyState message="No articles found" />
+              )}
+            </TabsContent>
+
+            {/* =====================================================
+                INFOGRAPHICS
+            ====================================================== */}
+
+            <TabsContent
+              value="infographics"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 outline-none"
+            >
+              {infographics.length > 0 ? (
+                infographics.map((item) => {
+
+                  const imageUrl =
+                    item.file_url ||
+                    item.image_url ||
+                    '';
+
+                  return (
+                    <Card
+                      key={item.id}
+                      className="overflow-hidden bg-white border-none shadow-sm rounded-[2.5rem] group hover:shadow-2xl transition-all duration-500 relative"
+                    >
+
+                      <MaterialActions
+                        onEdit={() =>
+                          handleOpenDialog(item)
+                        }
+                        onDelete={() =>
+                          triggerDeleteConfirm(
+                            item.id,
+                            item.title
+                          )
+                        }
+                      />
+
+                      <div className="relative h-64 bg-slate-100 overflow-hidden">
+
+                        {imageUrl ? (
+                          <img
+                            src={imageUrl}
+                            alt={item.title}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <HardDrive className="w-12 h-12 text-slate-300" />
+                          </div>
+                        )}
+
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+
+                          <Button
+                            onClick={() =>
+                              handlePreview(item)
+                            }
+                            className="rounded-full bg-white text-slate-900 h-12 w-12 p-0 shadow-xl"
+                          >
+                            <Maximize2 className="w-5 h-5" />
+                          </Button>
+
+                        </div>
+                      </div>
+
+                      <div className="p-6">
+
+                        <MaterialCategory
+                          category={item.category}
+                        />
+                        <MaterialMeta item={item} />
+
+                        <h3 className="font-black text-slate-800 truncate uppercase mt-1 mb-4">
+                          {item.title}
+                        </h3>
+
+                        {imageUrl && (
+                          <Button
+                            onClick={() =>
+                              downloadFile(
+                                imageUrl,
+                                item.title
+                              )
+                            }
+                            className="w-full h-12 bg-slate-900 hover:bg-indigo-600 rounded-2xl font-black uppercase text-xs text-white"
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            Download Image
+                          </Button>
+                        )}
+
+                      </div>
+                    </Card>
+                  );
+                })
+              ) : (
+                <EmptyState message="No infographics found" />
+              )}
+            </TabsContent>
+
+            {/* =====================================================
+                VIDEOS
+            ====================================================== */}
+
+            <TabsContent
+              value="videos"
+              className="grid grid-cols-1 md:grid-cols-2 gap-6 outline-none"
+            >
+              {videos.length > 0 ? (
+                videos.map((item) => (
+                  <Card
+                    key={item.id}
+                    className="p-8 bg-white border-none shadow-sm rounded-[2.5rem] group relative"
+                  >
+
+                    <MaterialActions
+                      onEdit={() =>
+                        handleOpenDialog(item)
+                      }
+                      onDelete={() =>
+                        triggerDeleteConfirm(
+                          item.id,
+                          item.title
+                        )
+                      }
+                    />
+
+                    <div className="flex items-center gap-6">
+
+                      <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center shrink-0">
+                        <Youtube className="w-10 h-10 text-red-600" />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+
+                        <MaterialCategory
+                          category={item.category}
+                        />
+                        <MaterialMeta item={item} />
+
+                        <h3 className="text-xl font-black text-slate-800 uppercase mt-1 mb-4 truncate">
+                          {item.title}
+                        </h3>
+
+                        <Button
+                          onClick={() =>
+                            handlePreview(item)
+                          }
+                          className="bg-red-600 hover:bg-red-700 h-12 px-8 rounded-2xl font-black uppercase text-xs text-white"
+                        >
+                          Watch Now
+                        </Button>
+
+                      </div>
+                    </div>
+                  </Card>
+                ))
+              ) : (
+                <EmptyState message="No videos found" />
+              )}
+            </TabsContent>
+          </>
+        )}
+      </Tabs>
+
+      {/* =========================================================
+          ADD / EDIT DIALOG
+      ========================================================== */}
+
+      <Dialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+      >
+        <DialogContent className="max-w-2xl bg-white rounded-3xl p-6 md:p-8 max-h-[92vh] overflow-y-auto border-none shadow-2xl">
+
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black uppercase italic tracking-tight text-slate-900">
+              {editingId ? 'Edit' : 'Upload'}{' '}
+              <span className="text-indigo-600">
+                Guidance Material
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="grid gap-5 mt-4">
+
+            {/* TITLE / TYPE */}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+              <div className="space-y-4">
+
+                <div className="space-y-1.5">
+                  <Label className="field-label">
+                    Resource Media Format
+                  </Label>
+
+                  <select
+                    value={formData.type}
+                    onChange={(event) => {
+                      const type =
+                        event.target.value as MaterialType;
+
+                      setFormData((previous) => ({
+                        ...previous,
+                        type,
+                        file_url:
+                          type === 'Video'
+                            ? previous.file_url
+                            : '',
+                      }));
+
+                      setSelectedImage(null);
+                      setAttachedDocument(null);
+                    }}
+                    className="select-field"
+                  >
+                    <option value="PDF">
+                      Article / Document (PDF)
+                    </option>
+
+                    <option value="Image">
+                      Infographic Graphic Image
+                    </option>
+
+                    <option value="Video">
+                      Video Streaming Link
+                    </option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+
+                  <Label className="field-label">
+                    Material Title
+                  </Label>
+
+                  <Input
+                    value={formData.title}
+                    onChange={(event) =>
+                      setFormData({
+                        ...formData,
+                        title: event.target.value,
+                      })
+                    }
+                    className="rounded-xl bg-slate-50 border-none h-12 font-bold px-4 text-slate-700"
+                    placeholder="e.g., Guide to Stress Management"
+                  />
+
+                </div>
+
+              </div>
+
+              <div className="space-y-1.5">
+
+                <Label className="field-label">
+                  Short Description
+                </Label>
+
+                <Textarea
+                  value={formData.description}
+                  onChange={(event) =>
+                    setFormData({
+                      ...formData,
+                      description:
+                        event.target.value,
+                    })
+                  }
+                  placeholder="Outline context details/notes here..."
+                  className="h-32 md:h-[114px] rounded-xl bg-slate-50 border-none p-4 font-medium text-slate-600 text-xs resize-none"
+                />
+
+              </div>
             </div>
 
-            <div className="space-y-4">
-              {isYoutubeMode ? (
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">YouTube URL</Label>
-                  <Input value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} placeholder="https://youtube.com/..." className="rounded-2xl h-14 bg-slate-50 border-none px-6 font-bold" />
-                </div>
-              ) : (
-                <div className="p-4 bg-indigo-50 rounded-2xl flex items-center gap-3">
-                    <FileCheck className="text-indigo-600" />
-                    <span className="text-xs font-bold text-indigo-900 truncate">{tempFile?.name}</span>
+            {/* CATEGORY / FILE */}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+              <div className="space-y-1.5">
+                <Label className="field-label">
+                  IEC Category
+                </Label>
+
+                <select
+                  value={formData.category}
+                  onChange={(event) =>
+                    setFormData({ ...formData, category: event.target.value })
+                  }
+                  className="select-field"
+                >
+                  {IEC_CATEGORIES.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="field-label">
+                  Program Component
+                </Label>
+
+                <select
+                  value={formData.program_component}
+                  onChange={(event) =>
+                    setFormData({ ...formData, program_component: event.target.value })
+                  }
+                  className="select-field"
+                >
+                  {PROGRAM_COMPONENTS.map((component) => (
+                    <option key={component} value={component}>
+                      {component}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="field-label flex items-center gap-1">
+                  <Tag className="w-3 h-3" />
+                  Tags
+                </Label>
+                <Input
+                  value={formData.tags}
+                  onChange={(event) =>
+                    setFormData({ ...formData, tags: event.target.value })
+                  }
+                  className="rounded-xl bg-slate-50 border-none h-12 font-bold px-4 text-slate-700"
+                  placeholder="e.g. study skills, academic success, learning strategies"
+                />
+                <p className="text-[10px] text-slate-400 font-medium">
+                  Separate multiple tags with commas.
+                </p>
+              </div>
+
+              {/* PDF */}
+
+              {formData.type === 'PDF' && (
+                <div className="space-y-1.5">
+
+                  <Label className="field-label">
+                    Document Attachment (.pdf)
+                  </Label>
+
+                  <div
+                    onClick={() =>
+                      documentInputRef.current?.click()
+                    }
+                    className="h-12 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center px-4 cursor-pointer text-slate-600 text-xs"
+                  >
+
+                    <FileText className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
+
+                    <span className="truncate flex-1 font-bold">
+                      {attachedDocument
+                        ? attachedDocument.name
+                        : editingId
+                        ? 'Replace PDF Document...'
+                        : 'Choose PDF Document...'}
+                    </span>
+
+                    <input
+                      type="file"
+                      ref={documentInputRef}
+                      className="hidden"
+                      accept=".pdf,application/pdf"
+                      onChange={
+                        handleDocumentSelect
+                      }
+                    />
+
+                  </div>
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-400">Title</Label>
-                <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="rounded-2xl h-14 bg-slate-50 border-none px-6 font-bold" />
-              </div>
+              {/* IMAGE */}
 
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-400">Category</Label>
-                <select className="w-full h-14 rounded-2xl bg-slate-50 border-none px-6 font-bold text-sm" value={editCategory} onChange={(e) => setEditCategory(e.target.value)}>
-                  <option value="General Awareness">General Awareness</option>
-                  <option value="Academic Support">Academic Support</option>
-                  <option value="Psychosocial Resource">Psychosocial Resource</option>
-                  <option value="Policy/Manual">Policy / Manual</option>
-                </select>
-              </div>
-              
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-400">Description</Label>
-                <textarea className="w-full rounded-2xl bg-slate-50 border-none p-6 font-medium text-sm min-h-[100px]" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
-              </div>
+              {formData.type === 'Image' && (
+                <div className="space-y-1.5">
+
+                  <Label className="field-label">
+                    Infographic File Asset
+                  </Label>
+
+                  <div
+                    onClick={() =>
+                      imageInputRef.current?.click()
+                    }
+                    className="h-12 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center px-4 cursor-pointer text-slate-600 text-xs"
+                  >
+
+                    <Camera className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
+
+                    <span className="truncate flex-1 font-bold">
+                      {selectedImage
+                        ? selectedImage.name
+                        : editingId
+                        ? 'Replace Graphic Image...'
+                        : 'Choose Graphic Image...'}
+                    </span>
+
+                    <input
+                      type="file"
+                      ref={imageInputRef}
+                      className="hidden"
+                      accept="image/*"
+                      onChange={(event) =>
+                        handleImageSelect(
+                          event,
+                          true
+                        )
+                      }
+                    />
+
+                  </div>
+                </div>
+              )}
+
+              {/* VIDEO */}
+
+              {formData.type === 'Video' && (
+                <div className="space-y-1.5">
+
+                  <Label className="field-label text-red-500">
+                    YouTube Streaming URL
+                  </Label>
+
+                  <Input
+                    value={formData.file_url}
+                    onChange={(event) =>
+                      setFormData({
+                        ...formData,
+                        file_url:
+                          event.target.value,
+                      })
+                    }
+                    className="rounded-xl bg-slate-50 border-none h-12 font-bold px-4 text-slate-700"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                  />
+
+                </div>
+              )}
             </div>
 
-            <Button onClick={handleFinalUpload} disabled={uploading} className="w-full h-16 bg-indigo-600 hover:bg-indigo-700 rounded-[2rem] font-black uppercase mt-8 text-white transition-all shadow-xl">
-              {uploading ? <Loader2 className="animate-spin mr-2" /> : <Upload className="mr-2" />}
-              Publish Now
+            {/* OPTIONAL COVER */}
+
+            {formData.type !== 'Image' && (
+              <div className="space-y-1.5">
+
+                <Label className="field-label">
+                  Display Banner Image Cover
+                  (Optional)
+                </Label>
+
+                <div
+                  onClick={() =>
+                    imageInputRef.current?.click()
+                  }
+                  className="h-12 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center px-4 cursor-pointer text-slate-600 text-xs"
+                >
+
+                  <Camera className="w-4 h-4 text-slate-400 mr-2" />
+
+                  <span className="truncate flex-1 font-medium">
+                    {selectedImage
+                      ? selectedImage.name
+                      : 'Upload visual thumbnail cover...'}
+                  </span>
+
+                  <input
+                    type="file"
+                    ref={imageInputRef}
+                    className="hidden"
+                    accept="image/*"
+                    onChange={(event) =>
+                      handleImageSelect(event)
+                    }
+                  />
+
+                </div>
+
+                {previewImageUrl && (
+                  <div className="mt-3 rounded-xl overflow-hidden bg-slate-100 h-32">
+                    <img
+                      src={previewImageUrl}
+                      alt="Cover preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
+
+              </div>
+            )}
+
+            {/* SAVE */}
+
+            <div className="pt-2">
+
+              <Button
+                onClick={handleSave}
+                disabled={loading}
+                className="w-full h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-xs shadow-md"
+              >
+                {loading ? (
+                  <Loader2 className="animate-spin h-5 w-5" />
+                ) : editingId ? (
+                  'Save & Sync Resource'
+                ) : (
+                  'Publish Asset Item'
+                )}
+              </Button>
+
+            </div>
+
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* =========================================================
+          PREVIEW
+      ========================================================== */}
+
+      <Dialog
+        open={isPreviewOpen}
+        onOpenChange={setIsPreviewOpen}
+      >
+        <DialogContent className="max-w-5xl w-[95vw] h-[90vh] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl flex flex-col">
+
+          <DialogHeader className="p-6 bg-white border-b border-slate-100 shrink-0">
+
+            <DialogTitle className="font-black uppercase tracking-tighter text-xl text-slate-900">
+              {previewItem?.title}
+            </DialogTitle>
+
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
+              Material Preview Mode
+            </p>
+
+          </DialogHeader>
+
+          <div className="flex-1 w-full bg-slate-900 flex items-center justify-center overflow-hidden">
+
+            {/* VIDEO */}
+
+            {previewItem &&
+            previewItem.type === 'Video' ? (
+              <iframe
+                src={getYouTubeEmbedUrl(
+                  previewItem.file_url || ''
+                )}
+                className="w-full aspect-video max-w-4xl rounded-2xl shadow-2xl border-none"
+                allowFullScreen
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                title={previewItem.title}
+              />
+            ) : previewItem &&
+              previewItem.type === 'PDF' &&
+              previewItem.file_url ? (
+              /* PDF */
+
+              <iframe
+                src={`${previewItem.file_url}#toolbar=0`}
+                className="w-full h-full border-none"
+                title="PDF Preview"
+              />
+            ) : previewItem &&
+              previewItem.type === 'Image' &&
+              (previewItem.file_url ||
+                previewItem.image_url) ? (
+              /* IMAGE */
+
+              <div className="p-4 w-full h-full flex items-center justify-center">
+                <img
+                  src={
+                    previewItem.file_url ||
+                    previewItem.image_url ||
+                    ''
+                  }
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                  alt={previewItem.title}
+                />
+              </div>
+            ) : (
+              <div className="text-center">
+
+                <HardDrive className="w-16 h-16 text-slate-700 mx-auto" />
+
+                <p className="font-bold text-slate-500 mt-4 uppercase text-xs">
+                  Format not supported for preview
+                </p>
+
+              </div>
+            )}
+
+          </div>
+
+          <div className="p-4 bg-white border-t border-slate-100 flex justify-end gap-3 shrink-0">
+
+            <Button
+              variant="ghost"
+              onClick={() =>
+                setIsPreviewOpen(false)
+              }
+              className="rounded-xl font-bold uppercase text-[10px]"
+            >
+              Close
             </Button>
-          </Card>
-        </div>
+
+            {previewItem &&
+              previewItem.type !== 'Video' &&
+              previewItem.file_url && (
+                <Button
+                  onClick={() =>
+                    downloadFile(
+                      previewItem.file_url!,
+                      previewItem.title
+                    )
+                  }
+                  className="bg-indigo-600 rounded-xl font-black uppercase text-[10px] px-6 text-white"
+                >
+                  Download Resource
+                </Button>
+              )}
+
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* =========================================================
+          DELETE
+      ========================================================== */}
+
+      <Dialog
+        open={isDeleteOpen}
+        onOpenChange={setIsDeleteOpen}
+      >
+        <DialogContent className="max-w-md bg-white rounded-[2rem] p-6 border-none shadow-2xl text-center">
+
+          <div className="mx-auto w-14 h-14 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-4">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+
+          <DialogHeader>
+
+            <DialogTitle className="text-xl font-black text-slate-900 uppercase tracking-tight text-center">
+              Delete Resource?
+            </DialogTitle>
+
+          </DialogHeader>
+
+          <div className="mt-3 text-slate-500 text-xs font-medium leading-relaxed px-2">
+
+            You are about to permanently delete{' '}
+
+            <span className="font-bold text-slate-800 uppercase">
+              "{deleteTargetTitle}"
+            </span>
+
+            . This action cannot be undone.
+
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 mt-6">
+
+            <Button
+              variant="ghost"
+              onClick={() =>
+                setIsDeleteOpen(false)
+              }
+              className="h-12 rounded-xl font-black uppercase text-[10px] text-slate-500 bg-slate-50"
+            >
+              Cancel
+            </Button>
+
+            <Button
+              onClick={handleExecuteDelete}
+              disabled={loading}
+              className="h-12 rounded-xl font-black uppercase text-[10px] bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                'Confirm Deletion'
+              )}
+            </Button>
+
+          </div>
+
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// =============================================================
+// SMALL COMPONENTS
+// =============================================================
+
+function MaterialActions({
+  onEdit,
+  onDelete,
+}: {
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="absolute top-4 right-4 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+
+      <Button
+        size="icon"
+        variant="secondary"
+        className="h-8 w-8 rounded-xl bg-white shadow-sm"
+        onClick={onEdit}
+      >
+        <Edit className="w-3.5 h-3.5 text-slate-600" />
+      </Button>
+
+      <Button
+        size="icon"
+        variant="destructive"
+        className="h-8 w-8 rounded-xl shadow-sm"
+        onClick={onDelete}
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </Button>
+
+    </div>
+  );
+}
+
+function MaterialCategory({
+  category,
+}: {
+  category?: string | null;
+}) {
+  return (
+    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 font-black uppercase text-[8px] tracking-wider rounded">
+      {category || 'General Guidance'}
+    </span>
+  );
+}
+
+function MaterialMeta({ item }: { item: Material }) {
+  return (
+    <div className="mt-2 space-y-1.5">
+      {item.program_component && (
+        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+          {item.program_component}
+        </p>
       )}
 
-      {/* --- HEADER --- */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm">
-        <div>
-          <h1 className="text-5xl font-black tracking-tighter text-slate-900 uppercase leading-none">Material <span className="text-indigo-600">Hub</span></h1>
-          <p className="text-slate-400 font-bold text-[10px] uppercase mt-2 tracking-widest">Digital Resource Library for Students</p>
+      {item.tags && item.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {item.tags.slice(0, 4).map((tag) => (
+            <span key={tag} className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[8px] font-bold">
+              #{tag}
+            </span>
+          ))}
+          {item.tags.length > 4 && (
+            <span className="text-[8px] font-bold text-slate-400">
+              +{item.tags.length - 4} more
+            </span>
+          )}
         </div>
-        <div className="flex gap-4">
-            <Button onClick={() => { setIsYoutubeMode(true); setEditTitle(''); setIsUploadModalOpen(true); }} className="h-16 px-8 bg-red-600 hover:bg-red-700 rounded-3xl font-black uppercase text-[10px] text-white transition-all shadow-xl">
-                <Youtube className="mr-2 w-5 h-5" /> Add YT Link
-            </Button>
-            <Button onClick={() => fileInputRef.current?.click()} className="h-16 px-8 bg-slate-900 hover:bg-indigo-600 rounded-3xl font-black uppercase text-[10px] text-white transition-all shadow-xl">
-                <Upload className="mr-2 w-5 h-5" /> Upload File
-            </Button>
-        </div>
-      </div>
+      )}
+    </div>
+  );
+}
 
-      {/* --- SEARCH BAR --- */}
-      <div className="relative">
-        <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-        <Input 
-          placeholder="Search materials by title or category..."
-          className="h-16 pl-16 rounded-[2rem] bg-white border-none shadow-sm font-bold text-lg"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-      </div>
+function EmptyState({
+  message,
+}: {
+  message: string;
+}) {
+  return (
+    <div className="col-span-full py-32 text-center bg-slate-50/50 rounded-[3rem] border-4 border-dashed border-slate-100">
 
-      {/* --- LIST GRID --- */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-        {materials.filter(m => m.title.toLowerCase().includes(searchQuery.toLowerCase())).map((item) => (
-          <Card key={item.id} className="group p-10 border-none shadow-sm hover:shadow-2xl transition-all duration-500 bg-white rounded-[4rem] relative overflow-hidden">
-            <div className="flex items-start gap-8">
-              <div className="w-24 h-24 bg-slate-50 rounded-[2.5rem] flex items-center justify-center group-hover:bg-indigo-600 group-hover:rotate-6 transition-all duration-500 shadow-inner">
-                {item.type === 'Video' ? (
-                  item.format === 'LINK' ? <Youtube className="h-12 w-12 text-red-600 group-hover:text-white" /> : <Film className="h-12 w-12 text-indigo-600 group-hover:text-white" />
-                ) : item.type === 'Image' ? (
-                  <ImageIcon className="h-12 w-12 text-indigo-600 group-hover:text-white" />
-                ) : (
-                  <FileText className="h-12 w-12 text-indigo-600 group-hover:text-white" />
-                )}
-              </div>
-              <div className="flex-1">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="px-5 py-2 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest">{item.category}</span>
-                  <button onClick={() => handleDelete(item.id)} className="text-slate-200 hover:text-red-500 transition-colors p-2"><Trash2 className="w-6 h-6" /></button>
-                </div>
-                <h3 className="text-3xl font-black text-slate-800 uppercase tracking-tighter mb-2">{item.title}</h3>
-                <p className="text-slate-400 text-sm font-medium line-clamp-2 mb-6 h-10">{item.description || 'No description provided.'}</p>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <Button onClick={() => handleAction(item, 'view')} variant="outline" className="h-14 rounded-2xl border-2 border-slate-50 font-black uppercase text-[11px] tracking-widest hover:bg-slate-50 transition-all">
-                    <Eye className="w-5 h-5 mr-3" /> {item.type === 'Video' ? 'Watch' : 'View'}
-                  </Button>
-                  {item.format !== 'LINK' ? (
-                    <Button onClick={() => handleAction(item, 'download')} className="h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-700 font-black uppercase text-[11px] text-white transition-all shadow-lg shadow-indigo-200">
-                        <Download className="w-5 h-5 mr-3" /> Save
-                    </Button>
-                  ) : (
-                    <div className="flex items-center justify-center bg-slate-50 rounded-2xl px-4 py-2">
-                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">YouTube Stream</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </Card>
-        ))}
+      <HardDrive className="w-16 h-16 text-slate-200 mx-auto mb-4" />
 
-        {materials.length === 0 && !loading && (
-          <div className="col-span-full text-center py-20 bg-slate-50 rounded-[4rem] border-2 border-dashed border-slate-200">
-             <FileText className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-             <p className="font-black uppercase text-slate-400 tracking-widest">The library is currently empty.</p>
-          </div>
-        )}
-      </div>
+      <p className="text-slate-400 font-black uppercase text-xl tracking-tighter">
+        {message}
+      </p>
+
     </div>
   );
 }

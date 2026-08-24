@@ -3,12 +3,20 @@ import { supabase } from "../lib/supabase";
 import { Button } from "../../src/components/ui/button";
 import { Card } from "../../src/components/ui/card";
 import {
-  BookOpen, FileText, ClipboardList, Users,
-  GraduationCap, Calendar, MapPin, ImageIcon, ArrowRight
+  BookOpen,
+  ClipboardList,
+  Users,
+  GraduationCap,
+  Calendar,
+  MapPin,
+  ImageIcon,
+  ArrowRight,
+  Menu, // Idinagdag para sa mobile menu
+  X,    // Idinagdag para sa close button
 } from "lucide-react";
 
 interface HomePageProps {
-  onNavigate: (page: "Home" | "Programs" | "Materials" | "Surveys" | "About") => void;
+  onNavigate: (page: "Home" | "About") => void;
 }
 
 interface Program {
@@ -24,39 +32,14 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activePage, setActivePage] = useState("home");
+  const [isMenuOpen, setIsMenuOpen] = useState(false); // Mobile menu state
 
   const youtubeVideoId = "A2JuNCYrUHE";
-
-  const features = [
-    {
-      icon: BookOpen,
-      title: "Guidance Programs",
-      description: "Access comprehensive guidance and counseling programs tailored to student needs.",
-      action: () => handleNavigation("Programs"),
-    },
-    {
-      icon: FileText,
-      title: "IEC Materials",
-      description: "Browse information, education, and communication materials for student awareness.",
-      action: () => handleNavigation("Materials"),
-    },
-    {
-      icon: ClipboardList,
-      title: "Surveys & Feedback",
-      description: "Participate in surveys to help improve guidance services and programs.",
-      action: () => handleNavigation("Surveys"),
-    },
-    {
-      icon: Users,
-      title: "About Us",
-      description: "Learn more about OMSC Guidance services and our commitment to student development.",
-      action: () => handleNavigation("About"),
-    },
-  ];
 
   const handleNavigation = (page: any) => {
     setActivePage(page.toLowerCase());
     onNavigate(page);
+    setIsMenuOpen(false); // Isara ang menu pagkatapos mag-click
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -64,9 +47,9 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
     const fetchPrograms = async () => {
       try {
         const { data, error } = await supabase
-          .from('programs')
-          .select('*')
-          .order('id', { ascending: false })
+          .from("programs")
+          .select("*")
+          .order("id", { ascending: false })
           .limit(4);
         if (error) throw error;
         if (data) setPrograms(data);
@@ -79,157 +62,152 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
     fetchPrograms();
   }, []);
 
+  const features = [
+    { icon: BookOpen, title: "Information Services", description: "Access guidance announcements, educational resources, and mental health materials.", action: () => handleNavigation("Programs") },
+    { icon: ClipboardList, title: "Testing Services", description: "Participate in aptitude tests, assessments, and diagnostic examinations.", action: () => handleNavigation("Surveys") },
+    { icon: GraduationCap, title: "Career Orientation", description: "Explore career guidance programs, seminars, and degree planning resources.", action: () => handleNavigation("Programs") },
+    { icon: Users, title: "Counseling Services", description: "Receive academic, personal, and emotional support through our programs.", action: () => handleNavigation("About") },
+  ];
+
   return (
     <div className="w-full min-h-screen bg-white">
-      {/* --- NAVBAR --- */}
-      <header className="fixed top-0 left-0 right-0 h-[80px] bg-[#0066cc] z-50 shadow-lg">
-        <div className="max-w-[1440px] mx-auto px-6 h-full flex items-center justify-between">
-          <div className="flex items-center gap-2 cursor-pointer group" onClick={() => handleNavigation("home")}>
-            <GraduationCap className="w-9 h-9 text-white group-hover:rotate-12 transition-transform" />
-            <h1 className="font-black text-xl uppercase tracking-tighter text-white">
-              OMSC Guidance
-            </h1>
+      {/* ================= NAVBAR (RESPONSIVE) ================= */}
+      <header className="fixed top-0 left-0 right-0 h-[70px] md:h-[80px] bg-[#0066cc] z-[100] shadow-lg">
+        <div className="max-w-[1440px] mx-auto px-4 md:px-6 h-full flex items-center justify-between">
+          <div className="flex items-center gap-2 md:gap-3 cursor-pointer" onClick={() => handleNavigation("home")}>
+            <GraduationCap className="w-7 h-7 md:w-9 md:h-9 text-white" />
+            <div>
+              <h1 className="font-black text-sm md:text-xl uppercase tracking-tight text-white leading-tight">OMSC Web-Based</h1>
+              <p className="text-[8px] md:text-[10px] uppercase tracking-[0.2em] text-blue-100 font-bold">Guidance System</p>
+            </div>
           </div>
 
-          <nav className="hidden md:flex items-center gap-2 font-bold text-[11px] uppercase tracking-wider">
-            {['home', 'programs', 'materials', 'surveys', 'about'].map((item) => (
-              <button
-                key={item}
-                onClick={() => handleNavigation(item)}
-                className="relative px-6 py-2 transition-all duration-300 group"
-              >
-                <span className={`relative z-10 transition-colors duration-300 ${
-                  activePage === item ? "text-white" : "text-white/70 hover:text-white"
-                }`}>
-                  {item === 'materials' ? 'IEC Materials' : item}
+          {/* Desktop Nav */}
+          <nav className="hidden lg:flex items-center gap-2 font-bold text-[11px] uppercase tracking-wider">
+            {["Home", "Programs", "Materials", "Surveys", "About"].map((item) => (
+              <button key={item} onClick={() => handleNavigation(item)} className="relative px-4 py-2 text-white">
+                <span className={activePage === item ? "opacity-100" : "opacity-70 hover:opacity-100"}>
+                  {item === "materials" ? "IEC Materials" : item}
                 </span>
-
-                {activePage === item && (
-                  <div className="absolute inset-0 z-0">
-                    <div className="absolute inset-0 border-2 border-white rounded-xl" />
-                    <div className="absolute bottom-1 left-1.5 right-1.5 h-1.5 bg-white/90 rounded-b-lg blur-[0.5px]" />
-                  </div>
-                )}
+                {activePage === item && <div className="absolute bottom-0 left-0 right-0 h-1 bg-white rounded-full" />}
               </button>
             ))}
           </nav>
 
-          <Button onClick={() => window.location.href = '/login'} className="bg-white text-[#0066cc] hover:bg-slate-100 font-black uppercase text-[10px] px-8 rounded-xl shadow-md transition-all active:scale-95">
-            Login
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => (window.location.href = "/login")} className="hidden sm:flex bg-white text-[#0066cc] text-[10px] px-6 rounded-xl">Login</Button>
+            {/* Mobile Menu Toggle */}
+            <button className="lg:hidden text-white p-2" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+              {isMenuOpen ? <X size={28} /> : <Menu size={28} />}
+            </button>
+          </div>
         </div>
+
+        {/* Mobile Dropdown Menu */}
+        {isMenuOpen && (
+          <div className="lg:hidden absolute top-[70px] left-0 right-0 bg-[#0055aa] border-t border-white/10 p-6 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-top duration-300">
+            {["home", "programs", "materials", "surveys", "about"].map((item) => (
+              <button key={item} onClick={() => handleNavigation(item)} className="text-left text-white font-black uppercase text-lg border-b border-white/5 pb-2">
+                {item}
+              </button>
+            ))}
+            <Button onClick={() => (window.location.href = "/login")} className="w-full bg-white text-[#0066cc] font-black h-12 rounded-xl mt-4">Login</Button>
+          </div>
+        )}
       </header>
 
-      {/* --- HERO SECTION --- */}
-      <section className="relative h-[600px] md:h-[700px] overflow-hidden mt-[80px] bg-black">
+      {/* ================= HERO SECTION (RESPONSIVE) ================= */}
+      <section className="relative h-[85vh] md:h-[700px] overflow-hidden mt-[70px] md:mt-[80px] bg-black">
         <div className="absolute inset-0 z-0 pointer-events-none">
+          {/* Ginawang Object-Cover para sa mobile */}
           <iframe
-            className="absolute top-0 left-0 w-full h-full scale-[1.35]"
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[180%] h-[180%] md:w-full md:h-full md:scale-[1.35]"
             src={`https://www.youtube.com/embed/${youtubeVideoId}?autoplay=1&mute=1&loop=1&playlist=${youtubeVideoId}&controls=0&modestbranding=1`}
             frameBorder="0"
             allow="autoplay; encrypted-media"
-            style={{ width: '100vw', height: '56.25vw', minHeight: '100%', minWidth: '177.77vh' }}
           ></iframe>
         </div>
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-900/80 to-transparent z-10" />
+        <div className="absolute inset-0 bg-gradient-to-b md:bg-gradient-to-r from-[#003366]/95 via-[#003366]/70 to-transparent z-10" />
+
         <div className="relative max-w-[1200px] mx-auto px-6 h-full flex items-center z-20">
-          <div className="max-w-2xl space-y-6 text-left animate-in fade-in slide-in-from-left-10 duration-1000">
-            <h1 className="text-5xl md:text-7xl font-black uppercase text-white leading-none tracking-tighter">
-              Empowering Students, <br /> <span className="text-blue-400">Enriching Lives.</span>
+          <div className="max-w-3xl space-y-6 md:space-y-8">
+            <p className="uppercase tracking-[0.2em] text-blue-200 text-[10px] md:text-xs font-black">Occidental Mindoro State University</p>
+            <h1 className="text-3xl md:text-7xl font-black uppercase text-white leading-[1.1] tracking-tighter">
+              Web-Based <br className="hidden md:block" /> Guidance Program
+              <span className="block text-blue-400 text-xl md:text-5xl mt-2 md:mt-4">Information System</span>
             </h1>
-            <p className="text-lg md:text-xl text-white/90 leading-relaxed font-medium">
-              Supporting student development through comprehensive guidance programs and educational materials aligned with CHED standards.
-            </p>
-            <div className="flex gap-4">
-              <Button onClick={() => handleNavigation("programs")} className="bg-white text-blue-700 font-black uppercase h-14 px-10 rounded-2xl hover:bg-slate-100 transition-all shadow-2xl">
-                Explore Programs
-              </Button>
-              <Button onClick={() => handleNavigation("about")} className="bg-transparent text-white border-2 border-white font-black uppercase h-14 px-10 rounded-2xl hover:bg-white/10 transition-all">
-                Learn More
-              </Button>
+            <p className="text-sm md:text-xl text-white/90 font-medium max-w-xl">Supporting students through accessible counseling, career orientation, and mental wellness resources.</p>
+            <div className="flex flex-col sm:flex-row gap-4 pt-4">
+              <Button onClick={() => handleNavigation("programs")} className="w-full sm:w-auto bg-white text-blue-700 font-black h-14 px-10 rounded-2xl">Explore Programs</Button>
+              <Button onClick={() => handleNavigation("about")} className="w-full sm:w-auto bg-transparent text-white border-2 border-white font-black h-14 px-10 rounded-2xl">Learn More</Button>
             </div>
           </div>
         </div>
       </section>
 
-      {/* --- SERVICES SECTION --- */}
-      <section className="py-24 bg-white border-b border-slate-100">
-        <div className="max-w-[1200px] mx-auto px-6 text-center">
-          <div className="mb-16 space-y-2">
-            <h2 className="text-4xl font-black uppercase text-slate-900 tracking-tighter">Our Guidance Services</h2>
-            <p className="text-slate-500 font-bold uppercase text-xs tracking-[0.2em]">Helping you navigate your academic journey</p>
+      {/* ================= SYSTEM OVERVIEW (RESPONSIVE GRID) ================= */}
+      <section className="py-16 md:py-24 bg-slate-50">
+        <div className="max-w-[1200px] mx-auto px-6">
+          <div className="grid lg:grid-cols-2 gap-10 md:gap-16 items-center">
+            <div className="space-y-6 text-center lg:text-left">
+              <p className="text-blue-600 font-black uppercase tracking-[0.3em] text-xs">About the System</p>
+              <h2 className="text-3xl md:text-5xl font-black uppercase tracking-tighter text-slate-900 leading-tight">Digital Platform for Students</h2>
+              <p className="text-slate-600 text-base md:text-lg">One centralized platform for counseling, career guidance, and student support services.</p>
+            </div>
+            <div className="bg-[#0066cc] rounded-[2rem] md:rounded-[3rem] p-8 md:p-10 text-white shadow-2xl">
+              <h3 className="text-2xl font-black uppercase mb-6">Quality Objectives</h3>
+              <ul className="space-y-4 text-sm md:text-base text-blue-100 font-medium">
+                <li>• Relevant and timely guidance programs</li>
+                <li>• Mental and emotional wellness promotion</li>
+                <li>• Improved accessibility of services</li>
+                <li>• Career and academic support</li>
+              </ul>
+            </div>
           </div>
+        </div>
+      </section>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* ================= SERVICES (AUTO-STACKING GRID) ================= */}
+      <section className="py-16 md:py-24 bg-white border-b">
+        <div className="max-w-[1200px] mx-auto px-6">
+          <div className="text-center mb-12 md:mb-16">
+            <h2 className="text-3xl md:text-4xl font-black uppercase text-slate-900 tracking-tighter">Our Guidance Services</h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {features.map((feature, index) => (
-              <Card
-                key={index}
-                className="p-8 bg-slate-50 border-none shadow-sm hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 cursor-pointer group rounded-[2.5rem]"
-                onClick={feature.action}
-              >
-                <div className="flex flex-col items-center text-center space-y-5">
-                  <div className="w-20 h-20 bg-white rounded-[2rem] flex items-center justify-center shadow-lg group-hover:bg-blue-600 transition-colors duration-500">
-                    <feature.icon className="h-10 w-10 text-blue-600 group-hover:text-white" strokeWidth={1.5} />
-                  </div>
-                  <h3 className="text-xl font-black uppercase tracking-tighter text-slate-800">{feature.title}</h3>
-                  <p className="text-sm text-slate-500 font-medium leading-relaxed">
-                    {feature.description}
-                  </p>
+              <Card key={index} className="p-6 md:p-8 bg-slate-50 border-none rounded-[2rem] text-center hover:-translate-y-2 transition-all cursor-pointer" onClick={feature.action}>
+                <div className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-md">
+                  <feature.icon className="h-8 w-8 text-blue-600" />
                 </div>
+                <h3 className="text-lg font-black uppercase mb-3">{feature.title}</h3>
+                <p className="text-xs md:text-sm text-slate-500 font-medium">{feature.description}</p>
               </Card>
             ))}
           </div>
         </div>
       </section>
 
-      {/* --- LATEST PROGRAMS --- */}
-      <section className="py-24 bg-slate-50">
+      {/* ================= LATEST PROGRAMS (RESPONSIVE CARDS) ================= */}
+      <section className="py-16 md:py-24 bg-slate-50">
         <div className="max-w-[1200px] mx-auto px-6">
-          <div className="flex justify-between items-end mb-16">
-            <div>
-              <h2 className="text-4xl font-black uppercase text-slate-900 tracking-tighter">Latest Programs</h2>
-              <div className="h-1.5 w-24 bg-blue-600 mt-3 rounded-full" />
-            </div>
-            <button onClick={() => handleNavigation("programs")} className="flex items-center gap-2 text-blue-600 font-black uppercase text-xs tracking-widest hover:gap-4 transition-all">
-              View All Programs <ArrowRight size={16} />
-            </button>
+          <div className="flex flex-col md:flex-row justify-between items-center md:items-end mb-12 gap-4">
+            <h2 className="text-3xl md:text-4xl font-black uppercase text-slate-900 text-center md:text-left">Latest Programs</h2>
+            <button onClick={() => handleNavigation("programs")} className="text-blue-600 font-black uppercase text-xs tracking-widest flex items-center gap-2">View All <ArrowRight size={16} /></button>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {isLoading ? (
-              [1, 2, 3, 4].map((n) => <div key={n} className="aspect-[4/3] bg-slate-200 animate-pulse rounded-[2.5rem]" />)
+              [1, 2, 3, 4].map((n) => <div key={n} className="aspect-[4/3] bg-slate-200 animate-pulse rounded-2xl" />)
             ) : (
               programs.map((program) => (
-                <Card
-                  key={program.id}
-                  className="hover:shadow-[0_40px_80px_-15px_rgba(0,0,0,0.1)] transition-all duration-700 rounded-[2.5rem] border-none group bg-white overflow-hidden flex flex-col"
-                  onClick={() => handleNavigation("programs")}
-                >
-                  <div className="aspect-[4/3] bg-[#0f172a] relative overflow-hidden">
-                    {program.image_url ? (
-                      <img
-                        src={program.image_url}
-                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-700"
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-slate-700 bg-slate-100">
-                        <ImageIcon size={40} strokeWidth={1} />
-                      </div>
-                    )}
+                <Card key={program.id} className="rounded-3xl border-none overflow-hidden bg-white shadow-sm flex flex-col">
+                  <div className="aspect-video bg-slate-900 relative">
+                    {program.image_url ? <img src={program.image_url} className="w-full h-full object-cover" alt="" /> : <div className="flex h-full items-center justify-center text-white"><ImageIcon size={30} /></div>}
                   </div>
-
-                  <div className="p-8 flex flex-col flex-1">
-                    <h3 className="text-lg font-black uppercase tracking-tighter leading-tight group-hover:text-blue-600 transition-colors line-clamp-2 mb-4">
-                      {program.title}
-                    </h3>
-                    <div className="mt-auto space-y-3 pt-4 border-t border-slate-50">
-                      <div className="flex items-center gap-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        <Calendar size={14} className="text-blue-500" />
-                        {new Date(program.date).toLocaleDateString()}
-                      </div>
-                      <div className="flex items-center gap-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        <MapPin size={14} className="text-blue-500" /> {program.location}
-                      </div>
+                  <div className="p-6 flex-1 flex flex-col">
+                    <h3 className="text-md font-black uppercase leading-tight line-clamp-2 mb-4">{program.title}</h3>
+                    <div className="mt-auto space-y-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <div className="flex items-center gap-2"><Calendar size={12} className="text-blue-500" /> {new Date(program.date).toLocaleDateString()}</div>
+                      <div className="flex items-center gap-2"><MapPin size={12} className="text-blue-500" /> {program.location}</div>
                     </div>
                   </div>
                 </Card>
@@ -239,22 +217,13 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         </div>
       </section>
 
-      {/* --- CTA SECTION --- */}
-      <section className="py-24 bg-white">
-        <div className="max-w-[1200px] mx-auto px-6">
-          <div className="bg-[#0066cc] rounded-[3rem] p-12 md:p-20 text-center relative overflow-hidden shadow-2xl">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl" />
-            <div className="relative z-10 space-y-8">
-              <h2 className="text-4xl md:text-6xl font-black text-white uppercase tracking-tighter">
-                Ready to level up your <br /> student life?
-              </h2>
-              <p className="text-blue-100 text-lg md:text-xl max-w-2xl mx-auto font-medium opacity-90">
-                Login to access your personalized dashboard and explore all the guidance resources available to you.
-              </p>
-              <Button onClick={() => window.location.href = '/login'} className="bg-white text-blue-700 hover:bg-slate-100 font-black uppercase h-16 px-12 rounded-2xl shadow-xl active:scale-95 transition-all">
-                Login to Dashboard
-              </Button>
-            </div>
+      {/* ================= CTA (FULL WIDTH MOBILE) ================= */}
+      <section className="py-16 md:py-24 bg-white">
+        <div className="max-w-[1200px] mx-auto px-4">
+          <div className="bg-[#0066cc] rounded-[2rem] md:rounded-[3rem] p-10 md:p-20 text-center text-white">
+            <h2 className="text-3xl md:text-6xl font-black uppercase mb-6">Start Your Journey</h2>
+            <p className="text-blue-100 mb-10 max-w-2xl mx-auto text-sm md:text-lg">Access counseling and student support services anytime online.</p>
+            <Button onClick={() => (window.location.href = "/login")} className="w-full sm:w-auto bg-white text-blue-700 font-black h-16 px-12 rounded-2xl">Access Portal</Button>
           </div>
         </div>
       </section>

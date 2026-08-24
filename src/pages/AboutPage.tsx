@@ -1,167 +1,187 @@
 import React from "react";
-import { Card } from "../../src/components/ui/card";
-import { Badge } from "../../src/components/ui/badge";
-import { Target, Users, Award, Heart, Mail, ArrowRight, ShieldCheck } from "lucide-react";
+import { Card } from "../components/ui/card";
+import { Badge } from "../components/ui/badge";
+import { 
+  ShieldCheck, Users, Target, BookOpen, Heart, 
+  Layers, Mail, Facebook, Phone, Award, ClipboardCheck 
+} from "lucide-react";
 
 const AboutPage: React.FC = () => {
-  const values = [
+  const components = [
     {
-      icon: Target,
-      title: "Our Mission",
-      description: "To provide comprehensive guidance services that support student development, academic success, and personal growth in alignment with CHED standards.",
+      title: "Group Guidance",
+      desc: "Structured group and classroom presentations aimed at collective proactive student growth.",
       color: "bg-blue-50 text-blue-600"
     },
     {
-      icon: Users,
-      title: "Student-Centered",
-      description: "We prioritize student needs and well-being, offering personalized support and resources tailored to individual circumstances.",
+      title: "Individual Student Planning",
+      desc: "Appraisal, educational and occupational planning, alongside structural student positioning and placement.",
       color: "bg-indigo-50 text-indigo-600"
     },
     {
-      icon: Award,
-      title: "Excellence",
-      description: "We maintain high standards in all guidance programs and services, continuously improving based on feedback and best practices.",
-      color: "bg-emerald-50 text-emerald-600"
-    },
-    {
-      icon: Heart,
-      title: "Compassionate Care",
-      description: "We provide a safe, supportive environment where students feel heard, respected, and empowered to overcome challenges.",
+      title: "Responsive Services",
+      desc: "Individual counseling, small-group intervention frameworks, peer consultations, and professional referral structures.",
       color: "bg-rose-50 text-rose-600"
     },
+    {
+      title: "System Support",
+      desc: "Program management, fair-share responsibilities, professional staff development, community outreach, and research.",
+      color: "bg-amber-50 text-amber-600"
+    }
+  ];
+
+  const objectives = [
+    "To maintain the highest quality of assistance and support to the academic community by providing relevant and timely programs, services, and information in the area of students' personal, social, educational and career development in all educational levels of the colleges.",
+    "To provide high-quality placement and diagnostic services to students of their aptitudes and interests toward better degree selection and career decision-making.",
+    "To develop relevant and responsive student-oriented programs aimed at the mental and social health of students to promote healthy and harmonious relationship among students, teachers and administrative staff."
   ];
 
   return (
-    <div className="w-full bg-slate-50 min-h-screen pb-20">
+    <div className="w-full bg-slate-50 min-h-screen pb-16 md:pb-24 font-sans">
+      
       {/* --- HERO SECTION --- */}
-      <section className="relative overflow-hidden pt-20 pb-16 md:pt-32 md:pb-24 bg-white">
-        <div className="max-w-[1200px] mx-auto px-6 relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-            <div className="space-y-8 text-center lg:text-left">
-              <Badge className="bg-indigo-100 text-indigo-600 border-none font-black px-4 py-1 rounded-full uppercase italic text-[10px] tracking-widest">
-                Our Identity
+      <section className="relative overflow-hidden pt-12 pb-12 md:pt-24 md:pb-20 bg-white border-b border-slate-100">
+        <div className="max-w-[1200px] mx-auto px-4 md:px-6 relative z-10">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+            
+            <div className="space-y-6 lg:col-span-7 text-center lg:text-left">
+              <Badge className="bg-indigo-100 text-indigo-600 border-none font-black px-4 py-1 rounded-full uppercase italic text-[9px] md:text-[10px] tracking-widest inline-block">
+                OMSC Administration Profile
               </Badge>
-              <h1 className="text-5xl md:text-7xl font-black italic uppercase text-slate-900 tracking-tighter leading-none">
-                Empowering <br /> <span className="text-indigo-600">OMSCians</span>
+              <h1 className="text-3xl md:text-6xl font-black italic uppercase text-slate-900 tracking-tighter leading-tight">
+                The Guidance and <br />
+                <span className="text-indigo-600">Testing Center</span>
               </h1>
-              <p className="text-lg font-medium text-slate-500 leading-relaxed italic max-w-xl mx-auto lg:mx-0">
-                The Occidental Mindoro State College Guidance Office is dedicated to the holistic development of every student through modern programs and compassionate counseling.
-              </p>
-              <div className="flex flex-wrap justify-center lg:justify-start gap-4">
-                <div className="flex items-center space-x-2 bg-slate-100 px-4 py-2 rounded-2xl">
-                  <ShieldCheck className="w-5 h-5 text-indigo-600" />
-                  <span className="text-[10px] font-black uppercase italic text-slate-600">CHED Accredited</span>
+              
+              {/* Director Profile Display */}
+              <div className="bg-slate-50 p-4 md:p-6 rounded-2xl border border-slate-100/80 flex items-center gap-4 max-w-md mx-auto lg:mx-0">
+                <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center font-black text-white shrink-0 shadow-md">
+                  AP
                 </div>
-                <div className="flex items-center space-x-2 bg-slate-100 px-4 py-2 rounded-2xl">
-                  <Users className="w-5 h-5 text-indigo-600" />
-                  <span className="text-[10px] font-black uppercase italic text-slate-600">Student First</span>
+                <div className="text-left">
+                  <h3 className="font-black text-slate-900 uppercase tracking-tight text-sm md:text-base leading-none">Dr. Angelina C. Paquibot</h3>
+                  <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mt-1.5">Guidance and Testing Center Director</p>
                 </div>
               </div>
+
+              <p className="text-xs md:text-sm font-medium text-slate-500 leading-relaxed italic text-justify">
+                The Guidance and Testing Center is an essential and integral part of the overall educational process. School counselors, working within the framework of the program, make major contributions to the primary educational mission and vision of the institution by providing students with Guidance and Counseling activities and services that facilitate and enhance their academic, career, and personal and social development.
+              </p>
             </div>
-            <div className="relative group">
-              <div className="absolute inset-0 bg-indigo-600 rounded-[3rem] rotate-3 scale-105 opacity-10 group-hover:rotate-0 transition-transform duration-500" />
+            
+            {/* Hero Image Container */}
+            <div className="relative group lg:col-span-5 px-4 md:px-0">
+              <div className="absolute inset-0 bg-indigo-600 rounded-[2rem] md:rounded-[2.5rem] rotate-2 scale-105 opacity-10" />
               <img
                 src="https://i.ibb.co/SDCTBBY7/download-4.jpg"
-                alt="guidance staff"
-                className="relative w-full h-[450px] object-cover rounded-[3.5rem] shadow-2xl z-10"
+                alt="OMSC Institutional Core Banner"
+                className="relative w-full h-[260px] md:h-[380px] object-cover rounded-[2rem] md:rounded-[2.5rem] shadow-xl z-10"
               />
             </div>
+
           </div>
         </div>
       </section>
 
-      {/* --- CORE VALUES --- */}
-      <section className="py-24">
-        <div className="max-w-[1200px] mx-auto px-6">
-          <div className="text-center mb-16 space-y-4">
-            <h2 className="text-4xl md:text-5xl font-black italic uppercase text-slate-900 tracking-tighter">Our Core Values</h2>
-            <div className="w-24 h-2 bg-indigo-600 mx-auto rounded-full" />
+      {/* --- EXTENDED MISSION STATEMENT & SERVICE COMPONENTS --- */}
+      <section className="py-16 max-w-[1200px] mx-auto px-4 md:px-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+          
+          <div className="lg:col-span-1 space-y-4 sticky top-24 bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
+            <h3 className="text-xl font-black uppercase tracking-tight text-slate-900">Collaborative Ecosystem</h3>
+            <p className="text-xs md:text-sm text-slate-500 leading-relaxed italic text-justify">
+              While school Counselors are available to respond to the unique needs of each student, the Guidance and Counseling approach is collaborative among teachers, parents and administrators. As a developmental program, it addresses the needs of all students in OMSC by facilitating their growth as well as helping to create positive and safe learning environments.
+            </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {values.map((value, index) => (
-              <Card
-                key={index}
-                className="p-8 bg-white border-none shadow-xl shadow-slate-200/50 hover:shadow-2xl hover:shadow-indigo-100 transition-all duration-500 hover:-translate-y-2 rounded-[2.5rem] group text-center flex flex-col items-center"
-              >
-                <div className={`w-20 h-20 ${value.color} rounded-3xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-500`}>
-                  <value.icon className="h-10 w-10" strokeWidth={2.5} />
+
+          <div className="lg:col-span-2 space-y-6">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Comprehensive Delivery Core Components</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {components.map((c, i) => (
+                <Card key={i} className="p-5 bg-white border-none shadow-sm rounded-2xl md:rounded-[2rem] flex flex-col justify-between border border-slate-100/40">
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Layers className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <h4 className="font-black uppercase text-xs md:text-sm tracking-tight text-slate-900 leading-none">{c.title}</h4>
+                    </div>
+                    <p className="text-[11px] md:text-xs font-medium text-slate-400 italic leading-relaxed">{c.desc}</p>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* --- QUALITY POLICY OBJECTIVES --- */}
+      <section className="py-16 bg-white rounded-[2rem] md:rounded-[4rem] mx-2 md:mx-4 border border-slate-100 shadow-inner">
+        <div className="max-w-[1000px] mx-auto px-4 md:px-6">
+          <div className="text-center mb-10 space-y-2">
+            <h2 className="text-2xl md:text-4xl font-black italic uppercase text-slate-900 tracking-tighter">Quality Policy Objectives</h2>
+            <div className="w-12 h-1.5 bg-indigo-600 mx-auto rounded-full" />
+          </div>
+
+          <div className="space-y-4">
+            {objectives.map((obj, index) => (
+              <div key={index} className="flex gap-4 p-5 bg-slate-50/50 rounded-2xl border border-slate-100/60 items-start">
+                <div className="w-6 h-6 rounded-md bg-indigo-600 text-white font-black text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+                  0{index + 1}
                 </div>
-                <h3 className="text-xl font-black italic uppercase tracking-tighter text-slate-900 mb-3">{value.title}</h3>
-                <p className="text-sm font-medium text-slate-500 italic leading-relaxed">
-                  {value.description}
+                <p className="text-xs md:text-sm font-medium text-slate-600 leading-relaxed text-justify italic">
+                  {obj}
                 </p>
-              </Card>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* --- SERVICES HIGHLIGHT --- */}
-      <section className="py-24 bg-white rounded-[4rem] md:rounded-[6rem] mx-4 shadow-inner">
-        <div className="max-w-[1200px] mx-auto px-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-            <Card className="group p-2 bg-slate-50 border-none rounded-[3.5rem] overflow-hidden shadow-xl hover:shadow-indigo-100 transition-all duration-500">
-              <div className="relative h-64 overflow-hidden rounded-[3rem]">
-                <img
-                  src="https://lead-academy.org/blog/wp-content/uploads/2022/12/Advantages-and-Disadvantages-of-Individual-Counselling-3.jpg"
-                  alt="counseling"
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent" />
-                <h3 className="absolute bottom-8 left-8 text-3xl font-black italic uppercase text-white tracking-tighter">Individual Counseling</h3>
-              </div>
-              <div className="p-8">
-                <p className="text-slate-500 font-medium italic leading-relaxed">
-                  Confidential one-on-one sessions tailored to help you navigate through personal challenges, academic pressure, and career decisions.
-                </p>
-              </div>
-            </Card>
-
-            <Card className="group p-2 bg-slate-50 border-none rounded-[3.5rem] overflow-hidden shadow-xl hover:shadow-indigo-100 transition-all duration-500">
-              <div className="relative h-64 overflow-hidden rounded-[3rem]">
-                <img
-                  src="https://i.ibb.co/84B2N80D/download-3.png"
-                  alt="group programs"
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent" />
-                <h3 className="absolute bottom-8 left-8 text-3xl font-black italic uppercase text-white tracking-tighter">Group Programs</h3>
-              </div>
-              <div className="p-8">
-                <p className="text-slate-500 font-medium italic leading-relaxed">
-                  Interactive workshops and seminars designed to build peer support networks and develop essential life skills for the modern world.
-                </p>
-              </div>
-            </Card>
-          </div>
+      {/* --- ORGANIZATIONAL CHART ANCHOR FRAME --- */}
+      <section className="py-16 max-w-[900px] mx-auto px-4 md:px-6 text-center">
+        <div className="mb-8 space-y-2">
+          <h2 className="text-2xl md:text-4xl font-black italic uppercase text-slate-900 tracking-tighter">Organizative Layout Framework</h2>
+          <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Official Governance Structure Hierarchy</p>
         </div>
+        <Card className="p-4 md:p-6 bg-white border-dashed border-2 border-slate-200 rounded-[2rem] shadow-sm group overflow-hidden">
+          <div className="relative overflow-hidden rounded-xl bg-slate-50 min-h-[160px] flex items-center justify-center">
+            <Users className="w-12 h-12 text-slate-200 absolute group-hover:scale-125 transition-transform duration-700" />
+            <p className="text-slate-400 font-black uppercase italic text-[10px] tracking-widest z-10">OMSC Guidance Structure Mapping Node View</p>
+          </div>
+        </Card>
       </section>
 
-      {/* --- CONTACT CTA --- */}
-      <section className="mt-24 max-w-[1000px] mx-auto px-6">
-        <div className="bg-indigo-600 rounded-[3.5rem] p-10 md:p-16 text-center shadow-2xl shadow-indigo-200 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl group-hover:scale-125 transition-transform duration-700" />
+      {/* --- SECURED OFFICIAL CONTACT INTERACTION CENTER --- */}
+      <section className="mt-8 max-w-[900px] mx-auto px-4 md:px-6">
+        <div className="bg-slate-950 rounded-[2rem] md:rounded-[3rem] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-600/20 rounded-full -mr-16 -mt-16 blur-2xl" />
           
-          <div className="relative z-10 space-y-6">
-            <h2 className="text-4xl md:text-6xl font-black italic uppercase text-white tracking-tighter leading-none">
-              Need Support? <br /> We're Listening.
-            </h2>
-            <p className="text-indigo-100 font-medium italic text-lg max-w-xl mx-auto">
-              Don't navigate college life alone. Reach out to our professional counselors today.
-            </p>
-            <div className="pt-6">
-              <a
-                href="mailto:guidance@omsc.edu.ph"
-                className="inline-flex items-center px-10 py-5 bg-white text-indigo-600 hover:bg-slate-50 font-black italic uppercase tracking-widest rounded-2xl transition-all shadow-xl hover:-translate-y-1 group"
-              >
-                <Mail className="w-5 h-5 mr-3 group-hover:animate-bounce" />
-                Contact Us Now
-                <ArrowRight className="w-5 h-5 ml-3" />
-              </a>
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
+            <div className="space-y-2 flex-1 text-center md:text-left">
+              <h2 className="text-2xl md:text-4xl font-black italic uppercase text-white tracking-tighter leading-none">Official Comm Hub</h2>
+              <p className="text-slate-400 font-medium italic text-xs md:text-sm">Reach our professional diagnostic support staff via our active secure contact endpoints.</p>
+            </div>
+            
+            {/* Contact Parameters Manifest Grid */}
+            <div className="space-y-3.5 shrink-0 min-w-[280px] bg-white/5 p-5 rounded-2xl border border-white/10">
+              <div className="flex items-center gap-3 text-xs font-mono font-bold text-slate-200 lowercase">
+                <Mail className="w-4 h-4 text-indigo-400 shrink-0" />
+                <span>guidanceofficeomsc@gmail.com</span>
+              </div>
+              <div className="flex items-center gap-3 text-xs font-bold text-slate-200 uppercase tracking-tight">
+                <Facebook className="w-4 h-4 text-indigo-400 shrink-0" />
+                <span className="text-[11px]">OMSC Guidance and Testing Center</span>
+              </div>
+              <div className="flex items-center gap-3 text-xs font-mono font-bold text-slate-200">
+                <Phone className="w-4 h-4 text-indigo-400 shrink-0" />
+                <span className="text-[10px]">043-491-0925 / 09632086253</span>
+              </div>
             </div>
           </div>
+
         </div>
       </section>
+
     </div>
   );
 };

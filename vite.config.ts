@@ -4,7 +4,6 @@ import { defineConfig } from "vite";
 import path from "path";
 import { fileURLToPath } from 'url';
 
-// Idagdag ito para gumana ang __dirname sa Vite
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -22,4 +21,12 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      }
+    }
+  }
 });

@@ -10,7 +10,7 @@ const Footer: React.FC = () => {
           <div>
             <h3 className="text-h4 text-gray-100 mb-4">OMSC Guidance</h3>
             <p className="text-body-sm text-gray-300 leading-relaxed">
-              Occidental Mindoro State College Guidance Information and Awareness System - 
+              Occidental Mindoro State University Guidance Information and Awareness System - 
               Supporting student development and institutional compliance with CHED standards.
             </p>
           </div>
@@ -68,7 +68,7 @@ const Footer: React.FC = () => {
         <div className="border-t border-gray-700 pt-6">
           <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
             <p className="text-body-sm text-gray-400">
-              © 2026 Occidental Mindoro State College. All rights reserved.
+              © 2026 Occidental Mindoro State University. All rights reserved.
             </p>
             <div className="flex space-x-6">
               <a href="#" className="text-body-sm text-gray-400 hover:text-primary-foreground transition-colors duration-normal">

@@ -1,249 +1,357 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase'; 
+import React, { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../../lib/supabase';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
 import { Label } from "../../components/ui/label";
-import { Textarea } from '../../components/ui/textarea';
 import { Badge } from "../../components/ui/badge";
+import { Input } from "../../components/ui/input";
 import { 
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from '../../components/ui/select';
 import { useToast } from '../../hooks/use-toast';
-import { Send, Loader2, BadgeCheck, MessageCircle, History } from 'lucide-react';
+import { 
+  User, ShieldCheck, Loader2, Save, GraduationCap, Building2 
+} from 'lucide-react';
 
-interface InquiryData {
-  id: string;
-  created_at: string;
-  category: string;
-  subject: string;
-  message: string;
-  status: string;
-  counselor_reply?: string;
-  replied_at?: string;
-}
-
-async function getCurrentUserId(): Promise<string | null> {
-  // 1. Supabase Auth session (pinaka-reliable — set na ito ng bagong LoginPage)
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user?.id) return session.user.id;
-  } catch (e) {
-    console.warn("[Auth] getSession failed:", e);
-  }
-
-  // 2. localStorage 'user' object fallback
-  try {
-    const saved = localStorage.getItem('user');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed?.id) return parsed.id;
-    }
-  } catch (e) {}
-
-  // 3. localStorage 'userId' direct key fallback
-  const directId = localStorage.getItem('userId');
-  if (directId) return directId;
-
-  return null;
-}
-
-export default function Inquiries() {
+export default function ProfileStudent() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  
-  const [category, setCategory] = useState('');
-  const [subject, setSubject] = useState('');
-  const [message, setMessage] = useState('');
-  const [myInquiries, setMyInquiries] = useState<InquiryData[]>([]);
 
-  useEffect(() => {
-    async function init() {
-      const id = await getCurrentUserId();
-      setCurrentUserId(id);
-      if (!id) { setFetching(false); return; }
-      fetchMyInquiries(id);
-    }
-    init();
-  }, []);
+  // Profile Form States
+  const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [campus, setCampus] = useState('');
+  const [program, setProgram] = useState('');
+  const [yearLevel, setYearLevel] = useState('');
+  const [gender, setGender] = useState('');
+  const [age, setAge] = useState<number | string>('');
+  const [isPwd, setIsPwd] = useState<boolean>(false);
+  const [isIp, setIsIp] = useState<boolean>(false);
 
-  async function fetchMyInquiries(userId: string) {
+  // Fetch Student Profile Data
+  const fetchProfileData = useCallback(async (userId: string) => {
     try {
       setFetching(true);
+
+      // Kunan din ng email mula sa Supabase Auth Session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email) {
+        setEmail(session.user.email);
+      }
+
+      // Query sa 'profiles' table
       const { data, error } = await supabase
-        .from('inquiries')
+        .from('profiles')
         .select('*')
-        .eq('student_id', userId)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      setMyInquiries(data || []);
+        .eq('id', userId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+
+      if (data) {
+        setFullName(data.full_name || '');
+        setCampus(data.campus || '');
+        setProgram(data.program || '');
+        setYearLevel(data.year_level !== null ? String(data.year_level) : '');
+        setGender(data.gender || '');
+        setAge(data.age || '');
+        setIsPwd(!!data.is_pwd);
+        setIsIp(!!data.is_ip);
+      }
     } catch (error: any) {
-      console.error('Error fetching history:', error.message);
+      console.error('Error fetching profile:', error.message);
+      toast({
+        variant: "destructive",
+        title: "Error Loading Profile",
+        description: error.message
+      });
     } finally {
       setFetching(false);
     }
-  }
+  }, [toast]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession();
+      const id = session?.user?.id || localStorage.getItem('userId');
+      setCurrentUserId(id);
+      if (id) {
+        fetchProfileData(id);
+      } else {
+        setFetching(false);
+      }
+    }
+    init();
+  }, [fetchProfileData]);
+
+  // Save / Update Profile
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!category || !subject || !message) {
-      toast({ title: "Validation Error", description: "Please fill up all fields.", variant: "destructive" });
+
+    if (!fullName || !campus || !program || !yearLevel || !gender || !age) {
+      toast({
+        title: "Validation Warning",
+        description: "Mangyaring kumpletuhin ang lahat ng kinakailangang impormasyon.",
+        variant: "destructive"
+      });
       return;
     }
 
-    if (!currentUserId) {
-      toast({ variant: "destructive", title: "SESSION EXPIRED", description: "Please login again to continue." });
-      return;
-    }
+    if (!currentUserId) return;
 
     setLoading(true);
     try {
-      const savedUser = localStorage.getItem('user');
-      const userObj = savedUser ? JSON.parse(savedUser) : null;
-      const userCampus = userObj?.campus || localStorage.getItem('userCampus') || 'San Jose Campus';
+      // Payload na tumutugma sa 'profiles' table columns
+      const payload = {
+        id: currentUserId,
+        full_name: fullName,
+        campus: campus,
+        program: program,
+        year_level: isNaN(Number(yearLevel)) ? yearLevel : Number(yearLevel), // Hahawakan pareho kung integer o text ang column type mo sa DB
+        gender: gender,
+        age: Number(age),
+        is_pwd: isPwd,
+        is_ip: isIp,
+        user_role: 'student'
+      };
 
-      const { error } = await supabase.from('inquiries').insert([{
-        student_id: currentUserId,
-        category,
-        subject,
-        message,
-        campus: userCampus,
-        status: 'pending',
-      }]);
+      const { error } = await supabase
+        .from('profiles')
+        .upsert(payload, { onConflict: 'id' });
 
       if (error) throw error;
 
-      toast({ title: 'INQUIRY SUBMITTED', description: 'Guidance Counselor will review this soon.' });
-      setCategory('');
-      setSubject('');
-      setMessage('');
-      fetchMyInquiries(currentUserId);
+      toast({
+        title: "PROFILE UPDATED",
+        description: "Matagumpay na na-update ang iyong profile information.",
+        className: "bg-emerald-600 text-white font-bold rounded-2xl"
+      });
     } catch (error: any) {
-      toast({ variant: "destructive", title: "SUBMISSION FAILED", description: error.message });
+      toast({
+        variant: "destructive",
+        title: "UPDATE FAILED",
+        description: error.message
+      });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-12 animate-in fade-in duration-700 font-sans">
-      <div className="border-b-4 border-slate-900 pb-8">
-        <h1 className="text-6xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">
-          Guidance <span className="text-indigo-600">Line</span>
-        </h1>
-        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.4em] mt-4 ml-1 flex items-center gap-2">
-          <BadgeCheck className="w-4 h-4 text-emerald-500" /> Direct Communication to San Jose Office
-        </p>
+    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6 md:space-y-10 font-sans w-full overflow-hidden animate-in fade-in duration-300">
+      
+      {/* HEADER BANNER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b pb-6 border-slate-200">
+        <div>
+          <h1 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">
+            Student <span className="text-indigo-600">Profile</span>
+          </h1>
+          <p className="text-slate-400 font-bold uppercase text-[9px] md:text-[10px] tracking-widest mt-2 flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" /> Demographics & Academic Profile Setup
+          </p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        <div className="lg:col-span-5 space-y-8">
-          <Card className="p-10 border-none shadow-2xl shadow-indigo-100/50 bg-white rounded-[3.5rem] relative overflow-hidden">
-            <div className="relative z-10 space-y-8">
-              <div className="flex items-center gap-3 mb-2">
-                <MessageCircle className="text-indigo-600 w-6 h-6" />
-                <h2 className="text-2xl font-black uppercase italic tracking-tight">New Inquiry</h2>
+      {fetching ? (
+        <div className="h-64 flex flex-col items-center justify-center bg-white rounded-2xl border shadow-sm">
+          <Loader2 className="animate-spin text-indigo-600 w-10 h-10" />
+        </div>
+      ) : (
+        <Card className="p-6 md:p-10 border-none shadow-xl bg-white rounded-2xl md:rounded-[3rem] relative overflow-hidden border-t-4 border-t-indigo-600 shadow-slate-100">
+          <form onSubmit={handleSaveProfile} className="space-y-8">
+            
+            {/* SECTION 1: ACADEMIC INFORMATION */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                <GraduationCap className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-lg font-black uppercase italic tracking-tight text-slate-800">
+                  Academic Information
+                </h2>
               </div>
 
-              {!currentUserId && !fetching && (
-                <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-center">
-                  <p className="text-red-600 font-black text-xs uppercase tracking-widest">
-                    ⚠️ Session not found. Please logout and login again.
-                  </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Email Address
+                  </Label>
+                  <Input 
+                    type="email" 
+                    value={email} 
+                    disabled 
+                    className="h-12 bg-slate-100 border-none rounded-xl font-bold px-4 text-xs text-slate-500 cursor-not-allowed"
+                  />
                 </div>
-              )}
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Category</Label>
-                  <Select value={category} onValueChange={setCategory} required>
-                    <SelectTrigger className="h-14 bg-slate-50 border-none rounded-2xl font-bold px-6 text-slate-700">
-                      <SelectValue placeholder="What is this about?" />
+                <div className="space-y-1.5">
+                  <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Full Name
+                  </Label>
+                  <Input 
+                    type="text" 
+                    placeholder="Juan Dela Cruz" 
+                    value={fullName} 
+                    onChange={(e) => setFullName(e.target.value)} 
+                    required 
+                    className="h-12 bg-slate-50 border-none rounded-xl font-bold px-4 text-xs focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+
+                {/* CAMPUS FIELD */}
+                <div className="space-y-1.5">
+                  <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1 flex items-center gap-1">
+                    <Building2 className="w-3 h-3 text-indigo-500" /> Campus
+                  </Label>
+                  <Select value={campus} onValueChange={setCampus} required>
+                    <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold px-4 text-xs">
+                      <SelectValue placeholder="Select Campus" />
                     </SelectTrigger>
-                    <SelectContent className="rounded-2xl border-none shadow-2xl">
-                      <SelectItem value="Academic">Academic Concerns</SelectItem>
-                      <SelectItem value="Career">Career Guidance</SelectItem>
-                      <SelectItem value="Mental Health">Mental Health / Wellness</SelectItem>
-                      <SelectItem value="Other">Other Concerns</SelectItem>
+                    <SelectContent className="rounded-xl border-none shadow-2xl bg-white">
+                      <SelectItem value="San Jose Campus">San Jose Campus</SelectItem>
+                      <SelectItem value="Labangan Campus">Labangan Campus</SelectItem>
+                      <SelectItem value="Mamburao Campus">Mamburao Campus</SelectItem>
+                      <SelectItem value="Sablayan Campus">Sablayan Campus</SelectItem>
+                      <SelectItem value="Murtha Campus">Murtha Campus</SelectItem>
+                      <SelectItem value="Extension Campus">Extension Campus</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Subject</Label>
-                  <Input placeholder="Short Title..." value={subject} onChange={(e) => setSubject(e.target.value)} required className="h-14 bg-slate-50 border-none rounded-2xl font-bold px-6 focus-visible:ring-2 focus-visible:ring-indigo-100" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Detail</Label>
-                  <Textarea placeholder="Describe how we can help..." value={message} onChange={(e) => setMessage(e.target.value)} required className="bg-slate-50 border-none rounded-[2rem] font-medium min-h-[150px] p-6 focus-visible:ring-2 focus-visible:ring-indigo-100 resize-none" />
-                </div>
-                <Button disabled={loading || !currentUserId} className="w-full h-16 bg-slate-900 hover:bg-indigo-600 text-white rounded-[1.5rem] font-black uppercase text-xs tracking-widest transition-all shadow-xl active:scale-95 disabled:opacity-40">
-                  {loading ? <Loader2 className="animate-spin mr-2" /> : <Send className="w-4 h-4 mr-3" />}
-                  Submit Request
-                </Button>
-              </form>
-            </div>
-          </Card>
-        </div>
 
-        <div className="lg:col-span-7 space-y-6">
-          <div className="flex items-center gap-3 mb-2 ml-4">
-            <History className="text-slate-400 w-5 h-5" />
-            <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Request History</h3>
-          </div>
-          <div className="space-y-6 max-h-[800px] overflow-y-auto pr-4 custom-scrollbar">
-            {fetching ? (
-              <div className="flex flex-col items-center py-20 bg-slate-50 rounded-[3rem]">
-                <Loader2 className="animate-spin text-indigo-600 w-8 h-8" />
-                <p className="mt-4 text-[10px] font-black uppercase tracking-widest text-slate-300">Syncing History...</p>
+                <div className="space-y-1.5">
+                  <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Course / Program
+                  </Label>
+                  <Select value={program} onValueChange={setProgram} required>
+                    <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold px-4 text-xs">
+                      <SelectValue placeholder="Select Course" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl border-none shadow-2xl bg-white">
+                      <SelectItem value="BSIT">BSIT - Bachelor of Science in Information Technology</SelectItem>
+                      <SelectItem value="BSBA">BSBA - Bachelor of Science in Business Administration</SelectItem>
+                      <SelectItem value="BSED">BSED - Bachelor of Secondary Education</SelectItem>
+                      <SelectItem value="BEED">BEED - Bachelor of Elementary Education</SelectItem>
+                      <SelectItem value="BSHM">BSHM - Bachelor of Science in Hospitality Management</SelectItem>
+                      <SelectItem value="BSAgri">BSAgri - Bachelor of Science in Agriculture</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Year Level
+                  </Label>
+                  <Select value={yearLevel} onValueChange={setYearLevel} required>
+                    <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold px-4 text-xs">
+                      <SelectValue placeholder="Select Year Level" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl border-none shadow-2xl bg-white">
+                      <SelectItem value="1">1st Year</SelectItem>
+                      <SelectItem value="2">2nd Year</SelectItem>
+                      <SelectItem value="3">3rd Year</SelectItem>
+                      <SelectItem value="4">4th Year</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            ) : myInquiries.length > 0 ? (
-              myInquiries.map((inq) => (
-                <Card key={inq.id} className="p-8 border-none shadow-sm bg-white rounded-[2.5rem] space-y-6 hover:shadow-xl transition-all border-l-8 border-l-slate-100">
-                  <div className="flex justify-between items-start">
-                    <div className="space-y-1">
-                      <Badge className="bg-indigo-50 text-indigo-600 hover:bg-indigo-50 border-none rounded-lg px-3 py-1 font-black text-[9px] uppercase tracking-wider">{inq.category}</Badge>
-                      <h4 className="text-2xl font-black text-slate-800 uppercase italic tracking-tighter">{inq.subject}</h4>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest italic">Submitted: {new Date(inq.created_at).toLocaleDateString()}</p>
-                    </div>
-                    <Badge className={`uppercase font-black text-[9px] px-4 py-1.5 rounded-full border-none shadow-sm ${inq.status === 'pending' ? 'bg-amber-400 text-white' : 'bg-emerald-500 text-white'}`}>
-                      {inq.status}
-                    </Badge>
+            </div>
+
+            {/* SECTION 2: DEMOGRAPHICS */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                <User className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-lg font-black uppercase italic tracking-tight text-slate-800">
+                  Demographics & Diversity
+                </h2>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Gender
+                  </Label>
+                  <Select value={gender} onValueChange={setGender} required>
+                    <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold px-4 text-xs">
+                      <SelectValue placeholder="Select Gender" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl border-none shadow-2xl bg-white">
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Age
+                  </Label>
+                  <Input 
+                    type="number" 
+                    placeholder="e.g. 20" 
+                    min={15} 
+                    max={100} 
+                    value={age} 
+                    onChange={(e) => setAge(e.target.value)} 
+                    required 
+                    className="h-12 bg-slate-50 border-none rounded-xl font-bold px-4 text-xs focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* PWD / IP Toggles */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div 
+                  onClick={() => setIsPwd(!isPwd)}
+                  className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
+                    isPwd ? 'bg-indigo-50 border-indigo-500 text-indigo-900' : 'bg-slate-50 border-slate-200 text-slate-600'
+                  }`}
+                >
+                  <div className="space-y-0.5">
+                    <p className="font-extrabold text-xs">Person with Disability (PWD)</p>
+                    <p className="text-[10px] text-slate-400 font-medium">Are you a registered PWD student?</p>
                   </div>
-                  <div className="bg-slate-50 p-6 rounded-[1.5rem] text-slate-600 font-bold leading-relaxed shadow-inner">{inq.message}</div>
-                  {inq.counselor_reply ? (
-                    <div className="mt-4 pt-6 border-t-2 border-dashed border-slate-100 animate-in slide-in-from-top-2">
-                      <div className="flex items-center gap-2 mb-4">
-                        <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center shadow-lg">
-                          <BadgeCheck className="w-4 h-4 text-white" />
-                        </div>
-                        <span className="text-[10px] font-black uppercase text-indigo-600 tracking-[0.2em]">Counselor Feedback</span>
-                      </div>
-                      <div className="bg-indigo-600 p-6 rounded-[2rem] rounded-tl-none shadow-xl shadow-indigo-100">
-                        <p className="text-white font-bold leading-relaxed italic">"{inq.counselor_reply}"</p>
-                        {inq.replied_at && (
-                          <p className="text-[8px] text-indigo-200 mt-2 uppercase font-black tracking-widest text-right">{new Date(inq.replied_at).toLocaleString()}</p>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-slate-50/50 p-4 rounded-2xl flex items-center justify-center gap-3 border border-dashed border-slate-200">
-                      <Loader2 className="w-3 h-3 animate-spin text-slate-300" />
-                      <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.3em]">Awaiting Counselor Review</p>
-                    </div>
-                  )}
-                </Card>
-              ))
-            ) : (
-              <div className="text-center py-24 bg-slate-50 rounded-[4rem] border-4 border-dashed border-slate-200">
-                <MessageCircle className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest italic">No inquiries submitted yet.</p>
+                  <Badge className={`uppercase text-[9px] font-black px-3 py-1 ${isPwd ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                    {isPwd ? 'YES' : 'NO'}
+                  </Badge>
+                </div>
+
+                <div 
+                  onClick={() => setIsIp(!isIp)}
+                  className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
+                    isIp ? 'bg-indigo-50 border-indigo-500 text-indigo-900' : 'bg-slate-50 border-slate-200 text-slate-600'
+                  }`}
+                >
+                  <div className="space-y-0.5">
+                    <p className="font-extrabold text-xs">Indigenous People (IP)</p>
+                    <p className="text-[10px] text-slate-400 font-medium">Do you belong to an IP community?</p>
+                  </div>
+                  <Badge className={`uppercase text-[9px] font-black px-3 py-1 ${isIp ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                    {isIp ? 'YES' : 'NO'}
+                  </Badge>
+                </div>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
+            </div>
+
+            {/* SUBMIT BUTTON */}
+            <Button 
+              type="submit" 
+              disabled={loading || !currentUserId} 
+              className="w-full h-14 bg-slate-900 hover:bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest transition-all flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <Save className="w-4 h-4" /> Save & Update Profile
+                </>
+              )}
+            </Button>
+
+          </form>
+        </Card>
+      )}
+
     </div>
   );
 }
