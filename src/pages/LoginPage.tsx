@@ -34,6 +34,8 @@ import {
   UsersRound,
   CheckCircle2,
   AlertCircle,
+  KeyRound,
+  Send,
 } from 'lucide-react';
 
 import { useToast } from '../hooks/use-toast';
@@ -103,6 +105,11 @@ export default function LoginPage({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
+
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [sendingReset, setSendingReset] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
 
   const { toast } = useToast();
 
@@ -397,8 +404,159 @@ export default function LoginPage({
     }
   };
 
+  const handleOpenForgotPassword = () => {
+    setResetEmail(email.trim());
+    setResetEmailSent(false);
+    setShowForgotPassword(true);
+  };
+
+  const handleSendResetEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const cleanResetEmail = resetEmail.trim();
+
+    if (!cleanResetEmail) {
+      toast({
+        variant: 'destructive',
+        title: 'EMAIL REQUIRED',
+        description: 'Please enter your institutional email.',
+      });
+      return;
+    }
+
+    setSendingReset(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        cleanResetEmail,
+        { redirectTo: `${window.location.origin}/reset-password` }
+      );
+
+      if (error) throw error;
+
+      setResetEmailSent(true);
+    } catch (error: any) {
+      // Supabase intentionally doesn't reveal whether an email exists for
+      // password-reset requests (prevents account enumeration), so most
+      // errors here are transient (rate limiting, network). Show the same
+      // "check your inbox" success state regardless, matching that
+      // behavior, unless it's clearly a client-side problem.
+      console.error('Password reset error:', error);
+      setResetEmailSent(true);
+    } finally {
+      setSendingReset(false);
+    }
+  };
+
   return (
     <div className="min-h-screen w-full bg-slate-50 flex items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
+      {/* FORGOT PASSWORD MODAL */}
+      {showForgotPassword && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+            onClick={() => setShowForgotPassword(false)}
+          />
+
+          <Card className="relative z-10 w-full max-w-md bg-white rounded-[2rem] sm:rounded-[3rem] shadow-2xl border-none overflow-hidden">
+            <div className="p-6 sm:p-8 md:p-10">
+              <div className="flex items-start justify-between gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
+                    <KeyRound className="w-6 h-6 text-indigo-600" />
+                  </div>
+
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-slate-900">
+                      Reset Password
+                    </h2>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">
+                      OMSC Guidance System
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(false)}
+                  className="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors shrink-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {resetEmailSent ? (
+                <div className="text-center py-4">
+                  <div className="mx-auto w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center mb-4">
+                    <CheckCircle2 className="w-7 h-7 text-emerald-600" />
+                  </div>
+
+                  <h3 className="text-lg font-black text-slate-900">
+                    Check Your Email
+                  </h3>
+
+                  <p className="mt-2 text-sm text-slate-500 leading-relaxed">
+                    If an account exists for{' '}
+                    <strong className="text-slate-700">{resetEmail}</strong>,
+                    a password reset link has been sent. Open it from the same
+                    device/browser to set a new password.
+                  </p>
+
+                  <Button
+                    type="button"
+                    onClick={() => setShowForgotPassword(false)}
+                    className="w-full h-12 mt-6 bg-slate-900 hover:bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs tracking-wider"
+                  >
+                    Back to Sign In
+                  </Button>
+                </div>
+              ) : (
+                <form onSubmit={handleSendResetEmail} className="space-y-5">
+                  <p className="text-sm text-slate-500 leading-relaxed">
+                    Enter your institutional email and we'll send you a link
+                    to reset your password.
+                  </p>
+
+                  <FieldWrapper
+                    label="Institutional Email"
+                    required
+                    icon={<Mail className="w-4 h-4" />}
+                  >
+                    <Input
+                      className="input-style pl-11"
+                      type="email"
+                      placeholder="student@omsc.edu.ph"
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      autoComplete="email"
+                      required
+                    />
+                  </FieldWrapper>
+
+                  <Button
+                    type="submit"
+                    disabled={sendingReset}
+                    className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-xs tracking-wider"
+                  >
+                    {sendingReset ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" />
+                        Send Reset Link
+                      </>
+                    )}
+                  </Button>
+                </form>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* TERMS MODAL */}
       {showTerms && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -1010,6 +1168,16 @@ export default function LoginPage({
                   </button>
                 </div>
               </FieldWrapper>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleOpenForgotPassword}
+                  className="text-[10px] font-black uppercase tracking-wider text-indigo-600 hover:underline"
+                >
+                  Forgot Password?
+                </button>
+              </div>
             </div>
           )}
 

@@ -11,6 +11,7 @@ import Layout from "./components/layout/Layout";
 // Pages
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import StudentDashboard from './pages/StudentDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 
@@ -65,6 +66,7 @@ function AppContent() {
               : <LoginPage onLogin={handleLogin} onBackToHome={() => navigate('/')} />
           }
         />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {/* ─── 3. PROTECTED ROUTES ─── */}
         {/* Student */}
