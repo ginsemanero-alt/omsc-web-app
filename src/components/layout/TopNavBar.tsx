@@ -1,4 +1,4 @@
-import { GraduationCap, Search, LogOut, ChevronDown, Menu, X } from 'lucide-react'; 
+import { GraduationCap, LogOut, ChevronDown, Menu, X } from 'lucide-react';
 import { useState, useEffect } from 'react'; // Idinagdag ang useEffect
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase'; // Siguraduhin na tama ang path ng supabase client mo
@@ -20,11 +20,10 @@ interface NavigationItem {
 }
 
 interface TopNavBarProps {
-  role: 'student' | 'counselor' | 'admin';
+  role: 'student' | 'admin';
   userName: string; // Ito yung default/fallback name
   campus: string;
   onLogout: () => void;
-  onCommandOpen: () => void;
   navigationItems: NavigationItem[];
   currentPath: string;
 }
@@ -33,7 +32,6 @@ export default function TopNavBar({
   userName: initialUserName, // Ginawang initial lang
   campus,
   onLogout,
-  onCommandOpen,
   navigationItems,
   currentPath,
 }: TopNavBarProps) {
@@ -46,11 +44,14 @@ export default function TopNavBar({
     async function fetchActualName() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        // Admin accounts have no `profiles` row (demographics are
+        // student-only) — maybeSingle() returns null there instead of a
+        // 406 error, and displayName just keeps its initialUserName prop.
         const { data: profile } = await supabase
-          .from('profiles') // Palitan kung 'accounts' ang table name mo
+          .from('profiles')
           .select('full_name')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
         
         if (profile?.full_name) {
           setDisplayName(profile.full_name);
@@ -111,10 +112,6 @@ export default function TopNavBar({
           </nav>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={onCommandOpen}>
-              <Search className="w-5 h-5" />
-            </Button>
-            
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="flex items-center gap-2 px-2 hover:bg-slate-100 rounded-xl transition-all">

@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 
 export default defineConfig({
   plugins: [react()],
-  publicDir: "./static",
+  publicDir: "public",
   base: "./",
   css: {
     postcss: {

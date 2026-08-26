@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../hooks/useAuth';
 
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -8,6 +10,7 @@ import { useToast } from '../../hooks/use-toast';
 import {
   ClipboardList,
   CheckCircle2,
+  XCircle,
   PlayCircle,
   Loader2,
   X,
@@ -17,6 +20,12 @@ import {
   AlertCircle,
   Send,
   RotateCcw,
+  FileCheck2,
+  Clock,
+  Trophy,
+  ArrowRight,
+  BookOpen,
+  Calendar,
 } from 'lucide-react';
 
 interface Question {
@@ -25,6 +34,9 @@ interface Question {
   type: 'mcq' | 'scale' | 'text' | string;
   options?: string[];
   required?: boolean;
+  correct_option?: string;
+  related_program_id?: number | null;
+  related_material_id?: number | null;
 }
 
 interface Survey {
@@ -33,13 +45,72 @@ interface Survey {
   description?: string | null;
   questions_data?: Question[];
   status?: string;
+  type?: 'knowledge' | 'opinion';
   created_at?: string;
   is_completed?: boolean;
 }
 
+interface SurveyResult {
+  id: string | number;
+  survey_id: string | number;
+  title: string;
+  category?: string | null;
+  created_at: string;
+  score?: number | null;
+  total_scored?: number | null;
+  percentage?: number | null;
+}
+
+interface MissedQuestion {
+  question: Question;
+  studentAnswer: any;
+}
+
+interface ScoreSummary {
+  correct: number;
+  total: number;
+  percentage: number | null;
+  missed: MissedQuestion[];
+}
+
+function computeScoreSummary(
+  questions: Question[],
+  answers: Record<string, any>
+): ScoreSummary {
+  const scoredQuestions = questions.filter(
+    (question) => question.type === 'mcq' && question.correct_option
+  );
+
+  const missed: MissedQuestion[] = [];
+  let correct = 0;
+
+  for (const question of scoredQuestions) {
+    const studentAnswer = answers[String(question.id)];
+
+    if (studentAnswer === question.correct_option) {
+      correct += 1;
+    } else {
+      missed.push({ question, studentAnswer });
+    }
+  }
+
+  const total = scoredQuestions.length;
+  const percentage = total > 0 ? Math.round((correct / total) * 100) : null;
+
+  return { correct, total, percentage, missed };
+}
+
 export default function QuizzesSurveys() {
+  const navigate = useNavigate();
+  const { dbUserId } = useAuth();
+
+  const [view, setView] = useState<'available' | 'results'>('available');
+
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [results, setResults] = useState<SurveyResult[]>([]);
+  const [resultsLoading, setResultsLoading] = useState(true);
 
   const [activeSurveyId, setActiveSurveyId] = useState<string | number | null>(
     null
@@ -52,20 +123,105 @@ export default function QuizzesSurveys() {
   const [showInstructions, setShowInstructions] = useState(false);
   const [showReview, setShowReview] = useState(false);
   const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false);
+  const [scoreSummary, setScoreSummary] = useState<ScoreSummary | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
 
+  const [programTitles, setProgramTitles] = useState<Record<number, string>>({});
+  const [materialTitles, setMaterialTitles] = useState<Record<number, string>>({});
+
   const { toast } = useToast();
 
-  /*
-   * MANUAL USER ID
-   * Keep this consistent with your existing database structure.
-   */
-  const CURRENT_USER_ID = '3';
-
   useEffect(() => {
+    if (!dbUserId) return;
+
     fetchActiveSurveys();
-  }, []);
+    fetchMyResults();
+    fetchLinkTitles();
+  }, [dbUserId]);
+
+  async function fetchLinkTitles() {
+    const [programsRes, materialsRes] = await Promise.all([
+      supabase.from('programs').select('id, title'),
+      supabase.from('materials').select('id, title'),
+    ]);
+
+    if (programsRes.data) {
+      setProgramTitles(
+        Object.fromEntries(programsRes.data.map((p: any) => [p.id, p.title]))
+      );
+    }
+
+    if (materialsRes.data) {
+      setMaterialTitles(
+        Object.fromEntries(materialsRes.data.map((m: any) => [m.id, m.title]))
+      );
+    }
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * FETCH MY RESULTS
+   * ---------------------------------------------------------
+   */
+  async function fetchMyResults() {
+    if (!dbUserId) return;
+
+    try {
+      setResultsLoading(true);
+
+      const { data: responsesData, error: responsesError } = await supabase
+        .from('survey_responses')
+        .select('id, survey_id, created_at, score, total_scored, percentage')
+        .eq('user_id', dbUserId)
+        .order('created_at', { ascending: false });
+
+      if (responsesError) throw responsesError;
+
+      const surveyIds = [
+        ...new Set((responsesData || []).map((r) => r.survey_id).filter(Boolean)),
+      ];
+
+      let surveysMap: Record<string, any> = {};
+
+      if (surveyIds.length > 0) {
+        const { data: surveysData, error: surveysError } = await supabase
+          .from('surveys')
+          .select('id, title, category')
+          .in('id', surveyIds);
+
+        if (surveysError) {
+          console.warn('Unable to fetch survey titles:', surveysError);
+        } else {
+          surveysMap = (surveysData || []).reduce((acc: Record<string, any>, s: any) => {
+            acc[String(s.id)] = s;
+            return acc;
+          }, {});
+        }
+      }
+
+      const formattedResults: SurveyResult[] = (responsesData || []).map((response: any) => {
+        const survey = surveysMap[String(response.survey_id)];
+
+        return {
+          id: response.id,
+          survey_id: response.survey_id,
+          title: survey?.title || 'Guidance Survey Response',
+          category: survey?.category || null,
+          created_at: response.created_at,
+          score: response.score,
+          total_scored: response.total_scored,
+          percentage: response.percentage,
+        };
+      });
+
+      setResults(formattedResults);
+    } catch (error: any) {
+      console.error('Results Fetch Error:', error);
+    } finally {
+      setResultsLoading(false);
+    }
+  }
 
   /*
    * ---------------------------------------------------------
@@ -73,6 +229,8 @@ export default function QuizzesSurveys() {
    * ---------------------------------------------------------
    */
   async function fetchActiveSurveys() {
+    if (!dbUserId) return;
+
     try {
       setLoading(true);
 
@@ -87,7 +245,7 @@ export default function QuizzesSurveys() {
       const { data: responsesData, error: responsesError } = await supabase
         .from('survey_responses')
         .select('survey_id')
-        .eq('user_id', CURRENT_USER_ID);
+        .eq('user_id', dbUserId);
 
       if (responsesError) {
         console.warn('Unable to fetch completed surveys:', responsesError);
@@ -161,6 +319,7 @@ export default function QuizzesSurveys() {
     setShowInstructions(true);
     setShowReview(false);
     setShowSubmitConfirmation(false);
+    setScoreSummary(null);
   };
 
   /*
@@ -177,6 +336,7 @@ export default function QuizzesSurveys() {
     setShowInstructions(false);
     setShowReview(false);
     setShowSubmitConfirmation(false);
+    setScoreSummary(null);
   };
 
   /*
@@ -352,13 +512,28 @@ export default function QuizzesSurveys() {
       return;
     }
 
+    if (!dbUserId) {
+      toast({
+        title: 'Session Not Ready',
+        description: 'Please wait a moment and try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const isKnowledge = activeSurvey.type === 'knowledge';
+    const summary = isKnowledge ? computeScoreSummary(questions, answers) : null;
+
     try {
       setSubmitting(true);
 
       const responsePayload = {
         survey_id: activeSurvey.id,
-        user_id: CURRENT_USER_ID,
+        user_id: dbUserId,
         answers: answers,
+        score: summary ? summary.correct : null,
+        total_scored: summary ? summary.total : null,
+        percentage: summary ? summary.percentage : null,
       };
 
       const { error } = await supabase
@@ -367,19 +542,28 @@ export default function QuizzesSurveys() {
 
       if (error) throw error;
 
-      toast({
-        title: 'Assessment Submitted',
-        description:
-          'Your response has been successfully recorded. Thank you for participating!',
-      });
+      await fetchActiveSurveys();
+      await fetchMyResults();
 
       setShowSubmitConfirmation(false);
       setShowReview(false);
-      setActiveSurveyId(null);
-      setAnswers({});
-      setCurrentQuestionIndex(0);
 
-      await fetchActiveSurveys();
+      if (summary && summary.total > 0) {
+        // Knowledge assessment with scored questions — show the results
+        // screen instead of closing, so a missed question can point the
+        // student back to the program/material it covers.
+        setScoreSummary(summary);
+      } else {
+        toast({
+          title: 'Assessment Submitted',
+          description:
+            'Your response has been successfully recorded. Thank you for participating!',
+        });
+
+        setActiveSurveyId(null);
+        setAnswers({});
+        setCurrentQuestionIndex(0);
+      }
     } catch (error: any) {
       console.error('Submission Error:', error);
 
@@ -604,8 +788,112 @@ export default function QuizzesSurveys() {
         </div>
       </div>
 
+      {/* VIEW TOGGLE */}
+      <div className="flex flex-wrap items-center gap-2 mb-8">
+        <button
+          type="button"
+          onClick={() => setView('available')}
+          className={`h-10 px-5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+            view === 'available'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'
+          }`}
+        >
+          Available Surveys
+        </button>
+        <button
+          type="button"
+          onClick={() => setView('results')}
+          className={`h-10 px-5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+            view === 'results'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'
+          }`}
+        >
+          My Results ({results.length})
+        </button>
+      </div>
+
+      {/* MY RESULTS */}
+      {view === 'results' && (
+        resultsLoading ? (
+          <div className="min-h-[40vh] flex items-center justify-center px-4">
+            <div className="flex flex-col items-center text-center">
+              <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+              <p className="mt-4 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
+                Loading Your Results
+              </p>
+            </div>
+          </div>
+        ) : results.length === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 px-6">
+            <FileCheck2 className="w-12 h-12 text-slate-300 mb-4" />
+            <h2 className="text-lg sm:text-xl font-black text-slate-700">
+              No Completed Surveys Yet
+            </h2>
+            <p className="text-sm text-slate-400 mt-2 max-w-md">
+              Once you complete a survey, your results will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {results.map((result) => (
+              <Card
+                key={result.id}
+                className="p-5 sm:p-6 rounded-3xl border border-slate-100 shadow-sm bg-white flex items-center gap-4"
+              >
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
+                  <FileCheck2 className="w-6 h-6 text-indigo-600" />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 truncate">
+                    {result.title}
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                    {result.category && (
+                      <span className="text-[10px] font-black uppercase tracking-wider text-violet-500">
+                        {result.category}
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400">
+                      <Clock className="w-3 h-3" />
+                      {new Date(result.created_at).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </span>
+                  </div>
+                </div>
+
+                {result.percentage !== null && result.percentage !== undefined ? (
+                  <div className="text-center shrink-0">
+                    <p
+                      className={`text-xl font-black ${
+                        result.percentage >= 70 ? 'text-emerald-600' : 'text-amber-600'
+                      }`}
+                    >
+                      {result.percentage}%
+                    </p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                      {result.score}/{result.total_scored} Correct
+                    </p>
+                  </div>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-wider shrink-0">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Submitted
+                  </span>
+                )}
+              </Card>
+            ))}
+          </div>
+        )
+      )}
+
       {/* SURVEY LIST */}
-      {!activeSurvey ? (
+      {view === 'available' && (!activeSurvey ? (
         <>
           {surveys.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 px-6">
@@ -648,28 +936,45 @@ export default function QuizzesSurveys() {
                       <ClipboardList className="w-6 h-6 sm:w-7 sm:h-7 text-indigo-600" />
                     </div>
 
-                    <span
-                      className={`
-                        inline-flex items-center gap-1.5
-                        px-3 py-1.5
-                        rounded-full
-                        text-[9px] sm:text-[10px]
-                        font-black uppercase tracking-wider
-                        ${
-                          survey.is_completed
-                            ? 'bg-emerald-50 text-emerald-600'
-                            : 'bg-indigo-50 text-indigo-600'
-                        }
-                      `}
-                    >
-                      {survey.is_completed ? (
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                      ) : (
-                        <PlayCircle className="w-3.5 h-3.5" />
-                      )}
+                    <div className="flex flex-col items-end gap-1.5">
+                      <span
+                        className={`
+                          inline-flex items-center gap-1.5
+                          px-3 py-1.5
+                          rounded-full
+                          text-[9px] sm:text-[10px]
+                          font-black uppercase tracking-wider
+                          ${
+                            survey.is_completed
+                              ? 'bg-emerald-50 text-emerald-600'
+                              : 'bg-indigo-50 text-indigo-600'
+                          }
+                        `}
+                      >
+                        {survey.is_completed ? (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        ) : (
+                          <PlayCircle className="w-3.5 h-3.5" />
+                        )}
 
-                      {survey.is_completed ? 'Completed' : 'Available'}
-                    </span>
+                        {survey.is_completed ? 'Completed' : 'Available'}
+                      </span>
+
+                      <span
+                        className={`
+                          px-3 py-1 rounded-full
+                          text-[8px] sm:text-[9px]
+                          font-black uppercase tracking-wider
+                          ${
+                            survey.type === 'knowledge'
+                              ? 'bg-purple-50 text-purple-600'
+                              : 'bg-slate-100 text-slate-500'
+                          }
+                        `}
+                      >
+                        {survey.type === 'knowledge' ? 'Scored' : 'Opinion'}
+                      </span>
+                    </div>
                   </div>
 
                   <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 leading-tight">
@@ -768,7 +1073,7 @@ export default function QuizzesSurveys() {
             </div>
 
             {/* PROGRESS */}
-            {!showInstructions && !showReview && (
+            {!showInstructions && !showReview && !scoreSummary && (
               <div className="mt-6">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-500">
@@ -798,7 +1103,7 @@ export default function QuizzesSurveys() {
             {/* -------------------------------------------
                 INSTRUCTIONS
             ------------------------------------------- */}
-            {showInstructions && (
+            {showInstructions && !scoreSummary && (
               <div className="max-w-3xl mx-auto">
                 <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-indigo-50 flex items-center justify-center mb-6">
                   <ClipboardList className="w-7 h-7 sm:w-8 sm:h-8 text-indigo-600" />
@@ -871,7 +1176,7 @@ export default function QuizzesSurveys() {
             {/* -------------------------------------------
                 QUESTION
             ------------------------------------------- */}
-            {!showInstructions && !showReview && currentQuestion && (
+            {!showInstructions && !showReview && !scoreSummary && currentQuestion && (
               <div className="max-w-3xl mx-auto">
                 <div className="flex items-start gap-3 sm:gap-5">
                   <div
@@ -960,7 +1265,7 @@ export default function QuizzesSurveys() {
             {/* -------------------------------------------
                 REVIEW
             ------------------------------------------- */}
-            {!showInstructions && showReview && (
+            {!showInstructions && showReview && !scoreSummary && (
               <div className="max-w-4xl mx-auto">
                 <div className="text-center max-w-2xl mx-auto">
                   <div className="mx-auto w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-indigo-50 flex items-center justify-center mb-5">
@@ -1106,9 +1411,130 @@ export default function QuizzesSurveys() {
                 </div>
               </div>
             )}
+
+            {/* -------------------------------------------
+                RESULTS (knowledge assessments only)
+            ------------------------------------------- */}
+            {scoreSummary && (
+              <div className="max-w-3xl mx-auto">
+                <div className="text-center max-w-xl mx-auto">
+                  <div
+                    className={`mx-auto w-16 h-16 sm:w-20 sm:h-20 rounded-3xl flex items-center justify-center mb-6 ${
+                      (scoreSummary.percentage ?? 0) >= 70
+                        ? 'bg-emerald-50'
+                        : 'bg-amber-50'
+                    }`}
+                  >
+                    <Trophy
+                      className={`w-8 h-8 sm:w-10 sm:h-10 ${
+                        (scoreSummary.percentage ?? 0) >= 70
+                          ? 'text-emerald-600'
+                          : 'text-amber-600'
+                      }`}
+                    />
+                  </div>
+
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-2">
+                    Assessment Complete
+                  </p>
+
+                  <h3 className="text-3xl sm:text-4xl font-black text-slate-900">
+                    {scoreSummary.correct} / {scoreSummary.total} Correct
+                  </h3>
+
+                  <p className="mt-2 text-lg sm:text-xl font-black text-indigo-600">
+                    {scoreSummary.percentage}% Score
+                  </p>
+
+                  <p className="mt-4 text-sm sm:text-base text-slate-500 leading-relaxed">
+                    {scoreSummary.missed.length === 0
+                      ? 'Perfect score! You answered every knowledge question correctly.'
+                      : "Here's what to review — each item below links to where you can learn more."}
+                  </p>
+                </div>
+
+                {scoreSummary.missed.length > 0 && (
+                  <div className="mt-8 space-y-4">
+                    {scoreSummary.missed.map(({ question, studentAnswer }) => (
+                      <div
+                        key={question.id}
+                        className="p-4 sm:p-6 rounded-2xl border border-rose-100 bg-rose-50/50"
+                      >
+                        <div className="flex items-start gap-3">
+                          <XCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm sm:text-base font-black text-slate-800 leading-relaxed">
+                              {question.text}
+                            </p>
+
+                            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div className="p-3 rounded-xl bg-white border border-rose-100">
+                                <p className="text-[9px] font-black uppercase text-rose-500">
+                                  Your Answer
+                                </p>
+                                <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-600">
+                                  {studentAnswer || 'No answer'}
+                                </p>
+                              </div>
+
+                              <div className="p-3 rounded-xl bg-white border border-emerald-100">
+                                <p className="text-[9px] font-black uppercase text-emerald-600">
+                                  Correct Answer
+                                </p>
+                                <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-600">
+                                  {question.correct_option}
+                                </p>
+                              </div>
+                            </div>
+
+                            {(question.related_program_id || question.related_material_id) && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {question.related_program_id &&
+                                  programTitles[question.related_program_id] && (
+                                    <Button
+                                      onClick={() => navigate('/student/programs')}
+                                      variant="outline"
+                                      className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
+                                    >
+                                      <Calendar className="w-3.5 h-3.5" />
+                                      {programTitles[question.related_program_id]}
+                                      <ArrowRight className="w-3.5 h-3.5" />
+                                    </Button>
+                                  )}
+
+                                {question.related_material_id &&
+                                  materialTitles[question.related_material_id] && (
+                                    <Button
+                                      onClick={() => navigate('/student/materials')}
+                                      variant="outline"
+                                      className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
+                                    >
+                                      <BookOpen className="w-3.5 h-3.5" />
+                                      {materialTitles[question.related_material_id]}
+                                      <ArrowRight className="w-3.5 h-3.5" />
+                                    </Button>
+                                  )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleCloseSurvey}
+                  className="mt-8 w-full h-12 sm:h-14 rounded-2xl bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] sm:text-xs tracking-widest"
+                >
+                  Done
+                </Button>
+              </div>
+            )}
           </div>
         </Card>
-      )}
+      ))}
 
       {/* -----------------------------------------------
           SUBMISSION CONFIRMATION MODAL

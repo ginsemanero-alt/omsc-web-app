@@ -43,6 +43,8 @@ import {
   Video,
   File,
   Eye,
+  Trophy,
+  Target,
 } from "lucide-react";
 
 import {
@@ -63,7 +65,7 @@ import {
 
 import { motion } from "framer-motion";
 import { jsPDF } from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 import { saveAs } from "file-saver";
 
 /* =========================================================
@@ -94,22 +96,24 @@ interface GuidanceProgram {
   category?: string | null;
   status?: string | null;
   created_at?: string | null;
+  guidance_service?: string | null;
+  program_component?: string | null;
 }
 
-interface Registration {
-  id?: string | number;
-  user_id?: string | null;
-  student_id?: string | null;
-  program_id?: string | number | null;
-  program?: string | null;
-  created_at?: string | null;
-  status?: string | null;
-}
+const GUIDANCE_SERVICES = [
+  "Information Services",
+  "Individual Inventory",
+  "Research and Evaluation",
+  "Career Orientation",
+  "Testing Services",
+  "Counseling Services",
+];
 
 interface Survey {
   id: string | number;
   title: string;
   status?: string | null;
+  type?: string | null;
   questions_data?: any[];
   created_at?: string | null;
 }
@@ -121,6 +125,18 @@ interface SurveyResponse {
   student_id?: string | null;
   answers?: Record<string, any> | null;
   created_at?: string | null;
+  score?: number | null;
+  total_scored?: number | null;
+  percentage?: number | null;
+}
+
+// Bridges survey_responses.user_id (a bigint FK to users.id) to
+// profiles (keyed on the auth uuid): users.id -> users.student_id ->
+// profiles.student_id. Neither users.id nor profiles.id can be
+// compared directly to each other.
+interface UserBridge {
+  id: string | number;
+  student_id?: string | null;
 }
 
 /* =========================================================
@@ -308,11 +324,11 @@ export default function AnalyticsDashboard() {
 
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [programs, setPrograms] = useState<GuidanceProgram[]>([]);
-  const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [surveyResponses, setSurveyResponses] = useState<
     SurveyResponse[]
   >([]);
+  const [userBridge, setUserBridge] = useState<UserBridge[]>([]);
 
   /* MATERIALS */
 
@@ -342,20 +358,15 @@ export default function AnalyticsDashboard() {
       const [
         profilesResult,
         programsResult,
-        registrationsResult,
         surveysResult,
         responsesResult,
         materialsResult,
+        userBridgeResult,
       ] = await Promise.all([
         supabase.from("profiles").select("*"),
 
         supabase
           .from("programs")
-          .select("*")
-          .order("created_at", { ascending: false }),
-
-        supabase
-          .from("program_registrations")
           .select("*")
           .order("created_at", { ascending: false }),
 
@@ -377,6 +388,10 @@ export default function AnalyticsDashboard() {
           .from("materials")
           .select("*")
           .order("created_at", { ascending: false }),
+
+        // Only the columns needed to bridge survey_responses.user_id to
+        // profiles via student_id (see UserBridge above).
+        supabase.from("users").select("id, student_id"),
       ]);
 
       if (profilesResult.error) {
@@ -385,10 +400,6 @@ export default function AnalyticsDashboard() {
 
       if (programsResult.error) {
         console.error("Programs:", programsResult.error);
-      }
-
-      if (registrationsResult.error) {
-        console.error("Registrations:", registrationsResult.error);
       }
 
       if (surveysResult.error) {
@@ -403,17 +414,19 @@ export default function AnalyticsDashboard() {
         console.error("Materials:", materialsResult.error);
       }
 
+      if (userBridgeResult.error) {
+        console.error("Users bridge:", userBridgeResult.error);
+      }
+
       setProfiles((profilesResult.data || []) as Profile[]);
       setPrograms((programsResult.data || []) as GuidanceProgram[]);
-      setRegistrations(
-        (registrationsResult.data || []) as Registration[]
-      );
       setSurveys((surveysResult.data || []) as Survey[]);
       setSurveyResponses(
         (responsesResult.data || []) as SurveyResponse[]
       );
 
       setMaterials((materialsResult.data || []) as Material[]);
+      setUserBridge((userBridgeResult.data || []) as UserBridge[]);
     } catch (error) {
       console.error("Analytics loading error:", error);
     } finally {
@@ -478,16 +491,6 @@ export default function AnalyticsDashboard() {
       }
     });
 
-    registrations.forEach((r) => {
-      if (!r.created_at) return;
-
-      const year = new Date(r.created_at).getFullYear();
-
-      if (Number.isFinite(year)) {
-        years.add(String(year));
-      }
-    });
-
     surveyResponses.forEach((r) => {
       if (!r.created_at) return;
 
@@ -511,7 +514,6 @@ export default function AnalyticsDashboard() {
     return Array.from(years).sort().reverse();
   }, [
     profiles,
-    registrations,
     surveyResponses,
     materials,
   ]);
@@ -578,18 +580,6 @@ export default function AnalyticsDashboard() {
   ]);
 
   /* =======================================================
-     FILTERED USER IDS
-  ======================================================= */
-
-  const filteredUserIds = useMemo(() => {
-    return new Set(
-      filteredProfiles
-        .map((p) => safeString(p.id))
-        .filter(Boolean)
-    );
-  }, [filteredProfiles]);
-
-  /* =======================================================
      FILTERED STUDENT IDS
   ======================================================= */
 
@@ -602,71 +592,40 @@ export default function AnalyticsDashboard() {
   }, [filteredProfiles]);
 
   /* =======================================================
-     REGISTRATIONS
-  ======================================================= */
-
-  const filteredRegistrations = useMemo(() => {
-    return registrations.filter((registration) => {
-      const userId = safeString(registration.user_id);
-      const studentId = safeString(
-        registration.student_id
-      );
-
-      if (!hasActiveFilters) {
-        return true;
-      }
-
-      if (userId && filteredUserIds.has(userId)) {
-        return true;
-      }
-
-      if (
-        studentId &&
-        filteredStudentIds.has(studentId)
-      ) {
-        return true;
-      }
-
-      return false;
-    });
-  }, [
-    registrations,
-    filteredUserIds,
-    filteredStudentIds,
-    hasActiveFilters,
-  ]);
-
-  /* =======================================================
      SURVEY RESPONSES
   ======================================================= */
 
+  // survey_responses.user_id is a bigint FK to users.id, which has no
+  // direct relationship to profiles.id (a uuid) or profiles.student_id.
+  // Bridge it via users.student_id, which matches profiles.student_id.
+  const userIdToStudentId = useMemo(() => {
+    const map: Record<string, string> = {};
+
+    userBridge.forEach((user) => {
+      const studentId = safeString(user.student_id);
+      if (studentId) {
+        map[safeString(user.id)] = studentId;
+      }
+    });
+
+    return map;
+  }, [userBridge]);
+
   const filteredSurveyResponses = useMemo(() => {
     return surveyResponses.filter((response) => {
-      const userId = safeString(response.user_id);
-      const studentId = safeString(
-        response.student_id
-      );
-
       if (!hasActiveFilters) {
         return true;
       }
 
-      if (userId && filteredUserIds.has(userId)) {
-        return true;
-      }
+      const studentId =
+        userIdToStudentId[safeString(response.user_id)] ||
+        safeString(response.student_id);
 
-      if (
-        studentId &&
-        filteredStudentIds.has(studentId)
-      ) {
-        return true;
-      }
-
-      return false;
+      return !!studentId && filteredStudentIds.has(studentId);
     });
   }, [
     surveyResponses,
-    filteredUserIds,
+    userIdToStudentId,
     filteredStudentIds,
     hasActiveFilters,
   ]);
@@ -792,15 +751,6 @@ export default function AnalyticsDashboard() {
       );
     });
 
-    filteredRegistrations.forEach(
-      (registration) => {
-        addParticipant(
-          registration.user_id,
-          registration.student_id
-        );
-      }
-    );
-
     filteredSurveyResponses.forEach(
       (response) => {
         addParticipant(
@@ -813,39 +763,8 @@ export default function AnalyticsDashboard() {
     return participants.size;
   }, [
     filteredProfiles,
-    filteredRegistrations,
     filteredSurveyResponses,
   ]);
-
-  /* =======================================================
-     PROGRAM PARTICIPANTS
-  ======================================================= */
-
-  const programParticipants = useMemo(() => {
-    const participants = new Set<string>();
-
-    filteredRegistrations.forEach(
-      (registration) => {
-        const userId = normalize(
-          registration.user_id
-        );
-
-        const studentId = normalize(
-          registration.student_id
-        );
-
-        if (studentId) {
-          participants.add(
-            `student:${studentId}`
-          );
-        } else if (userId) {
-          participants.add(`user:${userId}`);
-        }
-      }
-    );
-
-    return participants.size;
-  }, [filteredRegistrations]);
 
   /* =======================================================
      SURVEY PARTICIPANTS
@@ -874,116 +793,6 @@ export default function AnalyticsDashboard() {
 
     return participants.size;
   }, [filteredSurveyResponses]);
-
-  /* =======================================================
-     PROGRAM ANALYTICS
-  ======================================================= */
-
-  const programAnalytics = useMemo(() => {
-    const countsById: Record<
-      string,
-      number
-    > = {};
-
-    const countsByName: Record<
-      string,
-      number
-    > = {};
-
-    programs.forEach((program) => {
-      countsById[String(program.id)] = 0;
-
-      const name = getProgramName(program);
-
-      countsByName[normalize(name)] = 0;
-    });
-
-    filteredRegistrations.forEach(
-      (registration) => {
-        if (
-          registration.program_id !==
-            null &&
-          registration.program_id !==
-            undefined
-        ) {
-          const key = String(
-            registration.program_id
-          );
-
-          countsById[key] =
-            (countsById[key] || 0) + 1;
-        }
-
-        if (registration.program) {
-          const key = normalize(
-            registration.program
-          );
-
-          countsByName[key] =
-            (countsByName[key] || 0) + 1;
-        }
-      }
-    );
-
-    const rows = programs.map((program) => {
-      const programId = String(program.id);
-
-      const name = getProgramName(program);
-
-      const registrationCount =
-        countsById[programId] > 0
-          ? countsById[programId]
-          : countsByName[normalize(name)] || 0;
-
-      return {
-        name,
-        registrations: registrationCount,
-        category:
-          safeString(program.category) ||
-          "Guidance Program",
-      };
-    });
-
-    filteredRegistrations.forEach(
-      (registration) => {
-        if (!registration.program) return;
-
-        const registrationName =
-          safeString(registration.program);
-
-        const alreadyExists = rows.some(
-          (row) =>
-            normalize(row.name) ===
-            normalize(registrationName)
-        );
-
-        if (!alreadyExists) {
-          rows.push({
-            name: registrationName,
-            registrations:
-              countsByName[
-                normalize(registrationName)
-              ] || 0,
-            category: "Guidance Program",
-          });
-        }
-      }
-    );
-
-    return rows
-      .filter(
-        (row) => row.registrations > 0
-      )
-      .sort(
-        (a, b) =>
-          b.registrations -
-          a.registrations
-      )
-      .slice(0, 12);
-  }, [
-    programs,
-    filteredRegistrations,
-  ]);
 
   /* =======================================================
      COURSE ANALYTICS
@@ -1138,6 +947,202 @@ export default function AnalyticsDashboard() {
   }, [filteredProfiles]);
 
   /* =======================================================
+     KNOWLEDGE AWARENESS
+
+     Pelayo/Usita asked for average knowledge score overall, per
+     program, and broken down by year level, gender, PWD, and IP.
+     Only survey_responses belonging to a "knowledge" (scored)
+     survey and carrying a computed percentage count here — opinion
+     surveys have no correct answer, so they contribute nothing.
+  ======================================================= */
+
+  const profileByStudentId = useMemo(() => {
+    const map: Record<string, Profile> = {};
+
+    filteredProfiles.forEach((profile) => {
+      const studentId = safeString(profile.student_id);
+      if (studentId) map[studentId] = profile;
+    });
+
+    return map;
+  }, [filteredProfiles]);
+
+  const scoredSurveyResponses = useMemo(() => {
+    const surveysById: Record<string, Survey> = {};
+    surveys.forEach((survey) => {
+      surveysById[safeString(survey.id)] = survey;
+    });
+
+    return filteredSurveyResponses.filter((response) => {
+      const survey = surveysById[safeString(response.survey_id)];
+      return (
+        survey?.type === "knowledge" &&
+        response.percentage !== null &&
+        response.percentage !== undefined
+      );
+    });
+  }, [filteredSurveyResponses, surveys]);
+
+  const awarenessAnalytics = useMemo(() => {
+    const average = (values: number[]) =>
+      values.length > 0
+        ? Math.round(values.reduce((sum, v) => sum + v, 0) / values.length)
+        : null;
+
+    const overall = average(
+      scoredSurveyResponses.map((r) => r.percentage || 0)
+    );
+
+    const groupBy = (
+      keyFn: (profile: Profile | undefined) => string
+    ) => {
+      const buckets: Record<string, number[]> = {};
+
+      scoredSurveyResponses.forEach((response) => {
+        const studentId = userIdToStudentId[safeString(response.user_id)];
+        const profile = studentId ? profileByStudentId[studentId] : undefined;
+        const key = keyFn(profile);
+
+        if (!buckets[key]) buckets[key] = [];
+        buckets[key].push(response.percentage || 0);
+      });
+
+      return Object.entries(buckets)
+        .map(([label, values]) => ({
+          label,
+          average: average(values) ?? 0,
+          count: values.length,
+        }))
+        .sort((a, b) => b.count - a.count);
+    };
+
+    return {
+      overall,
+      totalResponses: scoredSurveyResponses.length,
+      byYearLevel: groupBy((p) => getYearLevel(p?.year_level)),
+      byGender: groupBy((p) => safeString(p?.gender) || "Not Specified"),
+      byPwd: groupBy((p) => (p?.is_pwd ? "PWD" : "Non-PWD")),
+      byIp: groupBy((p) => (p?.is_ip ? "IP" : "Non-IP")),
+    };
+  }, [scoredSurveyResponses, userIdToStudentId, profileByStudentId]);
+
+  const programAwarenessAnalytics = useMemo(() => {
+    const buckets: Record<string, number[]> = {};
+
+    scoredSurveyResponses.forEach((response) => {
+      const survey = surveys.find(
+        (s) => safeString(s.id) === safeString(response.survey_id)
+      );
+
+      const questions = Array.isArray(survey?.questions_data)
+        ? survey!.questions_data
+        : [];
+
+      questions.forEach((question: any) => {
+        if (
+          question?.type !== "mcq" ||
+          !question?.correct_option ||
+          !question?.related_program_id
+        ) {
+          return;
+        }
+
+        const programId = safeString(question.related_program_id);
+        const given = response.answers?.[String(question.id)];
+        const isCorrect = given === question.correct_option ? 1 : 0;
+
+        if (!buckets[programId]) buckets[programId] = [];
+        buckets[programId].push(isCorrect * 100);
+      });
+    });
+
+    return Object.entries(buckets)
+      .map(([programId, values]) => {
+        const program = programs.find(
+          (p) => safeString(p.id) === programId
+        );
+
+        return {
+          programId,
+          name: program ? getProgramName(program) : `Program #${programId}`,
+          average: Math.round(
+            values.reduce((sum, v) => sum + v, 0) / values.length
+          ),
+          count: values.length,
+        };
+      })
+      .sort((a, b) => b.count - a.count);
+  }, [scoredSurveyResponses, surveys, programs]);
+
+  /* =======================================================
+     GUIDANCE SERVICE COVERAGE
+
+     Usita asked to "include all the Programs of Guidance" — this
+     shows program count and average awareness score per guidance
+     service, across the fixed 6-category list, including
+     categories with zero programs so gaps are visible too.
+  ======================================================= */
+
+  const guidanceServiceCoverage = useMemo(() => {
+    const programCounts: Record<string, number> = {};
+
+    programs.forEach((program) => {
+      const service = safeString(program.guidance_service);
+      if (service) programCounts[service] = (programCounts[service] || 0) + 1;
+    });
+
+    const serviceByProgramId: Record<string, string> = {};
+    programs.forEach((program) => {
+      const service = safeString(program.guidance_service);
+      if (service) serviceByProgramId[safeString(program.id)] = service;
+    });
+
+    const scoreBuckets: Record<string, number[]> = {};
+
+    scoredSurveyResponses.forEach((response) => {
+      const survey = surveys.find(
+        (s) => safeString(s.id) === safeString(response.survey_id)
+      );
+
+      const questions = Array.isArray(survey?.questions_data)
+        ? survey!.questions_data
+        : [];
+
+      questions.forEach((question: any) => {
+        if (
+          question?.type !== "mcq" ||
+          !question?.correct_option ||
+          !question?.related_program_id
+        ) {
+          return;
+        }
+
+        const service = serviceByProgramId[safeString(question.related_program_id)];
+        if (!service) return;
+
+        const given = response.answers?.[String(question.id)];
+        const isCorrect = given === question.correct_option ? 1 : 0;
+
+        if (!scoreBuckets[service]) scoreBuckets[service] = [];
+        scoreBuckets[service].push(isCorrect * 100);
+      });
+    });
+
+    return GUIDANCE_SERVICES.map((service) => {
+      const scores = scoreBuckets[service] || [];
+
+      return {
+        service,
+        programCount: programCounts[service] || 0,
+        averageScore:
+          scores.length > 0
+            ? Math.round(scores.reduce((sum, v) => sum + v, 0) / scores.length)
+            : null,
+      };
+    });
+  }, [programs, scoredSurveyResponses, surveys]);
+
+  /* =======================================================
      CAMPUS
   ======================================================= */
 
@@ -1180,55 +1185,17 @@ export default function AnalyticsDashboard() {
 
   /* =======================================================
      MONTHLY PROGRAM PARTICIPATION
+
+     Was derived from program_registrations, removed in
+     Phase 1b. Kept as an explicit empty array so the trend
+     chart renders its "no data" state instead of a flat
+     zero line that could be mistaken for real data.
   ======================================================= */
 
-  const monthlyParticipation =
-    useMemo(() => {
-      const months = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-      ];
-
-      const data = months.map(
-        (month) => ({
-          month,
-          participants: 0,
-        })
-      );
-
-      filteredRegistrations.forEach(
-        (registration) => {
-          if (!registration.created_at)
-            return;
-
-          const date = new Date(
-            registration.created_at
-          );
-
-          if (
-            !Number.isNaN(
-              date.getTime()
-            )
-          ) {
-            data[
-              date.getMonth()
-            ].participants += 1;
-          }
-        }
-      );
-
-      return data;
-    }, [filteredRegistrations]);
+  const monthlyParticipation: {
+    month: string;
+    participants: number;
+  }[] = [];
 
   /* =======================================================
      =======================================================
@@ -1623,9 +1590,6 @@ export default function AnalyticsDashboard() {
   const totalStudents =
     participantCount;
 
-  const totalProgramParticipants =
-    filteredRegistrations.length;
-
   const totalGuidancePrograms =
     programs.length;
 
@@ -1646,16 +1610,6 @@ export default function AnalyticsDashboard() {
       [
         "Students Covered",
         totalStudents,
-      ],
-
-      [
-        "Unique Program Participants",
-        programParticipants,
-      ],
-
-      [
-        "Program Registrations",
-        totalProgramParticipants,
       ],
 
       [
@@ -1755,7 +1709,7 @@ export default function AnalyticsDashboard() {
       28
     );
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: 36,
 
       head: [
@@ -1810,7 +1764,7 @@ export default function AnalyticsDashboard() {
 
     nextY += 6;
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: nextY,
 
       head: [
@@ -1854,7 +1808,7 @@ export default function AnalyticsDashboard() {
       nextY
     );
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: nextY + 6,
 
       head: [
@@ -2027,20 +1981,20 @@ export default function AnalyticsDashboard() {
 
     rows.push([]);
 
-    /* PROGRAM */
+    /* PROGRAM AWARENESS */
 
     rows.push([
       "PROGRAM",
-      "CATEGORY",
-      "REGISTRATIONS",
+      "AVG KNOWLEDGE SCORE",
+      "SCORED ANSWERS",
     ]);
 
-    programAnalytics.forEach(
+    programAwarenessAnalytics.forEach(
       (row) => {
         rows.push([
           row.name,
-          row.category,
-          row.registrations,
+          row.average,
+          row.count,
         ]);
       }
     );
@@ -2099,12 +2053,6 @@ export default function AnalyticsDashboard() {
       summary: {
         students_covered:
           totalStudents,
-
-        unique_program_participants:
-          programParticipants,
-
-        program_registrations:
-          totalProgramParticipants,
 
         guidance_programs:
           totalGuidancePrograms,
@@ -2218,13 +2166,19 @@ export default function AnalyticsDashboard() {
       },
 
       programs:
-        programAnalytics,
+        programAwarenessAnalytics,
+
+      awareness: {
+        overall_score: awarenessAnalytics.overall,
+        total_scored_responses: awarenessAnalytics.totalResponses,
+        by_year_level: awarenessAnalytics.byYearLevel,
+        by_gender: awarenessAnalytics.byGender,
+        by_pwd: awarenessAnalytics.byPwd,
+        by_ip: awarenessAnalytics.byIp,
+      },
 
       monthly_participation:
         monthlyParticipation,
-
-      program_registration_data:
-        filteredRegistrations,
 
       survey_response_data:
         filteredSurveyResponses,
@@ -2566,20 +2520,13 @@ export default function AnalyticsDashboard() {
             GENERAL SUMMARY
         ================================================= */}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
           <StatCard
             title="Students Covered"
             value={totalStudents}
-            description="Profiles + program + survey participants"
+            description="Profiles + survey participants"
             icon={Users}
-          />
-
-          <StatCard
-            title="Program Participants"
-            value={programParticipants}
-            description="Unique registered students"
-            icon={ClipboardList}
           />
 
           <StatCard
@@ -3189,90 +3136,195 @@ export default function AnalyticsDashboard() {
         </Card>
 
         {/* =================================================
-            PROGRAM ANALYTICS
+            KNOWLEDGE AWARENESS
         ================================================= */}
 
-        <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+        <div className="space-y-6">
 
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
-
-            <div>
-              <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
-                Guidance Program Participation
-              </h2>
-
-              <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
-                Analytics per program based on actual registrations
-              </p>
-            </div>
-
-            <div className="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase">
-              {programAnalytics.length} Programs Displayed
-            </div>
-
+          <div className="flex items-center gap-3">
+            <Trophy className="w-5 h-5 text-indigo-600" />
+            <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
+              Knowledge Awareness
+            </h2>
           </div>
 
-          {programAnalytics.length ===
-          0 ? (
-            <div className="h-64 flex items-center justify-center text-slate-400 text-xs font-bold">
-              No program participation data available.
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <StatCard
+              title="Overall Average Score"
+              value={
+                awarenessAnalytics.overall !== null
+                  ? `${awarenessAnalytics.overall}%`
+                  : "No data"
+              }
+              description="Across all knowledge assessments"
+              icon={Trophy}
+            />
+
+            <StatCard
+              title="Scored Assessment Responses"
+              value={awarenessAnalytics.totalResponses}
+              description="Knowledge Assessment submissions counted"
+              icon={Target}
+            />
+          </div>
+
+          {/* PER PROGRAM */}
+          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
+              <div>
+                <h3 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
+                  Awareness by Program
+                </h3>
+
+                <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+                  Average score on questions linked to each program
+                </p>
+              </div>
+
+              <div className="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase">
+                {programAwarenessAnalytics.length} Programs With Data
+              </div>
             </div>
-          ) : (
-            <ResponsiveContainer
-              width="100%"
-              height={350}
-            >
-              <BarChart
-                data={programAnalytics}
-                margin={{
-                  top: 10,
-                  right: 10,
-                  left: 0,
-                  bottom: 60,
-                }}
+
+            {programAwarenessAnalytics.length === 0 ? (
+              <div className="h-64 flex items-center justify-center text-slate-400 text-xs font-bold text-center px-6">
+                No program-linked knowledge questions have been answered yet.
+                Link a question to a program in the Survey Builder to see it here.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={350}>
+                <BarChart
+                  data={programAwarenessAnalytics}
+                  margin={{ top: 10, right: 10, left: 0, bottom: 60 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+
+                  <XAxis
+                    dataKey="name"
+                    angle={-30}
+                    textAnchor="end"
+                    interval={0}
+                    height={90}
+                    tick={{ fontSize: 9, fontWeight: 700 }}
+                  />
+
+                  <YAxis
+                    domain={[0, 100]}
+                    tick={{ fontSize: 9 }}
+                    unit="%"
+                  />
+
+                  <Tooltip formatter={(value: number) => `${value}%`} />
+
+                  <Bar
+                    dataKey="average"
+                    name="Avg. Score"
+                    fill="#4f46e5"
+                    radius={[8, 8, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </Card>
+
+          {/* DEMOGRAPHIC BREAKDOWNS */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {[
+              { title: "By Year Level", data: awarenessAnalytics.byYearLevel },
+              { title: "By Gender", data: awarenessAnalytics.byGender },
+              { title: "By PWD Status", data: awarenessAnalytics.byPwd },
+              { title: "By IP Status", data: awarenessAnalytics.byIp },
+            ].map(({ title, data }) => (
+              <Card
+                key={title}
+                className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white"
               >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                />
+                <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
+                  {title}
+                </h3>
 
-                <XAxis
-                  dataKey="name"
-                  angle={-30}
-                  textAnchor="end"
-                  interval={0}
-                  height={90}
-                  tick={{
-                    fontSize: 9,
-                    fontWeight: 700,
-                  }}
-                />
+                <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
+                  Average knowledge score
+                </p>
 
-                <YAxis
-                  allowDecimals={false}
-                  tick={{
-                    fontSize: 9,
-                  }}
-                />
+                {data.length === 0 ? (
+                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs font-bold">
+                    No scored responses yet.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {data.map((row) => (
+                      <div key={row.label}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold text-slate-600">
+                            {row.label}
+                            <span className="text-slate-400 font-medium">
+                              {" "}
+                              ({row.count})
+                            </span>
+                          </span>
+                          <span className="text-xs font-black text-indigo-600">
+                            {row.average}%
+                          </span>
+                        </div>
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-indigo-600 rounded-full"
+                            style={{ width: `${row.average}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            ))}
+          </div>
 
-                <Tooltip />
+          {/* GUIDANCE SERVICE COVERAGE */}
+          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+            <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
+              Guidance Service Coverage
+            </h3>
 
-                <Bar
-                  dataKey="registrations"
-                  name="Registrations"
-                  fill="#4f46e5"
-                  radius={[
-                    8,
-                    8,
-                    0,
-                    0,
-                  ]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+            <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
+              Program count and average awareness score per guidance service
+            </p>
 
-        </Card>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                    <th className="pb-3 pr-4">Guidance Service</th>
+                    <th className="pb-3 pr-4">Programs</th>
+                    <th className="pb-3">Avg. Awareness Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {guidanceServiceCoverage.map((row) => (
+                    <tr key={row.service} className="border-b border-slate-50 last:border-none">
+                      <td className="py-3 pr-4 text-xs font-bold text-slate-700">
+                        {row.service}
+                      </td>
+                      <td className="py-3 pr-4 text-xs font-black text-slate-900">
+                        {row.programCount}
+                      </td>
+                      <td className="py-3 text-xs font-black">
+                        {row.averageScore !== null ? (
+                          <span className="text-indigo-600">{row.averageScore}%</span>
+                        ) : (
+                          <span className="text-slate-300 font-bold">No data</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+        </div>
 
         {/* =================================================
             COURSE + YEAR LEVEL
@@ -3692,59 +3744,65 @@ export default function AnalyticsDashboard() {
           <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
 
             <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-              Program Participation Trend
+              Awareness Trend
             </h2>
 
             <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
-              Monthly Guidance program registrations
+              Monthly knowledge survey awareness scores
             </p>
 
             <div className="h-72 mt-4">
 
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-              >
-                <LineChart
-                  data={
-                    monthlyParticipation
-                  }
+              {monthlyParticipation.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-slate-400 text-xs font-bold">
+                  No awareness trend data available yet.
+                </div>
+              ) : (
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
                 >
+                  <LineChart
+                    data={
+                      monthlyParticipation
+                    }
+                  >
 
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    vertical={false}
-                  />
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                    />
 
-                  <XAxis
-                    dataKey="month"
-                    tick={{
-                      fontSize: 9,
-                    }}
-                  />
+                    <XAxis
+                      dataKey="month"
+                      tick={{
+                        fontSize: 9,
+                      }}
+                    />
 
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{
-                      fontSize: 9,
-                    }}
-                  />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{
+                        fontSize: 9,
+                      }}
+                    />
 
-                  <Tooltip />
+                    <Tooltip />
 
-                  <Line
-                    type="monotone"
-                    dataKey="participants"
-                    name="Registrations"
-                    stroke="#4f46e5"
-                    strokeWidth={3}
-                    dot={{
-                      r: 4,
-                    }}
-                  />
+                    <Line
+                      type="monotone"
+                      dataKey="participants"
+                      name="Awareness Score"
+                      stroke="#4f46e5"
+                      strokeWidth={3}
+                      dot={{
+                        r: 4,
+                      }}
+                    />
 
-                </LineChart>
-              </ResponsiveContainer>
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
 
             </div>
 
@@ -3962,7 +4020,6 @@ export default function AnalyticsDashboard() {
                   Analytics are generated from
                   registered student profiles,
                   Guidance programs,
-                  program registrations,
                   survey responses, and IEC
                   materials stored in the
                   materials table.

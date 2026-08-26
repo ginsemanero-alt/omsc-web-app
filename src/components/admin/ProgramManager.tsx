@@ -14,15 +14,14 @@ import {
 import { Label } from '../../components/ui/label';
 import { 
   Plus, Search, Edit, Trash2, Calendar, MapPin, 
-  Loader2, Camera, FileText, ChevronDown, ChevronUp, Download, Clock, AlertCircle, Award
+  Loader2, Camera, FileText, ChevronDown, ChevronUp, Download, Clock, AlertCircle
 } from 'lucide-react';
 
 export default function ProgramManagement() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const materialRef = useRef<HTMLInputElement>(null);
-  const certInputRef = useRef<HTMLInputElement>(null); 
-  
+
   const [programs, setPrograms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -38,7 +37,6 @@ export default function ProgramManagement() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [materialFile, setMaterialFile] = useState<File | null>(null);
-  const [certTemplateFile, setCertTemplateFile] = useState<File | null>(null); 
 
   const [startTime, setStartTime] = useState('08:00');
   const [endTime, setEndTime] = useState('17:00');
@@ -132,7 +130,6 @@ export default function ProgramManagement() {
     }
     setMaterialFile(null);
     setSelectedFile(null);
-    setCertTemplateFile(null);
     setIsDialogOpen(true);
   };
 
@@ -194,22 +191,6 @@ export default function ProgramManagement() {
         }]);
       }
 
-      if (certTemplateFile && currentProgramId) {
-        const certPath = `${currentProgramId}/cert_${Date.now()}_${certTemplateFile.name}`;
-        const { error: certStorageError } = await supabase.storage.from('materials').upload(certPath, certTemplateFile);
-        if (certStorageError) throw certStorageError;
-        const { data: certUrl } = supabase.storage.from('materials').getPublicUrl(certPath);
-        
-        await supabase.from('materials').delete().eq('program_id', currentProgramId).ilike('title', 'CERTIFICATE_TEMPLATE%');
-
-        const { error: dbError } = await supabase.from('materials').insert([{
-          program_id: currentProgramId,
-          title: `CERTIFICATE_TEMPLATE: ${certTemplateFile.name}`,
-          file_url: certUrl.publicUrl
-        }]);
-        if (dbError) throw dbError;
-      }
-
       toast({ title: "Success", description: "Program metrics and structural items synced without cache conflicts." });
       setIsDialogOpen(false);
       fetchPrograms();
@@ -252,7 +233,7 @@ export default function ProgramManagement() {
           <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight uppercase">
             Programs <span className="text-indigo-600">Portal</span>
           </h1>
-          <p className="text-slate-400 font-bold uppercase text-[9px] tracking-widest mt-1">Institutional Counselor Deck</p>
+          <p className="text-slate-400 font-bold uppercase text-[9px] tracking-widest mt-1">Institutional Admin Deck</p>
         </div>
         
         <Button 
@@ -284,7 +265,6 @@ export default function ProgramManagement() {
       {/* GRID */}
       <div className="grid grid-cols-1 gap-4 md:gap-6">
         {programs.filter(p => p.title?.toLowerCase().includes(searchQuery.toLowerCase())).map((program) => {
-          const currentCert = program.materials?.find((m: any) => m.title?.startsWith('CERTIFICATE_TEMPLATE:'));
           const normalHandouts = program.materials?.filter((m: any) => !m.title?.startsWith('CERTIFICATE_TEMPLATE:')) || [];
 
           return (
@@ -350,40 +330,23 @@ export default function ProgramManagement() {
                         <p className="font-medium whitespace-pre-wrap">{program.content || "No extended descriptions mapped for this entry."}</p>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label className="text-[8px] md:text-[9px] font-black uppercase text-indigo-500 block mb-1 tracking-widest">Downloadable Handouts Ledger</Label>
-                          {normalHandouts.length > 0 ? (
-                            <div className="space-y-2">
-                              {normalHandouts.map((mat: any) => (
-                                <a key={mat.id} href={mat.file_url} target="_blank" rel="noreferrer" className="flex items-center justify-between p-3.5 bg-white border border-slate-100 hover:border-indigo-500 rounded-xl transition-all shadow-sm group/item">
-                                  <div className="flex items-center gap-2.5 min-w-0">
-                                    <FileText className="w-4 h-4 text-indigo-500 shrink-0" />
-                                    <span className="text-[11px] font-black text-slate-700 truncate max-w-[180px] uppercase tracking-tight">{mat.title.replace('HANDOUT: ', '')}</span>
-                                  </div>
-                                  <Download className="w-3.5 h-3.5 text-slate-400 group-hover/item:text-indigo-600 transition-colors shrink-0" />
-                                </a>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-[9px] text-slate-400 font-bold italic uppercase tracking-wider ml-1">No file attachments bound to slot.</p>
-                          )}
-                        </div>
-
-                        <div className="space-y-2">
-                           <Label className="text-[8px] md:text-[9px] font-black uppercase text-indigo-500 block mb-1 tracking-widest">Certificate Asset Layout</Label>
-                           {currentCert ? (
-                              <a href={currentCert.file_url} target="_blank" rel="noreferrer" className="flex items-center justify-between p-3.5 bg-emerald-50/40 border border-emerald-100 hover:border-emerald-500 rounded-xl transition-all shadow-sm group/cert">
-                                 <div className="flex items-center gap-2.5 min-w-0 text-emerald-700">
-                                    <Award className="w-4 h-4 shrink-0" />
-                                    <span className="text-[11px] font-black truncate max-w-[180px] uppercase tracking-tight">Active Certificate Template</span>
-                                 </div>
-                                 <Download className="w-3.5 h-3.5 text-emerald-400 group-hover/cert:text-emerald-700 transition-colors shrink-0" />
+                      <div className="space-y-2">
+                        <Label className="text-[8px] md:text-[9px] font-black uppercase text-indigo-500 block mb-1 tracking-widest">Downloadable Handouts Ledger</Label>
+                        {normalHandouts.length > 0 ? (
+                          <div className="space-y-2">
+                            {normalHandouts.map((mat: any) => (
+                              <a key={mat.id} href={mat.file_url} target="_blank" rel="noreferrer" className="flex items-center justify-between p-3.5 bg-white border border-slate-100 hover:border-indigo-500 rounded-xl transition-all shadow-sm group/item">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <FileText className="w-4 h-4 text-indigo-500 shrink-0" />
+                                  <span className="text-[11px] font-black text-slate-700 truncate max-w-[180px] uppercase tracking-tight">{mat.title.replace('HANDOUT: ', '')}</span>
+                                </div>
+                                <Download className="w-3.5 h-3.5 text-slate-400 group-hover/item:text-indigo-600 transition-colors shrink-0" />
                               </a>
-                           ) : (
-                              <p className="text-[9px] text-amber-600 font-bold italic uppercase tracking-wider ml-1">⚠️ No certificate template layout uploaded.</p>
-                           )}
-                        </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[9px] text-slate-400 font-bold italic uppercase tracking-wider ml-1">No file attachments bound to slot.</p>
+                        )}
                       </div>
                     </div>
                   )}
@@ -474,7 +437,7 @@ export default function ProgramManagement() {
                 <select value={formData.guidance_service} onChange={(e) => setFormData({...formData, guidance_service: e.target.value})} className="w-full h-12 rounded-xl bg-slate-50 border-none px-4 font-bold text-xs uppercase text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100">
                   <option value="Information Services">Information Services</option>
                   <option value="Individual Inventory">Individual Inventory</option>
-                  <option value="Research & Evaluation">Research & Evaluation</option>
+                  <option value="Research and Evaluation">Research and Evaluation</option>
                   <option value="Career Orientation">Career Orientation</option>
                   <option value="Testing Services">Testing Services</option>
                   <option value="Counseling Services">Counseling Services</option>
@@ -494,23 +457,12 @@ export default function ProgramManagement() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Session Handouts File</Label>
-                <div onClick={() => materialRef.current?.click()} className="h-12 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center px-4 cursor-pointer border-none text-slate-600 text-xs">
-                  <FileText className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
-                  <span className="truncate flex-1 font-bold">{materialFile ? materialFile.name : 'Choose Handouts...'}</span>
-                  <input type="file" ref={materialRef} className="hidden" accept=".pdf,.doc,.docx" onChange={(e) => setMaterialFile(e.target.files?.[0] || null)} />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-indigo-600 tracking-wider font-bold">Certificate Template Layout</Label>
-                <div onClick={() => certInputRef.current?.click()} className="h-12 bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-200 border-dashed rounded-xl flex items-center px-4 cursor-pointer text-indigo-900 text-xs font-bold">
-                  <Award className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
-                  <span className="truncate flex-1">{certTemplateFile ? certTemplateFile.name : 'Upload Layout Template'}</span>
-                  <input type="file" ref={certInputRef} className="hidden" accept="image/*,.pdf" onChange={(e) => setCertTemplateFile(e.target.files?.[0] || null)} />
-                </div>
+            <div className="space-y-1.5">
+              <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Session Handouts File</Label>
+              <div onClick={() => materialRef.current?.click()} className="h-12 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center px-4 cursor-pointer border-none text-slate-600 text-xs">
+                <FileText className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
+                <span className="truncate flex-1 font-bold">{materialFile ? materialFile.name : 'Choose Handouts...'}</span>
+                <input type="file" ref={materialRef} className="hidden" accept=".pdf,.doc,.docx" onChange={(e) => setMaterialFile(e.target.files?.[0] || null)} />
               </div>
             </div>
 

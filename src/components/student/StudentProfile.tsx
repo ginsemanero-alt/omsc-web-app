@@ -10,10 +10,10 @@ import {
 } from '../../components/ui/select';
 import { useToast } from '../../hooks/use-toast';
 import { 
-  User, ShieldCheck, Loader2, Save, GraduationCap, Building2 
+  User, ShieldCheck, Loader2, Save, GraduationCap 
 } from 'lucide-react';
 
-export default function ProfileStudent() {
+export default function StudentProfile() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -22,7 +22,6 @@ export default function ProfileStudent() {
   // Profile Form States
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
-  const [campus, setCampus] = useState('');
   const [program, setProgram] = useState('');
   const [yearLevel, setYearLevel] = useState('');
   const [gender, setGender] = useState('');
@@ -52,9 +51,8 @@ export default function ProfileStudent() {
 
       if (data) {
         setFullName(data.full_name || '');
-        setCampus(data.campus || '');
         setProgram(data.program || '');
-        setYearLevel(data.year_level !== null ? String(data.year_level) : '');
+        setYearLevel(data.year_level || '');
         setGender(data.gender || '');
         setAge(data.age || '');
         setIsPwd(!!data.is_pwd);
@@ -75,7 +73,7 @@ export default function ProfileStudent() {
   useEffect(() => {
     async function init() {
       const { data: { session } } = await supabase.auth.getSession();
-      const id = session?.user?.id || localStorage.getItem('userId');
+      const id = session?.user?.id ?? null;
       setCurrentUserId(id);
       if (id) {
         fetchProfileData(id);
@@ -90,7 +88,7 @@ export default function ProfileStudent() {
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!fullName || !campus || !program || !yearLevel || !gender || !age) {
+    if (!fullName || !program || !yearLevel || !gender || !age) {
       toast({
         title: "Validation Warning",
         description: "Mangyaring kumpletuhin ang lahat ng kinakailangang impormasyon.",
@@ -107,9 +105,8 @@ export default function ProfileStudent() {
       const payload = {
         id: currentUserId,
         full_name: fullName,
-        campus: campus,
         program: program,
-        year_level: isNaN(Number(yearLevel)) ? yearLevel : Number(yearLevel), // Hahawakan pareho kung integer o text ang column type mo sa DB
+        year_level: yearLevel,
         gender: gender,
         age: Number(age),
         is_pwd: isPwd,
@@ -198,26 +195,6 @@ export default function ProfileStudent() {
                   />
                 </div>
 
-                {/* CAMPUS FIELD */}
-                <div className="space-y-1.5">
-                  <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1 flex items-center gap-1">
-                    <Building2 className="w-3 h-3 text-indigo-500" /> Campus
-                  </Label>
-                  <Select value={campus} onValueChange={setCampus} required>
-                    <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold px-4 text-xs">
-                      <SelectValue placeholder="Select Campus" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-xl border-none shadow-2xl bg-white">
-                      <SelectItem value="San Jose Campus">San Jose Campus</SelectItem>
-                      <SelectItem value="Labangan Campus">Labangan Campus</SelectItem>
-                      <SelectItem value="Mamburao Campus">Mamburao Campus</SelectItem>
-                      <SelectItem value="Sablayan Campus">Sablayan Campus</SelectItem>
-                      <SelectItem value="Murtha Campus">Murtha Campus</SelectItem>
-                      <SelectItem value="Extension Campus">Extension Campus</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
                     Course / Program
@@ -237,7 +214,7 @@ export default function ProfileStudent() {
                   </Select>
                 </div>
 
-                <div className="space-y-1.5 md:col-span-2">
+                <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
                     Year Level
                   </Label>
@@ -246,10 +223,10 @@ export default function ProfileStudent() {
                       <SelectValue placeholder="Select Year Level" />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl border-none shadow-2xl bg-white">
-                      <SelectItem value="1">1st Year</SelectItem>
-                      <SelectItem value="2">2nd Year</SelectItem>
-                      <SelectItem value="3">3rd Year</SelectItem>
-                      <SelectItem value="4">4th Year</SelectItem>
+                      <SelectItem value="1st Year">1st Year</SelectItem>
+                      <SelectItem value="2nd Year">2nd Year</SelectItem>
+                      <SelectItem value="3rd Year">3rd Year</SelectItem>
+                      <SelectItem value="4th Year">4th Year</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

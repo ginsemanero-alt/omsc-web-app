@@ -39,7 +39,7 @@ import {
 import { useToast } from '../hooks/use-toast';
 import { supabase } from '../lib/supabase';
 
-type UserRole = 'student' | 'counselor' | 'admin';
+type UserRole = 'student' | 'admin';
 
 interface LoginPageProps {
   onLogin: (role: UserRole, name: string) => void;
@@ -93,7 +93,7 @@ export default function LoginPage({
   const [age, setAge] = useState('');
   const [gender, setGender] = useState<Gender>('Prefer not to say');
 
-  const [isIndigenous, setIsIndigenous] =
+  const [isIp, setIsIp] =
     useState<YesNoPrefer>('Prefer not to say');
 
   const [isPwd, setIsPwd] =
@@ -147,7 +147,7 @@ export default function LoginPage({
     setYearLevel('1');
     setAge('');
     setGender('Prefer not to say');
-    setIsIndigenous('Prefer not to say');
+    setIsIp('Prefer not to say');
     setIsPwd('Prefer not to say');
     setAgreed(false);
     setShowPassword(false);
@@ -282,7 +282,7 @@ export default function LoginPage({
           age: Number(age),
           gender,
 
-          isIndigenous,
+          isIp,
           isPwd,
 
           status: 'active',
@@ -344,66 +344,16 @@ export default function LoginPage({
           }
 
           /*
-           * Store basic user information locally.
-           * Do not store password or sensitive survey responses.
+           * localStorage keeps only display values. Auth state and
+           * role are never read from localStorage — they come from
+           * the verified Supabase session via useAuth.
            */
-          localStorage.setItem('userId', String(data.id));
           localStorage.setItem('userName', data.name);
-          localStorage.setItem('userRole', data.role);
 
           localStorage.setItem(
             'userCampus',
             data.campus || 'San Jose Campus'
           );
-
-          localStorage.setItem(
-            'user',
-            JSON.stringify({
-              id: data.id,
-              email: data.email,
-              name: data.name,
-              role: data.role,
-              campus: data.campus || 'San Jose Campus',
-              studentId: data.studentId || data.student_id || '',
-              program: data.program || '',
-              yearLevel: data.yearLevel || data.year_level || '',
-            })
-          );
-
-          /*
-           * Usage logging
-           */
-          try {
-            const { data: logEntry, error } = await supabase
-              .from('usage_logs')
-              .insert([
-                {
-                  user_id: data.id,
-                  login_at: new Date().toISOString(),
-                },
-              ])
-              .select()
-              .single();
-
-            if (logEntry) {
-              localStorage.setItem(
-                'currentSessionLogId',
-                String(logEntry.id)
-              );
-            }
-
-            if (error) {
-              console.error(
-                'Usage log error:',
-                error.message
-              );
-            }
-          } catch (err) {
-            console.error(
-              'Critical: Failed to initialize usage log',
-              err
-            );
-          }
 
           toast({
             title: 'WELCOME',
@@ -588,7 +538,7 @@ export default function LoginPage({
             <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mt-2 max-w-md">
               {isRegister
                 ? 'Create your Higher Education student account'
-                : 'Unified access for students, counselors & administrators'}
+                : 'Unified access for students & administrators'}
             </p>
           </div>
         </div>
@@ -856,9 +806,9 @@ export default function LoginPage({
                     icon={<UsersRound className="w-4 h-4" />}
                   >
                     <Select
-                      value={isIndigenous}
+                      value={isIp}
                       onValueChange={(value) =>
-                        setIsIndigenous(value as YesNoPrefer)
+                        setIsIp(value as YesNoPrefer)
                       }
                     >
                       <SelectTrigger className="select-style pl-11">

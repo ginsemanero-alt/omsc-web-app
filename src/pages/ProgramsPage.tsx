@@ -3,7 +3,30 @@ import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Calendar, MapPin, Users, Loader2, Search } from "lucide-react";
 import { Input } from "../components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 import { supabase } from "../lib/supabase"; // 🌟 Ligtas na backend fallback core pipeline
+
+const GUIDANCE_SERVICES = [
+  'Information Services',
+  'Individual Inventory',
+  'Research and Evaluation',
+  'Career Orientation',
+  'Testing Services',
+  'Counseling Services',
+];
+
+const PROGRAM_COMPONENTS = [
+  'Group Guidance',
+  'Individual Student Planning',
+  'Responsive Services',
+  'System Support',
+];
 
 interface Program {
   id: number;
@@ -13,12 +36,16 @@ interface Program {
   date: string;
   participants?: number;
   status: string;
+  guidance_service?: string;
+  program_component?: string;
 }
 
 const ProgramsPage: React.FC = () => {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [guidanceServiceFilter, setGuidanceServiceFilter] = useState("all");
+  const [programComponentFilter, setProgramComponentFilter] = useState("all");
 
   useEffect(() => {
     const fetchPrograms = async () => {
@@ -27,7 +54,7 @@ const ProgramsPage: React.FC = () => {
         
         // --- STEP 1: Subukang tawagin ang Express API Endpoint Server ---
         try {
-          const res = await fetch("http://localhost:3001/api/programs");
+          const res = await fetch("/api/programs");
           if (res.ok) {
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
@@ -54,23 +81,14 @@ const ProgramsPage: React.FC = () => {
             location: p.location || "OMSC Main Venue",
             date: p.date || p.scheduled_date || new Date().toISOString(),
             participants: p.participants || p.max_slots || 0,
-            status: p.status || "upcoming"
+            status: p.status || "upcoming",
+            guidance_service: p.guidance_service || "",
+            program_component: p.program_component || "",
           }));
-          
+
           setPrograms(mappedPrograms);
-        } else {
-          // Simulation fallback framework kung bago pa ang database at wala pang in-upload si counselor
-          setPrograms([
-            {
-              id: 99,
-              title: "MENTAL TARDIGRADYIO",
-              description: "A specialized student support focus tract seminar targeted towards enhancing academic coping mechanism thresholds under stress conditions.",
-              location: "Labangan Campus Gymnasium",
-              date: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString(), // 3 days in future
-              participants: 120,
-              status: "upcoming"
-            }
-          ]);
+        } else if (error) {
+          console.error("Error fetching programs from Supabase:", error.message);
         }
       } catch (err) {
         console.error("Error fetching programs master matrix data:", err);
@@ -82,11 +100,16 @@ const ProgramsPage: React.FC = () => {
     fetchPrograms();
   }, []);
 
-  const filteredPrograms = programs.filter(
-    (p) =>
+  const filteredPrograms = programs.filter((p) => {
+    const matchesSearch =
       p.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.location?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      p.location?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesGuidanceService =
+      guidanceServiceFilter === "all" || p.guidance_service === guidanceServiceFilter;
+    const matchesProgramComponent =
+      programComponentFilter === "all" || p.program_component === programComponentFilter;
+    return matchesSearch && matchesGuidanceService && matchesProgramComponent;
+  });
 
   return (
     <div className="w-full py-8 md:py-20 bg-slate-50 min-h-screen font-sans">
@@ -118,6 +141,32 @@ const ProgramsPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Guidance Service / Program Component Filters */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-8 md:mb-10">
+          <Select value={guidanceServiceFilter} onValueChange={setGuidanceServiceFilter}>
+            <SelectTrigger className="w-full sm:w-64 h-12 rounded-2xl border-none shadow-sm bg-white font-bold text-slate-600 uppercase text-[10px] tracking-widest">
+              <SelectValue placeholder="Guidance Service" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl border-none shadow-xl bg-white">
+              <SelectItem value="all">All Guidance Services</SelectItem>
+              {GUIDANCE_SERVICES.map((service) => (
+                <SelectItem key={service} value={service}>{service}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={programComponentFilter} onValueChange={setProgramComponentFilter}>
+            <SelectTrigger className="w-full sm:w-64 h-12 rounded-2xl border-none shadow-sm bg-white font-bold text-slate-600 uppercase text-[10px] tracking-widest">
+              <SelectValue placeholder="Program Component" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl border-none shadow-xl bg-white">
+              <SelectItem value="all">All Program Components</SelectItem>
+              {PROGRAM_COMPONENTS.map((component) => (
+                <SelectItem key={component} value={component}>{component}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* --- CONTENT GRID --- */}
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-64 space-y-4">
@@ -136,9 +185,22 @@ const ProgramsPage: React.FC = () => {
                 <div className="absolute top-0 left-0 w-1.5 md:w-2 h-full bg-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity" />
 
                 <div className="space-y-5">
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {program.guidance_service && (
+                        <Badge className="rounded-lg px-2.5 py-1 font-black uppercase text-[8px] tracking-wider border-none bg-indigo-100 text-indigo-600">
+                          {program.guidance_service}
+                        </Badge>
+                      )}
+                      {program.program_component && (
+                        <Badge className="rounded-lg px-2.5 py-1 font-black uppercase text-[8px] tracking-wider border-none bg-purple-100 text-purple-600">
+                          {program.program_component}
+                        </Badge>
+                      )}
+                    </div>
+
                     <Badge
-                      className={`rounded-lg px-3 py-1 font-black uppercase text-[8px] md:text-[9px] tracking-wider border-none ${
+                      className={`shrink-0 rounded-lg px-3 py-1 font-black uppercase text-[8px] md:text-[9px] tracking-wider border-none ${
                         new Date(program.date) > new Date()
                           ? "bg-emerald-100 text-emerald-600"
                           : "bg-slate-100 text-slate-400"

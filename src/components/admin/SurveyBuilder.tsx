@@ -35,6 +35,7 @@ import {
 } from "../ui/dialog";
 
 type QuestionType = "mcq" | "scale" | "text";
+type SurveyType = "knowledge" | "opinion";
 
 type Question = {
   id: string | number;
@@ -42,6 +43,10 @@ type Question = {
   type: QuestionType;
   options?: string[];
   required?: boolean;
+  // Only meaningful for mcq questions on a "knowledge" survey.
+  correct_option?: string;
+  related_program_id?: number | null;
+  related_material_id?: number | null;
 };
 
 type Survey = {
@@ -49,6 +54,7 @@ type Survey = {
   title: string;
   description?: string | null;
   category?: string | null;
+  type: SurveyType;
   status: "draft" | "active" | "closed";
   questions_data: Question[];
   created_at?: string;
@@ -56,6 +62,9 @@ type Survey = {
   start_date?: string | null;
   end_date?: string | null;
 };
+
+type ProgramOption = { id: number; title: string };
+type MaterialOption = { id: number; title: string };
 
 const CATEGORIES = [
   "Counseling Services",
@@ -109,9 +118,23 @@ export default function SurveyBuilder() {
 
   const [creating, setCreating] = useState(false);
 
+  const [programOptions, setProgramOptions] = useState<ProgramOption[]>([]);
+  const [materialOptions, setMaterialOptions] = useState<MaterialOption[]>([]);
+
   useEffect(() => {
     fetchSurveys();
+    fetchLinkOptions();
   }, []);
+
+  async function fetchLinkOptions() {
+    const [programsRes, materialsRes] = await Promise.all([
+      supabase.from("programs").select("id, title").order("title"),
+      supabase.from("materials").select("id, title").order("title"),
+    ]);
+
+    if (programsRes.data) setProgramOptions(programsRes.data as ProgramOption[]);
+    if (materialsRes.data) setMaterialOptions(materialsRes.data as MaterialOption[]);
+  }
 
   async function fetchSurveys() {
     try {
@@ -165,6 +188,7 @@ export default function SurveyBuilder() {
       const title = String(formData.get("title") || "").trim();
       const description = String(formData.get("description") || "").trim();
       const category = String(formData.get("category") || "");
+      const type = String(formData.get("type") || "opinion") as SurveyType;
 
       if (!title) {
         toast({
@@ -180,6 +204,7 @@ export default function SurveyBuilder() {
           title,
           description,
           category,
+          type,
           status: "draft",
           questions_data: [],
         },
@@ -253,7 +278,7 @@ export default function SurveyBuilder() {
   }
 
   async function updateSurveyInfo(
-    field: "title" | "description" | "category",
+    field: "title" | "description" | "category" | "type",
     value: string
   ) {
     if (!editingSurvey) return;
@@ -318,6 +343,7 @@ export default function SurveyBuilder() {
           title: `${survey.title} - Copy`,
           description: survey.description || "",
           category: survey.category || "Other",
+          type: survey.type || "opinion",
           status: "draft",
           questions_data: survey.questions_data || [],
         },
@@ -534,7 +560,7 @@ export default function SurveyBuilder() {
 
               <div>
                 <p className="text-indigo-200 text-[10px] font-black uppercase tracking-widest mb-2">
-                  Counselor / Admin Survey Editor
+                  Admin Survey Editor
                 </p>
 
                 <Input
@@ -575,6 +601,24 @@ export default function SurveyBuilder() {
 
               <div className="bg-white/10 rounded-2xl p-5">
                 <label className="text-[9px] font-black uppercase text-indigo-200">
+                  Survey Type
+                </label>
+
+                <select
+                  value={editingSurvey.type || "opinion"}
+                  onChange={(e) =>
+                    updateSurveyInfo(
+                      "type",
+                      e.target.value
+                    )
+                  }
+                  className="mt-2 w-full h-11 rounded-xl bg-white text-slate-800 px-3 font-bold text-xs outline-none"
+                >
+                  <option value="knowledge">Knowledge Assessment (scored)</option>
+                  <option value="opinion">Opinion Survey (unscored)</option>
+                </select>
+
+                <label className="text-[9px] font-black uppercase text-indigo-200 mt-5 block">
                   Survey Category
                 </label>
 
@@ -770,6 +814,92 @@ export default function SurveyBuilder() {
                           <Plus className="w-4 h-4 mr-2" />
                           Add Option
                         </Button>
+
+                        {editingSurvey.type === "knowledge" && (
+                          <div className="mt-4 space-y-3 border-t border-indigo-100 pt-4">
+                            <div>
+                              <label className="text-[9px] font-black uppercase text-indigo-500">
+                                Correct Answer
+                              </label>
+
+                              <select
+                                value={question.correct_option || ""}
+                                onChange={(e) =>
+                                  updateQuestion(index, {
+                                    correct_option: e.target.value || undefined,
+                                  })
+                                }
+                                className="mt-1 w-full h-11 rounded-xl bg-white border border-indigo-100 px-3 text-xs font-bold text-slate-700 outline-none"
+                              >
+                                <option value="">
+                                  Select the correct option...
+                                </option>
+                                {(question.options || []).map((option, optionIndex) => (
+                                  <option key={optionIndex} value={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-[9px] font-black uppercase text-indigo-500">
+                                  Related Program (optional)
+                                </label>
+
+                                <select
+                                  value={question.related_program_id ?? ""}
+                                  onChange={(e) =>
+                                    updateQuestion(index, {
+                                      related_program_id: e.target.value
+                                        ? Number(e.target.value)
+                                        : null,
+                                    })
+                                  }
+                                  className="mt-1 w-full h-11 rounded-xl bg-white border border-indigo-100 px-3 text-xs font-bold text-slate-700 outline-none"
+                                >
+                                  <option value="">None</option>
+                                  {programOptions.map((program) => (
+                                    <option key={program.id} value={program.id}>
+                                      {program.title}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="text-[9px] font-black uppercase text-indigo-500">
+                                  Related Material (optional)
+                                </label>
+
+                                <select
+                                  value={question.related_material_id ?? ""}
+                                  onChange={(e) =>
+                                    updateQuestion(index, {
+                                      related_material_id: e.target.value
+                                        ? Number(e.target.value)
+                                        : null,
+                                    })
+                                  }
+                                  className="mt-1 w-full h-11 rounded-xl bg-white border border-indigo-100 px-3 text-xs font-bold text-slate-700 outline-none"
+                                >
+                                  <option value="">None</option>
+                                  {materialOptions.map((material) => (
+                                    <option key={material.id} value={material.id}>
+                                      {material.title}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+
+                            <p className="text-[9px] text-slate-400 leading-relaxed">
+                              Shown to a student if they miss this question, so the
+                              assessment doubles as an awareness intervention.
+                            </p>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -999,13 +1129,25 @@ export default function SurveyBuilder() {
 
                 <div className="flex justify-between items-start gap-3">
 
-                  <span
-                    className={`px-3 py-1.5 rounded-lg text-[8px] font-black uppercase ${getStatusClass(
-                      survey.status
-                    )}`}
-                  >
-                    {getStatusLabel(survey.status)}
-                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    <span
+                      className={`px-3 py-1.5 rounded-lg text-[8px] font-black uppercase ${getStatusClass(
+                        survey.status
+                      )}`}
+                    >
+                      {getStatusLabel(survey.status)}
+                    </span>
+
+                    <span
+                      className={`px-3 py-1.5 rounded-lg text-[8px] font-black uppercase ${
+                        survey.type === "knowledge"
+                          ? "bg-indigo-50 text-indigo-600"
+                          : "bg-purple-50 text-purple-600"
+                      }`}
+                    >
+                      {survey.type === "knowledge" ? "Scored" : "Opinion"}
+                    </span>
+                  </div>
 
                   <div className="flex gap-1">
                     <Button
@@ -1153,6 +1295,49 @@ export default function SurveyBuilder() {
                   placeholder="e.g. Student Counseling Evaluation"
                   className="mt-2 h-12 rounded-xl bg-slate-50 border-none"
                 />
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-600">
+                  Survey Type
+                </label>
+
+                <div className="mt-2 grid grid-cols-2 gap-3">
+                  <label className="flex flex-col gap-1 rounded-xl border-2 border-slate-100 p-3 cursor-pointer has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50">
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="type"
+                        value="knowledge"
+                        defaultChecked
+                        className="accent-indigo-600"
+                      />
+                      <span className="text-xs font-black text-slate-800">
+                        Knowledge Assessment
+                      </span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium pl-6">
+                      Scored — has correct answers
+                    </span>
+                  </label>
+
+                  <label className="flex flex-col gap-1 rounded-xl border-2 border-slate-100 p-3 cursor-pointer has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50">
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="type"
+                        value="opinion"
+                        className="accent-indigo-600"
+                      />
+                      <span className="text-xs font-black text-slate-800">
+                        Opinion Survey
+                      </span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium pl-6">
+                      Unscored — no correct answer
+                    </span>
+                  </label>
+                </div>
               </div>
 
               <div>

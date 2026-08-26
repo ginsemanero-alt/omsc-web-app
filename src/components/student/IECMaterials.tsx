@@ -5,19 +5,22 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
-import { 
-  FileText, 
-  Image as ImageIcon, 
-  Video, 
-  Download, 
-  Eye, 
-  Loader2, 
+import {
+  FileText,
+  Image as ImageIcon,
+  Video,
+  Download,
+  Eye,
+  Loader2,
   HardDrive,
   Search,
   Calendar,
   X,
   Maximize2,
-  Youtube
+  Youtube,
+  Music,
+  Link as LinkIcon,
+  ExternalLink,
 } from 'lucide-react';
 
 export default function IECMaterials() {
@@ -75,18 +78,27 @@ export default function IECMaterials() {
     m.title?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // --- UPDATED LOGIC FILTERS ---
-  const articles = filteredData.filter(m => 
-    m.type === 'PDF' || m.type === 'Document' || m.file_url?.toLowerCase().endsWith('.pdf')
+  // --- FILTERS ---
+  // The admin now picks an explicit type on upload (PDF / Image / Video /
+  // Audio / Link), which is the reliable signal. The extension/URL checks
+  // are kept only as a fallback for older rows uploaded before that existed.
+  const articles = filteredData.filter(m =>
+    m.type === 'PDF' || m.type === 'Document' || m.file_url?.toLowerCase().split('?')[0].endsWith('.pdf')
   );
 
-  const infographics = filteredData.filter(m => 
-    m.type === 'Image' || /\.(jpg|jpeg|png|webp|gif)$/i.test(m.file_url || '')
+  const infographics = filteredData.filter(m =>
+    m.type === 'Image' || /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(m.file_url || '')
   );
 
-  const videos = filteredData.filter(m => 
+  const videos = filteredData.filter(m =>
     m.type === 'Video' || m.file_url?.includes('youtube.com') || m.file_url?.includes('youtu.be')
   );
+
+  const audioItems = filteredData.filter(m =>
+    m.type === 'Audio' || /\.(mp3|wav|ogg|m4a)(\?.*)?$/i.test(m.file_url || '')
+  );
+
+  const links = filteredData.filter(m => m.type === 'Link');
 
   // Helper function to format YouTube URLs for iframe
   const getYouTubeEmbedUrl = (url: string) => {
@@ -129,7 +141,9 @@ export default function IECMaterials() {
         <TabsList className="bg-slate-100/50 p-1.5 rounded-2xl mb-8 border border-slate-100">
           <TabsTrigger value="articles" className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Articles</TabsTrigger>
           <TabsTrigger value="infographics" className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Infographics</TabsTrigger>
-          <TabsTrigger value="videos" className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Videos & Links</TabsTrigger>
+          <TabsTrigger value="videos" className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Videos</TabsTrigger>
+          <TabsTrigger value="audio" className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Audio</TabsTrigger>
+          <TabsTrigger value="links" className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Links</TabsTrigger>
         </TabsList>
 
         {loading ? (
@@ -204,6 +218,47 @@ export default function IECMaterials() {
                 </Card>
               )) : <EmptyState message="No videos found" />}
             </TabsContent>
+
+            {/* AUDIO TAB */}
+            <TabsContent value="audio" className="grid grid-cols-1 md:grid-cols-2 gap-6 outline-none">
+              {audioItems.length > 0 ? audioItems.map((item) => (
+                <Card key={item.id} className="p-6 bg-white border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all group">
+                  <div className="flex items-center gap-5">
+                    <div className="w-16 h-16 bg-purple-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-purple-100 transition-colors">
+                      <Music className="w-8 h-8 text-purple-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-xl font-black text-slate-800 truncate uppercase mb-3">{item.title}</h3>
+                      <audio src={item.file_url} controls className="w-full h-10" />
+                    </div>
+                  </div>
+                </Card>
+              )) : <EmptyState message="No audio resources found" />}
+            </TabsContent>
+
+            {/* LINKS TAB */}
+            <TabsContent value="links" className="grid grid-cols-1 md:grid-cols-2 gap-6 outline-none">
+              {links.length > 0 ? links.map((item) => (
+                <Card key={item.id} className="p-6 bg-white border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all group">
+                  <div className="flex items-center gap-5">
+                    <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-100 transition-colors">
+                      <LinkIcon className="w-8 h-8 text-indigo-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-xl font-black text-slate-800 truncate uppercase mb-4">{item.title}</h3>
+                      <a
+                        href={item.file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 h-11 px-6 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs text-white transition-colors"
+                      >
+                        Open Resource <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  </div>
+                </Card>
+              )) : <EmptyState message="No linked resources found" />}
+            </TabsContent>
           </>
         )}
       </Tabs>
@@ -236,6 +291,28 @@ export default function IECMaterials() {
               <div className="p-4 w-full h-full flex items-center justify-center">
                 <img src={previewItem.file_url} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" alt="Preview" />
               </div>
+            ) : previewItem?.type === 'Audio' ? (
+              <div className="p-8 w-full max-w-xl flex flex-col items-center gap-6">
+                <div className="w-24 h-24 rounded-3xl bg-purple-500/10 flex items-center justify-center">
+                  <Music className="w-12 h-12 text-purple-400" />
+                </div>
+                <audio src={previewItem.file_url} controls className="w-full" />
+              </div>
+            ) : previewItem?.type === 'Link' ? (
+              <div className="p-8 w-full max-w-xl flex flex-col items-center gap-6 text-center">
+                <div className="w-24 h-24 rounded-3xl bg-indigo-500/10 flex items-center justify-center">
+                  <LinkIcon className="w-12 h-12 text-indigo-400" />
+                </div>
+                <p className="text-slate-300 text-sm break-all">{previewItem.file_url}</p>
+                <a
+                  href={previewItem.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 h-12 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-xs"
+                >
+                  Open in New Tab <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
             ) : (
               <div className="text-center">
                 <HardDrive className="w-16 h-16 text-slate-700 mx-auto" />
@@ -247,8 +324,8 @@ export default function IECMaterials() {
           <div className="p-4 bg-white border-t border-slate-100 flex justify-end gap-3 shrink-0">
             <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="rounded-xl font-bold uppercase text-[10px]">Close</Button>
             
-            {/* Hide download button for YouTube links */}
-            {previewItem?.type !== 'Video' && !previewItem?.file_url?.includes('youtube') && (
+            {/* Hide download button for streaming/external-link types */}
+            {previewItem?.type !== 'Video' && previewItem?.type !== 'Link' && !previewItem?.file_url?.includes('youtube') && (
               <Button onClick={() => downloadFile(previewItem.file_url, previewItem.title)} className="bg-indigo-600 rounded-xl font-black uppercase text-[10px] px-6 text-white">
                 Download Resource
               </Button>

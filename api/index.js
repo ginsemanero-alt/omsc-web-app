@@ -7,8 +7,23 @@ import bcrypt from 'bcryptjs'; // ← bcryptjs, hindi bcrypt (mas stable sa Verc
 
 const app = express();
 
+// --- CORS ALLOWLIST ---
+// ALLOWED_ORIGINS is a comma-separated list of origins allowed to call this
+// API (e.g. "https://your-app.vercel.app,http://localhost:5173").
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
 app.use(cors({
-    origin: '*',
+    origin: (origin, callback) => {
+        // Allow same-origin/non-browser requests (no Origin header) and any
+        // origin present in the allowlist.
+        if (!origin || allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -27,20 +42,6 @@ if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const supabaseAnon = createClient(supabaseUrl, supabaseAnonKey);
 
-// --- LOGGER ---
-const logActivity = async (action, userEmail, status, details, req) => {
-    try {
-        const ip = req.headers['x-forwarded-for'] || '0.0.0.0';
-        supabase.from('security_logs').insert([
-            { action, user_email: userEmail, status, details, ip_address: ip }
-        ]).then(({ error }) => {
-            if (error) console.error("Logger Error:", error.message);
-        });
-    } catch (err) {
-        console.error("Logger Runtime Error:", err.message);
-    }
-};
-
 // --- ROUTES ---
 
 app.get('/api/health', (req, res) => {
@@ -49,12 +50,27 @@ app.get('/api/health', (req, res) => {
 
 app.post('/api/register', async (req, res) => {
     const {
-        studentId, name, email, password, role, campus,
-        program, yearLevel, status, age, gender, isIndigenous, isPwd
+        studentId, name, email, password, campus,
+        program, yearLevel, status, age, gender, isIp, isPwd
     } = req.body;
 
     const cleanEmail = email?.trim().toLowerCase();
     const cleanStudentId = studentId?.trim();
+    const cleanName = name?.trim();
+    // Public self-registration only ever creates student accounts. The
+    // request body used to be trusted for `role`, which meant anyone could
+    // POST role: "admin" with no authentication and get a fully-privileged
+    // account — confirmed exploitable, fixed here. Admin accounts are
+    // provisioned separately (directly in Supabase), not through this
+    // public endpoint.
+    const finalRole = 'student';
+
+    // The registration form offers "Yes" / "No" / "Prefer not to say", but
+    // profiles.is_ip and profiles.is_pwd are strict booleans (same as the
+    // profile-edit form's plain Yes/No toggle) — anything other than an
+    // explicit "Yes" is treated as false, since Postgres can't cast
+    // "Prefer not to say" to boolean and that would crash the insert.
+    const toBool = (value) => value === 'Yes';
 
     try {
         const { data: existing } = await supabase
@@ -68,33 +84,64 @@ app.post('/api/register', async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        // Create the Supabase Auth user first so we have its uuid, which is
+        // what `profiles.id` is keyed on (profiles.id = auth.users.id).
+        // `users.id` is an unrelated bigint auto-increment id, so demographics
+        // can only be linked to the real auth identity via this uuid, not
+        // via users.id.
+        const { data: authCreate, error: authCreateError } = await supabase.auth.admin.createUser({
+            email: cleanEmail,
+            password: password,
+            email_confirm: true,
+            user_metadata: { name: cleanName, role: finalRole }
+        });
+
+        if (authCreateError) throw authCreateError;
+
+        const authUserId = authCreate.user.id;
+
+        // `users` holds account/access-control fields only. Demographics
+        // live in `profiles`, which is the single source analytics reads.
         const { data, error: dbError } = await supabase
             .from('users')
             .insert([{
                 student_id: cleanStudentId,
-                name: name.trim(),
+                name: cleanName,
                 email: cleanEmail,
                 password: hashedPassword,
-                role: role || 'student',
-                campus, program,
-                year_level: yearLevel,
-                status: status || 'active',
-                age, gender,
-                is_indigenous: isIndigenous,
-                is_pwd: isPwd
+                role: finalRole,
+                campus,
+                status: status || 'active'
             }])
             .select();
 
-        if (dbError) throw dbError;
+        if (dbError) {
+            await supabase.auth.admin.deleteUser(authUserId);
+            throw dbError;
+        }
 
-        await supabase.auth.admin.createUser({
-            email: cleanEmail,
-            password: password,
-            email_confirm: true,
-            user_metadata: { name: name.trim(), role: role || 'student' }
-        });
+        const { error: profileError } = await supabase
+            .from('profiles')
+            .insert([{
+                id: authUserId,
+                full_name: cleanName,
+                student_id: cleanStudentId,
+                campus,
+                program,
+                year_level: yearLevel,
+                age,
+                gender,
+                is_ip: toBool(isIp),
+                is_pwd: toBool(isPwd),
+                user_role: finalRole
+            }]);
 
-        logActivity('User Registration', cleanEmail, 'success', `New account: ${name}`, req);
+        if (profileError) {
+            await supabase.from('users').delete().eq('id', data[0].id);
+            await supabase.auth.admin.deleteUser(authUserId);
+            throw profileError;
+        }
+
         res.status(201).json({ message: "Account created!", userId: data[0].id });
     } catch (error) {
         console.error("Registration Error:", error.message);
@@ -138,8 +185,6 @@ app.post('/api/login', async (req, res) => {
             authData = retry.data;
         }
 
-        logActivity('User Login', cleanEmail, 'success', `Logged in as ${user.role}`, req);
-
         res.json({
             id: user.id,
             role: user.role,
@@ -153,16 +198,6 @@ app.post('/api/login', async (req, res) => {
         console.error("Login Error:", err.message);
         res.status(500).json({ message: "Internal server error" });
     }
-});
-
-app.get('/api/admin/security-logs', async (req, res) => {
-    const { data, error } = await supabase
-        .from('security_logs')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
 });
 
 export default app;

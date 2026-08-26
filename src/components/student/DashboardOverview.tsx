@@ -4,9 +4,9 @@ import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Progress } from '../../components/ui/progress';
 import { useNavigate } from 'react-router-dom';
-import { 
-  BookOpen, ClipboardList, Calendar, 
-  TrendingUp, Loader2, ArrowRight, MapPin 
+import {
+  BookOpen, ClipboardList, Calendar,
+  Loader2, ArrowRight, MapPin, FileText
 } from 'lucide-react';
 
 export default function DashboardOverview() {
@@ -14,13 +14,13 @@ export default function DashboardOverview() {
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('Student');
   const [userCampus, setUserCampus] = useState('San Jose Campus');
-  const [activeSurveys, setActiveSurveys] = useState<any[]>([]); 
+  const [activeSurveys, setActiveSurveys] = useState<any[]>([]);
   const [programs, setPrograms] = useState<any[]>([]);
+  const [latestMaterials, setLatestMaterials] = useState<any[]>([]);
   const [stats, setStats] = useState([
     { label: 'Programs Available', value: '0', icon: Calendar, color: 'text-indigo-600' },
     { label: 'Surveys Published', value: '0', icon: ClipboardList, color: 'text-emerald-600' },
     { label: 'Materials Online', value: '0', icon: BookOpen, color: 'text-purple-600' },
-    { label: 'Participation Rate', value: '0%', icon: TrendingUp, color: 'text-blue-600' },
   ]);
 
   const fetchDashboardData = useCallback(async () => {
@@ -32,9 +32,11 @@ export default function DashboardOverview() {
       const user = session?.user;
 
       if (user) {
-        // Fetch user profile details from DB
+        // profiles.id is the Supabase Auth user's uuid, unlike users.id
+        // (an unrelated bigint), so this is the one that can actually be
+        // matched against the session user's id.
         const { data: profile } = await supabase
-          .from('users') 
+          .from('profiles')
           .select('full_name, campus')
           .eq('id', user.id)
           .maybeSingle();
@@ -51,20 +53,26 @@ export default function DashboardOverview() {
       }
 
       // 2. Fetch Real Stats & Data from Database
-      const [progRes, surveyRes, matRes] = await Promise.all([
+      const [progRes, surveyRes, matRes, latestMatRes] = await Promise.all([
         supabase.from('programs').select('*', { count: 'exact' }).order('created_at', { ascending: false }).limit(3),
         supabase.from('surveys').select('*', { count: 'exact' }).eq('status', 'active').limit(3),
         supabase.from('materials').select('*', { count: 'exact', head: true }),
+        supabase
+          .from('materials')
+          .select('id, title, file_url, created_at')
+          .not('title', 'ilike', 'CERTIFICATE_TEMPLATE:%')
+          .order('created_at', { ascending: false })
+          .limit(3),
       ]);
 
       if (progRes.data) setPrograms(progRes.data);
       if (surveyRes.data) setActiveSurveys(surveyRes.data);
+      if (latestMatRes.data) setLatestMaterials(latestMatRes.data);
 
       setStats([
         { label: 'Programs Available', value: (progRes.count || 0).toString(), icon: Calendar, color: 'text-indigo-600' },
         { label: 'Surveys Published', value: (surveyRes.count || 0).toString(), icon: ClipboardList, color: 'text-emerald-600' },
         { label: 'Materials Online', value: (matRes.count || 0).toString(), icon: BookOpen, color: 'text-purple-600' },
-        { label: 'Participation Rate', value: '0%', icon: TrendingUp, color: 'text-blue-600' },
       ]);
 
     } catch (error) {
@@ -108,7 +116,7 @@ export default function DashboardOverview() {
       </div>
 
       {/* Real Statistics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
         {stats.map((stat) => (
           <Card key={stat.label} className="p-6 md:p-8 border-none shadow-sm bg-white rounded-2xl md:rounded-[3rem] hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
             <div className="flex items-start justify-between">
@@ -127,40 +135,73 @@ export default function DashboardOverview() {
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
         
-        {/* Real Guidance Programs Section */}
-        <Card className="lg:col-span-2 p-5 sm:p-8 md:p-12 rounded-2xl md:rounded-[4rem] border-none shadow-sm bg-white">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-10">
-            <h2 className="text-2xl md:text-3xl font-black text-slate-900 italic uppercase tracking-tight">Latest Guidance Programs</h2>
-            <Button variant="ghost" onClick={() => navigate('/student/programs')} className="text-indigo-600 font-black uppercase text-[10px] tracking-widest p-0 sm:p-2 self-start sm:self-auto">
-              Explore All <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </div>
-          
-          <div className="space-y-4">
-            {programs.length > 0 ? (
-              programs.map((program) => (
-                <div key={program.id} className="p-4 sm:p-6 md:p-8 bg-slate-50 rounded-xl md:rounded-[2.5rem] flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300">
-                  <div className="space-y-1">
-                    <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase italic leading-tight">{program.title}</h3>
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[9px] font-black uppercase text-slate-400 tracking-widest">
-                      <span className="flex items-center gap-1.5">
-                        <Calendar className="h-3 w-3" /> 
-                        {program.created_at ? new Date(program.created_at).toLocaleDateString() : 'N/A'}
-                      </span>
-                      <span className="hidden sm:inline">•</span>
-                      <span>{program.campus || userCampus}</span>
+        {/* Latest Programs & Materials Section */}
+        <Card className="lg:col-span-2 p-5 sm:p-8 md:p-12 rounded-2xl md:rounded-[4rem] border-none shadow-sm bg-white space-y-10">
+          <div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-10">
+              <h2 className="text-2xl md:text-3xl font-black text-slate-900 italic uppercase tracking-tight">Latest Guidance Programs</h2>
+              <Button variant="ghost" onClick={() => navigate('/student/programs')} className="text-indigo-600 font-black uppercase text-[10px] tracking-widest p-0 sm:p-2 self-start sm:self-auto">
+                Explore All <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              {programs.length > 0 ? (
+                programs.map((program) => (
+                  <div key={program.id} className="p-4 sm:p-6 md:p-8 bg-slate-50 rounded-xl md:rounded-[2.5rem] flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300">
+                    <div className="space-y-1">
+                      <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase italic leading-tight">{program.title}</h3>
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                        <span className="flex items-center gap-1.5">
+                          <Calendar className="h-3 w-3" />
+                          {program.created_at ? new Date(program.created_at).toLocaleDateString() : 'N/A'}
+                        </span>
+                        <span className="hidden sm:inline">•</span>
+                        <span>{program.campus || userCampus}</span>
+                      </div>
                     </div>
+                    <Button onClick={() => navigate('/student/programs')} className="bg-slate-900 text-white hover:bg-indigo-600 rounded-xl h-12 px-6 font-black uppercase text-[10px] tracking-widest w-full sm:w-auto transition-colors">
+                      View
+                    </Button>
                   </div>
-                  <Button onClick={() => navigate('/student/programs')} className="bg-slate-900 text-white hover:bg-indigo-600 rounded-xl h-12 px-6 font-black uppercase text-[10px] tracking-widest w-full sm:w-auto transition-colors">
-                    View
-                  </Button>
+                ))
+              ) : (
+                <div className="text-center py-10 bg-slate-50 rounded-xl border-2 border-dashed border-slate-100">
+                  <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest">No posted guidance programs yet.</p>
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-10 bg-slate-50 rounded-xl border-2 border-dashed border-slate-100">
-                <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest">No posted guidance programs yet.</p>
-              </div>
-            )}
+              )}
+            </div>
+          </div>
+
+          <div className="border-t-2 border-slate-100 pt-8 md:pt-10">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-10">
+              <h2 className="text-2xl md:text-3xl font-black text-slate-900 italic uppercase tracking-tight">Latest IEC Materials</h2>
+              <Button variant="ghost" onClick={() => navigate('/student/materials')} className="text-indigo-600 font-black uppercase text-[10px] tracking-widest p-0 sm:p-2 self-start sm:self-auto">
+                Explore All <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              {latestMaterials.length > 0 ? (
+                latestMaterials.map((material) => (
+                  <div key={material.id} className="p-4 sm:p-6 md:p-8 bg-slate-50 rounded-xl md:rounded-[2.5rem] flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 shrink-0">
+                        <FileText className="h-4 w-4" />
+                      </div>
+                      <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase italic leading-tight truncate">{material.title}</h3>
+                    </div>
+                    <Button onClick={() => navigate('/student/materials')} className="bg-slate-900 text-white hover:bg-indigo-600 rounded-xl h-12 px-6 font-black uppercase text-[10px] tracking-widest w-full sm:w-auto transition-colors">
+                      View
+                    </Button>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-10 bg-slate-50 rounded-xl border-2 border-dashed border-slate-100">
+                  <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest">No posted IEC materials yet.</p>
+                </div>
+              )}
+            </div>
           </div>
         </Card>
 
@@ -174,7 +215,7 @@ export default function DashboardOverview() {
             <div className="space-y-6">
               {activeSurveys.length > 0 ? (
                 activeSurveys.map((survey) => (
-                  <div key={survey.id} className="space-y-2 group cursor-pointer" onClick={() => navigate('/student/surveys')}>
+                  <div key={survey.id} className="space-y-2 group cursor-pointer" onClick={() => navigate('/student/survey')}>
                     <div className="flex justify-between items-center gap-2">
                       <span className="text-xs font-black uppercase tracking-widest text-indigo-100 group-hover:text-white transition-colors line-clamp-1">{survey.title}</span>
                       <span className="text-[8px] font-black bg-white/20 px-1.5 py-0.5 rounded shrink-0">NEW</span>
@@ -189,7 +230,7 @@ export default function DashboardOverview() {
           </div>
 
           <Button 
-            onClick={() => navigate('/student/surveys')}
+            onClick={() => navigate('/student/survey')}
             className="w-full mt-8 h-14 bg-white text-indigo-600 font-black rounded-xl hover:bg-slate-900 hover:text-white transition-all duration-300 uppercase tracking-widest text-[10px] relative z-10"
           >
             Take Surveys

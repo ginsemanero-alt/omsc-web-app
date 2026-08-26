@@ -30,6 +30,8 @@ import {
   Calendar,
   Maximize2,
   Youtube,
+  Music,
+  Link as LinkIcon,
   Plus,
   Edit,
   Trash2,
@@ -39,7 +41,7 @@ import {
   Filter,
 } from 'lucide-react';
 
-type MaterialType = 'PDF' | 'Image' | 'Video';
+type MaterialType = 'PDF' | 'Image' | 'Video' | 'Audio' | 'Link';
 
 const IEC_CATEGORIES = [
   'Guidance Services',
@@ -120,9 +122,12 @@ export default function IECMaterials() {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
 
+  const audioInputRef = useRef<HTMLInputElement>(null);
+
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState('');
   const [attachedDocument, setAttachedDocument] = useState<File | null>(null);
+  const [attachedAudio, setAttachedAudio] = useState<File | null>(null);
 
   const [formData, setFormData] = useState<FormData>(DEFAULT_FORM);
 
@@ -176,7 +181,10 @@ export default function IECMaterials() {
         program_component: material.program_component || PROGRAM_COMPONENTS[0],
         tags: (material.tags || []).join(', '),
         description: material.description || '',
-        file_url: material.type === 'Video' ? material.file_url || '' : '',
+        file_url:
+          material.type === 'Video' || material.type === 'Link'
+            ? material.file_url || ''
+            : '',
       });
 
       setPreviewImageUrl(material.image_url || '');
@@ -188,6 +196,7 @@ export default function IECMaterials() {
 
     setSelectedImage(null);
     setAttachedDocument(null);
+    setAttachedAudio(null);
 
     if (imageInputRef.current) {
       imageInputRef.current.value = '';
@@ -195,6 +204,10 @@ export default function IECMaterials() {
 
     if (documentInputRef.current) {
       documentInputRef.current.value = '';
+    }
+
+    if (audioInputRef.current) {
+      audioInputRef.current.value = '';
     }
 
     setIsDialogOpen(true);
@@ -228,6 +241,20 @@ export default function IECMaterials() {
         variant: 'destructive',
         title: 'Invalid Document',
         description: 'Only PDF files are allowed.',
+      });
+
+      return false;
+    }
+
+    return true;
+  };
+
+  const validateAudio = (file: File) => {
+    if (!file.type.startsWith('audio/')) {
+      toast({
+        variant: 'destructive',
+        title: 'Invalid Audio File',
+        description: 'Please select a valid audio file.',
       });
 
       return false;
@@ -279,6 +306,25 @@ export default function IECMaterials() {
     }
 
     setAttachedDocument(file);
+  };
+
+  // =========================================================
+  // AUDIO SELECT
+  // =========================================================
+
+  const handleAudioSelect = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    if (!validateAudio(file)) {
+      event.target.value = '';
+      return;
+    }
+
+    setAttachedAudio(file);
   };
 
   // =========================================================
@@ -337,6 +383,16 @@ export default function IECMaterials() {
       return;
     }
 
+    if (formData.type === 'Link' && !formData.file_url.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Missing Link URL',
+        description: 'Please enter the resource URL.',
+      });
+
+      return;
+    }
+
     if (formData.type === 'PDF' && !editingId && !attachedDocument) {
       toast({
         variant: 'destructive',
@@ -352,6 +408,16 @@ export default function IECMaterials() {
         variant: 'destructive',
         title: 'Missing Image',
         description: 'Please select an infographic image.',
+      });
+
+      return;
+    }
+
+    if (formData.type === 'Audio' && !editingId && !attachedAudio) {
+      toast({
+        variant: 'destructive',
+        title: 'Missing Audio File',
+        description: 'Please attach an audio file.',
       });
 
       return;
@@ -397,10 +463,22 @@ export default function IECMaterials() {
       }
 
       // -------------------------------------------------------
-      // VIDEO URL
+      // AUDIO UPLOAD
       // -------------------------------------------------------
 
-      if (formData.type === 'Video') {
+      if (formData.type === 'Audio' && attachedAudio) {
+        finalFileUrl = await uploadFile(
+          'material-files',
+          'audio',
+          attachedAudio
+        );
+      }
+
+      // -------------------------------------------------------
+      // VIDEO / LINK URL
+      // -------------------------------------------------------
+
+      if (formData.type === 'Video' || formData.type === 'Link') {
         finalFileUrl = formData.file_url.trim();
       }
 
@@ -666,6 +744,8 @@ export default function IECMaterials() {
   const videos = filteredData.filter(
     (material) =>
       material.type === 'Video' ||
+      material.type === 'Audio' ||
+      material.type === 'Link' ||
       material.file_url?.includes('youtube.com') ||
       material.file_url?.includes('youtu.be')
   );
@@ -779,7 +859,7 @@ export default function IECMaterials() {
             value="videos"
             className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs"
           >
-            Videos & Links
+            Video / Audio / Links
           </TabsTrigger>
 
         </TabsList>
@@ -1014,8 +1094,20 @@ export default function IECMaterials() {
 
                     <div className="flex items-center gap-6">
 
-                      <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center shrink-0">
-                        <Youtube className="w-10 h-10 text-red-600" />
+                      <div className={`w-20 h-20 rounded-3xl flex items-center justify-center shrink-0 ${
+                        item.type === 'Audio'
+                          ? 'bg-purple-50'
+                          : item.type === 'Link'
+                          ? 'bg-indigo-50'
+                          : 'bg-red-50'
+                      }`}>
+                        {item.type === 'Audio' ? (
+                          <Music className="w-10 h-10 text-purple-600" />
+                        ) : item.type === 'Link' ? (
+                          <LinkIcon className="w-10 h-10 text-indigo-600" />
+                        ) : (
+                          <Youtube className="w-10 h-10 text-red-600" />
+                        )}
                       </div>
 
                       <div className="flex-1 min-w-0">
@@ -1033,9 +1125,19 @@ export default function IECMaterials() {
                           onClick={() =>
                             handlePreview(item)
                           }
-                          className="bg-red-600 hover:bg-red-700 h-12 px-8 rounded-2xl font-black uppercase text-xs text-white"
+                          className={`h-12 px-8 rounded-2xl font-black uppercase text-xs text-white ${
+                            item.type === 'Audio'
+                              ? 'bg-purple-600 hover:bg-purple-700'
+                              : item.type === 'Link'
+                              ? 'bg-indigo-600 hover:bg-indigo-700'
+                              : 'bg-red-600 hover:bg-red-700'
+                          }`}
                         >
-                          Watch Now
+                          {item.type === 'Audio'
+                            ? 'Play Audio'
+                            : item.type === 'Link'
+                            ? 'Open Link'
+                            : 'Watch Now'}
                         </Button>
 
                       </div>
@@ -1092,13 +1194,14 @@ export default function IECMaterials() {
                         ...previous,
                         type,
                         file_url:
-                          type === 'Video'
+                          type === 'Video' || type === 'Link'
                             ? previous.file_url
                             : '',
                       }));
 
                       setSelectedImage(null);
                       setAttachedDocument(null);
+                      setAttachedAudio(null);
                     }}
                     className="select-field"
                   >
@@ -1112,6 +1215,14 @@ export default function IECMaterials() {
 
                     <option value="Video">
                       Video Streaming Link
+                    </option>
+
+                    <option value="Audio">
+                      Audio File
+                    </option>
+
+                    <option value="Link">
+                      External Link
                     </option>
                   </select>
                 </div>
@@ -1329,6 +1440,71 @@ export default function IECMaterials() {
 
                 </div>
               )}
+
+              {/* AUDIO */}
+
+              {formData.type === 'Audio' && (
+                <div className="space-y-1.5">
+
+                  <Label className="field-label">
+                    Audio File Attachment
+                  </Label>
+
+                  <div
+                    onClick={() =>
+                      audioInputRef.current?.click()
+                    }
+                    className="h-12 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center px-4 cursor-pointer text-slate-600 text-xs"
+                  >
+
+                    <FileText className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
+
+                    <span className="truncate flex-1 font-bold">
+                      {attachedAudio
+                        ? attachedAudio.name
+                        : editingId
+                        ? 'Replace Audio File...'
+                        : 'Choose Audio File...'}
+                    </span>
+
+                    <input
+                      type="file"
+                      ref={audioInputRef}
+                      className="hidden"
+                      accept="audio/*"
+                      onChange={
+                        handleAudioSelect
+                      }
+                    />
+
+                  </div>
+                </div>
+              )}
+
+              {/* LINK */}
+
+              {formData.type === 'Link' && (
+                <div className="space-y-1.5">
+
+                  <Label className="field-label">
+                    External Resource URL
+                  </Label>
+
+                  <Input
+                    value={formData.file_url}
+                    onChange={(event) =>
+                      setFormData({
+                        ...formData,
+                        file_url:
+                          event.target.value,
+                      })
+                    }
+                    className="rounded-xl bg-slate-50 border-none h-12 font-bold px-4 text-slate-700"
+                    placeholder="https://..."
+                  />
+
+                </div>
+              )}
             </div>
 
             {/* OPTIONAL COVER */}
@@ -1469,6 +1645,42 @@ export default function IECMaterials() {
                   alt={previewItem.title}
                 />
               </div>
+            ) : previewItem &&
+              previewItem.type === 'Audio' &&
+              previewItem.file_url ? (
+              /* AUDIO */
+
+              <div className="p-8 w-full max-w-xl flex flex-col items-center gap-6">
+                <div className="w-24 h-24 rounded-3xl bg-purple-500/10 flex items-center justify-center">
+                  <Music className="w-12 h-12 text-purple-400" />
+                </div>
+                <audio
+                  src={previewItem.file_url}
+                  controls
+                  className="w-full"
+                />
+              </div>
+            ) : previewItem &&
+              previewItem.type === 'Link' &&
+              previewItem.file_url ? (
+              /* LINK */
+
+              <div className="p-8 w-full max-w-xl flex flex-col items-center gap-6 text-center">
+                <div className="w-24 h-24 rounded-3xl bg-indigo-500/10 flex items-center justify-center">
+                  <LinkIcon className="w-12 h-12 text-indigo-400" />
+                </div>
+                <p className="text-slate-300 text-sm break-all">
+                  {previewItem.file_url}
+                </p>
+                <a
+                  href={previewItem.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center h-12 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-xs"
+                >
+                  Open in New Tab
+                </a>
+              </div>
             ) : (
               <div className="text-center">
 
@@ -1497,6 +1709,7 @@ export default function IECMaterials() {
 
             {previewItem &&
               previewItem.type !== 'Video' &&
+              previewItem.type !== 'Link' &&
               previewItem.file_url && (
                 <Button
                   onClick={() =>

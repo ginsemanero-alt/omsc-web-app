@@ -1,6 +1,9 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
 import { Toaster } from './components/ui/toaster';
+
+// Auth
+import { AuthProvider, useAuth } from './hooks/useAuth';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Layout
 import Layout from "./components/layout/Layout";
@@ -9,53 +12,32 @@ import Layout from "./components/layout/Layout";
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import StudentDashboard from './pages/StudentDashboard';
-import CounselorDashboard from './pages/CounselorDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 
 // Sub-pages (Public)
 import ProgramsPage from './pages/ProgramsPage';
 import MaterialsPage from './pages/MaterialsPage';
-import SurveysPage from './pages/SurveysPage';
 import AboutPage from './pages/AboutPage';
-import VideoGenerator from './components/student/Profiling';
 
 // FIX #1: TakeSurvey dapat hiwalay na import — hindi same as SurveysPage.
 // Kung wala ka pang dedicated TakeSurvey page, gawin nating alias muna ng QuizzesSurveys.
 // Palitan mo 'to ng sariling TakeSurvey component mo kapag nagawa mo na.
 import TakeSurvey from './components/student/QuizzesSurveys';
 
-type UserRole = 'student' | 'counselor' | 'admin' | null;
-
 function AppContent() {
   const navigate = useNavigate();
-
-  // FIX #2: Auth state initialization — consistent na from localStorage
-  const [userRole, setUserRole] = useState<UserRole>(
-    () => localStorage.getItem('userRole') as UserRole
-  );
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(
-    () => !!localStorage.getItem('isAuthenticated')
-  );
+  const { user, role, loading, signOut } = useAuth();
 
   const handleLogin = (role: string, name: string) => {
-    setUserRole(role as UserRole);
-    setIsAuthenticated(true);
-    localStorage.setItem('userRole', role);
-    localStorage.setItem('isAuthenticated', 'true');
-    // FIX #3: name param is accepted but was unused — now stored for dashboard use
+    // Auth state itself now comes from the Supabase session (via useAuth).
+    // localStorage keeps only display values.
     localStorage.setItem('userName', name);
     navigate(`/${role}`);
   };
 
-  const handleLogout = () => {
-    // FIX #4: Full cleanup — lahat ng auth keys cleared on logout
-    setUserRole(null);
-    setIsAuthenticated(false);
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('isAuthenticated');
+  const handleLogout = async () => {
+    await signOut();
     localStorage.removeItem('userName');
-    localStorage.removeItem('userId');
-    localStorage.removeItem('user');
     localStorage.removeItem('userCampus');
     navigate('/');
   };
@@ -68,9 +50,7 @@ function AppContent() {
         <Route path="/" element={<Layout><HomePage onNavigate={(page) => navigate(`/${page}`)} /></Layout>} />
         <Route path="/programs" element={<Layout><ProgramsPage /></Layout>} />
         <Route path="/materials" element={<Layout><MaterialsPage /></Layout>} />
-        <Route path="/surveys" element={<Layout><SurveysPage /></Layout>} />
         <Route path="/about" element={<Layout><AboutPage /></Layout>} />
-        <Route path="/ai-video" element={<Layout><VideoGenerator /></Layout>} />
 
         {/* FIX #5: /take-survey/:id now points to the correct TakeSurvey component,
             not SurveysPage. The :id param will be accessible via useParams() inside it. */}
@@ -80,8 +60,8 @@ function AppContent() {
         <Route
           path="/login"
           element={
-            isAuthenticated
-              ? <Navigate to={`/${userRole}`} replace />
+            !loading && user && role
+              ? <Navigate to={`/${role}`} replace />
               : <LoginPage onLogin={handleLogin} onBackToHome={() => navigate('/')} />
           }
         />
@@ -91,19 +71,9 @@ function AppContent() {
         <Route
           path="/student/*"
           element={
-            isAuthenticated && userRole === 'student'
-              ? <StudentDashboard onLogout={handleLogout} />
-              : <Navigate to="/login" replace />
-          }
-        />
-
-        {/* Counselor */}
-        <Route
-          path="/counselor/*"
-          element={
-            isAuthenticated && userRole === 'counselor'
-              ? <CounselorDashboard onLogout={handleLogout} />
-              : <Navigate to="/login" replace />
+            <ProtectedRoute role="student">
+              <StudentDashboard onLogout={handleLogout} />
+            </ProtectedRoute>
           }
         />
 
@@ -111,9 +81,9 @@ function AppContent() {
         <Route
           path="/admin/*"
           element={
-            isAuthenticated && userRole === 'admin'
-              ? <AdminDashboard onLogout={handleLogout} />
-              : <Navigate to="/login" replace />
+            <ProtectedRoute role="admin">
+              <AdminDashboard onLogout={handleLogout} />
+            </ProtectedRoute>
           }
         />
 
@@ -128,8 +98,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <Router>
-      <AppContent />
-    </Router>
+    <AuthProvider>
+      <Router>
+        <AppContent />
+      </Router>
+    </AuthProvider>
   );
 }

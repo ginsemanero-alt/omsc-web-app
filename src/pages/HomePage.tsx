@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 interface HomePageProps {
-  onNavigate: (page: "Home" | "About") => void;
+  onNavigate: (page: "Home" | "Programs" | "Materials" | "About" | "Login") => void;
 }
 
 interface Program {
@@ -64,7 +64,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
   const features = [
     { icon: BookOpen, title: "Information Services", description: "Access guidance announcements, educational resources, and mental health materials.", action: () => handleNavigation("Programs") },
-    { icon: ClipboardList, title: "Testing Services", description: "Participate in aptitude tests, assessments, and diagnostic examinations.", action: () => handleNavigation("Surveys") },
+    { icon: ClipboardList, title: "Testing Services", description: "Participate in aptitude tests, assessments, and diagnostic examinations.", action: () => handleNavigation("Login") },
     { icon: GraduationCap, title: "Career Orientation", description: "Explore career guidance programs, seminars, and degree planning resources.", action: () => handleNavigation("Programs") },
     { icon: Users, title: "Counseling Services", description: "Receive academic, personal, and emotional support through our programs.", action: () => handleNavigation("About") },
   ];
@@ -84,7 +84,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
           {/* Desktop Nav */}
           <nav className="hidden lg:flex items-center gap-2 font-bold text-[11px] uppercase tracking-wider">
-            {["Home", "Programs", "Materials", "Surveys", "About"].map((item) => (
+            {["Home", "Programs", "Materials", "About"].map((item) => (
               <button key={item} onClick={() => handleNavigation(item)} className="relative px-4 py-2 text-white">
                 <span className={activePage === item ? "opacity-100" : "opacity-70 hover:opacity-100"}>
                   {item === "materials" ? "IEC Materials" : item}
@@ -106,7 +106,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         {/* Mobile Dropdown Menu */}
         {isMenuOpen && (
           <div className="lg:hidden absolute top-[70px] left-0 right-0 bg-[#0055aa] border-t border-white/10 p-6 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-top duration-300">
-            {["home", "programs", "materials", "surveys", "about"].map((item) => (
+            {["home", "programs", "materials", "about"].map((item) => (
               <button key={item} onClick={() => handleNavigation(item)} className="text-left text-white font-black uppercase text-lg border-b border-white/5 pb-2">
                 {item}
               </button>

@@ -178,7 +178,6 @@ export default function UserManagement() {
           <SelectContent className="rounded-2xl border-none shadow-xl">
             <SelectItem value="all">All Roles</SelectItem>
             <SelectItem value="Admin">Admins</SelectItem>
-            <SelectItem value="Counselor">Counselors</SelectItem>
             <SelectItem value="Student">Students</SelectItem>
           </SelectContent>
         </Select>
