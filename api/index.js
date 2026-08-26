@@ -149,6 +149,93 @@ app.post('/api/register', async (req, res) => {
     }
 });
 
+app.post('/api/admin/create-staff', async (req, res) => {
+    // Same privilege-escalation risk /api/register used to have if left
+    // unchecked, so this endpoint requires the caller's own session token
+    // and verifies they're an active admin before creating anything.
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+    if (!token) {
+        return res.status(401).json({ message: "Missing authorization token" });
+    }
+
+    try {
+        const { data: { user: callerAuthUser }, error: callerError } = await supabase.auth.getUser(token);
+
+        if (callerError || !callerAuthUser?.email) {
+            return res.status(401).json({ message: "Invalid or expired session" });
+        }
+
+        const { data: callerRecord } = await supabase
+            .from('users')
+            .select('role')
+            .eq('email', callerAuthUser.email.toLowerCase())
+            .maybeSingle();
+
+        if (callerRecord?.role !== 'admin') {
+            return res.status(403).json({ message: "Only admins can create staff accounts" });
+        }
+
+        const { name, email, password, campus } = req.body;
+        const cleanEmail = email?.trim().toLowerCase();
+        const cleanName = name?.trim();
+
+        if (!cleanName || !cleanEmail || !password || password.length < 8) {
+            return res.status(400).json({ message: "Name, email, and a password of at least 8 characters are required" });
+        }
+
+        const { data: existing } = await supabase
+            .from('users')
+            .select('email')
+            .eq('email', cleanEmail);
+
+        if (existing && existing.length > 0) {
+            return res.status(400).json({ message: "Email already exists" });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Same auth-then-db creation order as /api/register, for the same
+        // reason: profiles/users rows are meaningless without a matching
+        // auth identity, so the auth user has to exist first.
+        const { data: authCreate, error: authCreateError } = await supabase.auth.admin.createUser({
+            email: cleanEmail,
+            password,
+            email_confirm: true,
+            user_metadata: { name: cleanName, role: 'admin' }
+        });
+
+        if (authCreateError) throw authCreateError;
+
+        const authUserId = authCreate.user.id;
+
+        // Admin accounts have no `profiles` row — demographics are
+        // student-only by design (see /api/register and TopNavBar).
+        const { data, error: dbError } = await supabase
+            .from('users')
+            .insert([{
+                name: cleanName,
+                email: cleanEmail,
+                password: hashedPassword,
+                role: 'admin',
+                campus: campus || null,
+                status: 'active'
+            }])
+            .select();
+
+        if (dbError) {
+            await supabase.auth.admin.deleteUser(authUserId);
+            throw dbError;
+        }
+
+        res.status(201).json({ message: "Staff account created!", userId: data[0].id });
+    } catch (error) {
+        console.error("Create Staff Error:", error.message);
+        res.status(500).json({ message: error.message });
+    }
+});
+
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
     const cleanEmail = email?.trim().toLowerCase();

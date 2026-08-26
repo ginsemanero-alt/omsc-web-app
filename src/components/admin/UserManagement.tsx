@@ -3,8 +3,9 @@ import { supabase } from '../../lib/supabase';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Search, Trash2, Loader2, Save, X, Shield, Users, MapPin, Download, AlertCircle, Trash } from 'lucide-react';
+import { Search, Trash2, Loader2, Save, X, Shield, Users, MapPin, Download, AlertCircle, Trash, UserPlus, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 
 export default function UserManagement() {
@@ -22,6 +23,15 @@ export default function UserManagement() {
   // Modal States
   const [modalType, setModalType] = useState<'update' | 'delete' | null>(null);
   const [pendingAction, setPendingAction] = useState<{id: string, role: string} | null>(null);
+
+  // Add Staff Account States
+  const [showAddStaff, setShowAddStaff] = useState(false);
+  const [staffName, setStaffName] = useState('');
+  const [staffEmail, setStaffEmail] = useState('');
+  const [staffPassword, setStaffPassword] = useState('');
+  const [staffCampus, setStaffCampus] = useState('');
+  const [showStaffPassword, setShowStaffPassword] = useState(false);
+  const [creatingStaff, setCreatingStaff] = useState(false);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -105,6 +115,74 @@ export default function UserManagement() {
     setEditingId(null);
   };
 
+  const generateStaffPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+    let generated = '';
+    for (let i = 0; i < 12; i++) {
+      generated += chars[Math.floor(Math.random() * chars.length)];
+    }
+    setStaffPassword(generated);
+    setShowStaffPassword(true);
+  };
+
+  const resetStaffForm = () => {
+    setStaffName('');
+    setStaffEmail('');
+    setStaffPassword('');
+    setStaffCampus('');
+    setShowStaffPassword(false);
+  };
+
+  const handleCreateStaff = async () => {
+    if (!staffName.trim() || !staffEmail.trim() || staffPassword.length < 8) {
+      toast({
+        variant: "destructive",
+        title: "INCOMPLETE FORM",
+        description: "Name, email, and a password of at least 8 characters are required."
+      });
+      return;
+    }
+
+    setCreatingStaff(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      const response = await fetch('/api/admin/create-staff', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token || ''}`,
+        },
+        body: JSON.stringify({
+          name: staffName.trim(),
+          email: staffEmail.trim(),
+          password: staffPassword,
+          campus: staffCampus || null,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to create staff account");
+      }
+
+      toast({
+        title: "STAFF ACCOUNT CREATED",
+        description: `${staffName.trim()} can now sign in as an admin.`,
+        className: "bg-indigo-600 text-white font-black rounded-2xl"
+      });
+
+      setShowAddStaff(false);
+      resetStaffForm();
+      fetchUsers();
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Error", description: err.message });
+    } finally {
+      setCreatingStaff(false);
+    }
+  };
+
   const filteredUsers = users.filter((user) => {
     const query = searchQuery.toLowerCase();
     const matchesSearch = user.name?.toLowerCase().includes(query) || user.email?.toLowerCase().includes(query);
@@ -158,7 +236,132 @@ export default function UserManagement() {
           </h1>
           <p className="text-slate-500 font-medium tracking-tight uppercase text-xs">Assign roles and campuses to staff</p>
         </div>
+        <Button
+          onClick={() => setShowAddStaff(true)}
+          className="h-12 rounded-2xl px-6 bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
+        >
+          <UserPlus className="w-4 h-4 mr-2" />
+          Add Staff Account
+        </Button>
       </div>
+
+      {/* ADD STAFF MODAL */}
+      {showAddStaff && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200">
+          <Card className="w-full max-w-md rounded-[2.5rem] border-none shadow-2xl bg-white overflow-hidden">
+            <div className="p-6 sm:p-8">
+              <div className="flex items-start justify-between gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
+                    <UserPlus className="w-6 h-6 text-indigo-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">Add Staff Account</h2>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">Admin access only</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddStaff(false); resetStaffForm(); }}
+                  className="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors shrink-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[9px] font-black uppercase tracking-wider text-slate-500 ml-1">Full Name</Label>
+                  <Input
+                    value={staffName}
+                    onChange={(e) => setStaffName(e.target.value)}
+                    placeholder="Juan Dela Cruz"
+                    className="h-12 bg-slate-50 border-none rounded-2xl font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[9px] font-black uppercase tracking-wider text-slate-500 ml-1">Email</Label>
+                  <Input
+                    type="email"
+                    value={staffEmail}
+                    onChange={(e) => setStaffEmail(e.target.value)}
+                    placeholder="staff@omsc.edu.ph"
+                    autoComplete="off"
+                    className="h-12 bg-slate-50 border-none rounded-2xl font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[9px] font-black uppercase tracking-wider text-slate-500 ml-1">Campus</Label>
+                  <Select value={staffCampus} onValueChange={setStaffCampus}>
+                    <SelectTrigger className="h-12 bg-slate-50 border-none rounded-2xl font-bold">
+                      <SelectValue placeholder="Assign Campus" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl border-none">
+                      <SelectItem value="san-jose">San Jose</SelectItem>
+                      <SelectItem value="sablayan">Sablayan</SelectItem>
+                      <SelectItem value="mamburao">Mamburao</SelectItem>
+                      <SelectItem value="labangan">Labangan</SelectItem>
+                      <SelectItem value="lubang">Lubang</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[9px] font-black uppercase tracking-wider text-slate-500 ml-1">Password</Label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        type={showStaffPassword ? 'text' : 'password'}
+                        value={staffPassword}
+                        onChange={(e) => setStaffPassword(e.target.value)}
+                        placeholder="At least 8 characters"
+                        autoComplete="new-password"
+                        className="h-12 bg-slate-50 border-none rounded-2xl font-bold pr-11"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowStaffPassword(!showStaffPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600"
+                      >
+                        {showStaffPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={generateStaffPassword}
+                      className="h-12 w-12 rounded-2xl border-slate-100 shrink-0 p-0"
+                      title="Generate password"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <p className="text-[9px] text-slate-400 font-medium ml-1">
+                    Share this password with the staff member securely — it won't be shown again.
+                  </p>
+                </div>
+
+                <Button
+                  onClick={handleCreateStaff}
+                  disabled={creatingStaff}
+                  className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-xs tracking-wider mt-2"
+                >
+                  {creatingStaff ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    'Create Admin Account'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* SEARCH & FILTER */}
       <div className="flex flex-col md:flex-row gap-4 bg-white p-4 rounded-[2rem] shadow-sm border border-slate-100">
@@ -177,8 +380,8 @@ export default function UserManagement() {
           </SelectTrigger>
           <SelectContent className="rounded-2xl border-none shadow-xl">
             <SelectItem value="all">All Roles</SelectItem>
-            <SelectItem value="Admin">Admins</SelectItem>
-            <SelectItem value="Student">Students</SelectItem>
+            <SelectItem value="admin">Admins</SelectItem>
+            <SelectItem value="student">Students</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -195,9 +398,9 @@ export default function UserManagement() {
             <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
               
               <div className="flex items-center gap-4 w-full lg:w-auto">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center 
-                  ${user.role === 'Admin' ? 'bg-rose-50 text-rose-600' : 'bg-indigo-50 text-indigo-600'}`}>
-                  {user.role === 'Admin' ? <Shield className="w-7 h-7" /> : <Users className="w-7 h-7" />}
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center
+                  ${user.role === 'admin' ? 'bg-rose-50 text-rose-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                  {user.role === 'admin' ? <Shield className="w-7 h-7" /> : <Users className="w-7 h-7" />}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
