@@ -983,6 +983,92 @@ export default function AnalyticsDashboard() {
     });
   }, [filteredSurveyResponses, surveys]);
 
+  /* =======================================================
+     PRE-TEST / POST-TEST COMPARISON
+
+     A single Knowledge Assessment only measures awareness at one
+     point in time — it can't show that a student actually learned
+     something. Pairing a "(Pre-Test)" survey with a "(Post-Test)"
+     survey of the same topic (same title minus that suffix) lets us
+     compute a per-student gain score, which is the actual evidence
+     of a knowledge/awareness improvement.
+  ======================================================= */
+
+  const getBaseTopicAndPhase = (
+    title: string
+  ): { base: string; phase: "pre" | "post" | null } => {
+    const preMatch = title.match(/^(.*?)\s*\(pre-test\)\s*$/i);
+    if (preMatch) return { base: preMatch[1].trim(), phase: "pre" };
+
+    const postMatch = title.match(/^(.*?)\s*\(post-test\)\s*$/i);
+    if (postMatch) return { base: postMatch[1].trim(), phase: "post" };
+
+    return { base: title, phase: null };
+  };
+
+  const prePostComparison = useMemo(() => {
+    const surveysById: Record<string, Survey> = {};
+    surveys.forEach((survey) => {
+      surveysById[safeString(survey.id)] = survey;
+    });
+
+    // topic -> studentId -> { pre?: percentage, post?: percentage }
+    const byTopic: Record<string, Record<string, { pre?: number; post?: number }>> = {};
+
+    scoredSurveyResponses.forEach((response) => {
+      const survey = surveysById[safeString(response.survey_id)];
+      if (!survey?.title) return;
+
+      const { base, phase } = getBaseTopicAndPhase(survey.title);
+      if (!phase) return;
+
+      const studentId =
+        userIdToStudentId[safeString(response.user_id)] ||
+        safeString(response.student_id);
+      if (!studentId) return;
+
+      if (!byTopic[base]) byTopic[base] = {};
+      if (!byTopic[base][studentId]) byTopic[base][studentId] = {};
+      byTopic[base][studentId][phase] = response.percentage ?? 0;
+    });
+
+    const average = (values: number[]) =>
+      values.length > 0
+        ? Math.round(values.reduce((sum, v) => sum + v, 0) / values.length)
+        : null;
+
+    return Object.entries(byTopic)
+      .map(([topic, students]) => {
+        const preScores: number[] = [];
+        const postScores: number[] = [];
+        const gains: number[] = [];
+        let improvedCount = 0;
+
+        Object.values(students).forEach((entry) => {
+          if (entry.pre !== undefined) preScores.push(entry.pre);
+          if (entry.post !== undefined) postScores.push(entry.post);
+
+          if (entry.pre !== undefined && entry.post !== undefined) {
+            const gain = entry.post - entry.pre;
+            gains.push(gain);
+            if (gain > 0) improvedCount += 1;
+          }
+        });
+
+        return {
+          topic,
+          preAvg: average(preScores),
+          postAvg: average(postScores),
+          avgGain: average(gains),
+          pairedCount: gains.length,
+          improvedCount,
+          preOnlyCount: preScores.length,
+          postOnlyCount: postScores.length,
+        };
+      })
+      .sort((a, b) => b.pairedCount - a.pairedCount);
+  }, [scoredSurveyResponses, surveys, userIdToStudentId]);
+
   const awarenessAnalytics = useMemo(() => {
     const average = (values: number[]) =>
       values.length > 0
@@ -1863,6 +1949,55 @@ export default function AnalyticsDashboard() {
       },
     });
 
+    let prePostY =
+      (doc.lastAutoTable
+        ?.finalY || nextY) + 12;
+
+    doc.setFontSize(13);
+
+    doc.text(
+      "PRE-TEST VS POST-TEST COMPARISON",
+      14,
+      prePostY
+    );
+
+    autoTable(doc, {
+      startY: prePostY + 6,
+
+      head: [
+        [
+          "TOPIC",
+          "PRE-TEST AVG",
+          "POST-TEST AVG",
+          "AVG GAIN",
+          "PAIRED STUDENTS",
+          "IMPROVED",
+        ],
+      ],
+
+      body: prePostComparison.map((row) => [
+        row.topic,
+        row.preAvg !== null ? `${row.preAvg}%` : "-",
+        row.postAvg !== null ? `${row.postAvg}%` : "-",
+        row.avgGain !== null ? `${row.avgGain >= 0 ? "+" : ""}${row.avgGain}%` : "-",
+        row.pairedCount,
+        row.pairedCount > 0 ? `${row.improvedCount}/${row.pairedCount}` : "-",
+      ]),
+
+      headStyles: {
+        fillColor: [
+          79,
+          70,
+          229,
+        ],
+        textColor: [
+          255,
+          255,
+          255,
+        ],
+      },
+    });
+
     doc.save(
       `OMSC_Guidance_Analytics_${new Date()
         .toISOString()
@@ -1998,6 +2133,30 @@ export default function AnalyticsDashboard() {
         ]);
       }
     );
+
+    rows.push([]);
+
+    /* PRE-TEST / POST-TEST COMPARISON */
+
+    rows.push([
+      "TOPIC",
+      "PRE-TEST AVG",
+      "POST-TEST AVG",
+      "AVG GAIN",
+      "PAIRED STUDENTS",
+      "IMPROVED",
+    ]);
+
+    prePostComparison.forEach((row) => {
+      rows.push([
+        row.topic,
+        row.preAvg ?? "",
+        row.postAvg ?? "",
+        row.avgGain ?? "",
+        row.pairedCount,
+        row.pairedCount > 0 ? `${row.improvedCount}/${row.pairedCount}` : "",
+      ]);
+    });
 
     const csv = rows
       .map((row) =>
@@ -2176,6 +2335,8 @@ export default function AnalyticsDashboard() {
         by_pwd: awarenessAnalytics.byPwd,
         by_ip: awarenessAnalytics.byIp,
       },
+
+      pre_post_comparison: prePostComparison,
 
       monthly_participation:
         monthlyParticipation,
@@ -3322,6 +3483,74 @@ export default function AnalyticsDashboard() {
                 </tbody>
               </table>
             </div>
+          </Card>
+
+          {/* PRE-TEST / POST-TEST COMPARISON */}
+          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+            <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
+              Pre-Test vs Post-Test Comparison
+            </h3>
+
+            <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
+              Average score gain for students who completed both a "(Pre-Test)" and
+              "(Post-Test)" survey of the same topic
+            </p>
+
+            {prePostComparison.length === 0 ? (
+              <div className="h-40 flex items-center justify-center text-slate-400 text-xs font-bold text-center px-6">
+                No paired data yet. Create a survey titled "Topic (Pre-Test)" and
+                another "Topic (Post-Test)" with the same wording to see the
+                comparison here.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                      <th className="pb-3 pr-4">Topic</th>
+                      <th className="pb-3 pr-4">Pre-Test Avg</th>
+                      <th className="pb-3 pr-4">Post-Test Avg</th>
+                      <th className="pb-3 pr-4">Avg. Gain</th>
+                      <th className="pb-3 pr-4">Paired Students</th>
+                      <th className="pb-3">Improved</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {prePostComparison.map((row) => (
+                      <tr key={row.topic} className="border-b border-slate-50 last:border-none">
+                        <td className="py-3 pr-4 text-xs font-bold text-slate-700">
+                          {row.topic}
+                        </td>
+                        <td className="py-3 pr-4 text-xs font-black text-slate-500">
+                          {row.preAvg !== null ? `${row.preAvg}%` : "—"}
+                        </td>
+                        <td className="py-3 pr-4 text-xs font-black text-slate-500">
+                          {row.postAvg !== null ? `${row.postAvg}%` : "—"}
+                        </td>
+                        <td className="py-3 pr-4 text-xs font-black">
+                          {row.avgGain !== null ? (
+                            <span className={row.avgGain >= 0 ? "text-emerald-600" : "text-rose-500"}>
+                              {row.avgGain >= 0 ? "+" : ""}
+                              {row.avgGain}%
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-bold">No pairs yet</span>
+                          )}
+                        </td>
+                        <td className="py-3 pr-4 text-xs font-black text-slate-900">
+                          {row.pairedCount}
+                        </td>
+                        <td className="py-3 text-xs font-black text-slate-900">
+                          {row.pairedCount > 0
+                            ? `${row.improvedCount}/${row.pairedCount}`
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Card>
 
         </div>
