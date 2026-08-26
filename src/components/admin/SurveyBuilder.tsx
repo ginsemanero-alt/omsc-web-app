@@ -66,13 +66,17 @@ type Survey = {
 type ProgramOption = { id: number; title: string };
 type MaterialOption = { id: number; title: string };
 
+// Matches the 6 official guidance_service categories enforced on
+// `programs` (see supabase/migrations.sql) and GUIDANCE_SERVICES in
+// AnalyticsDashboard.tsx, so a survey's category always lines up with
+// the program it can be linked to via related_program_id.
 const CATEGORIES = [
+  "Information Services",
+  "Individual Inventory",
+  "Research and Evaluation",
+  "Career Orientation",
+  "Testing Services",
   "Counseling Services",
-  "Career Guidance",
-  "Student Development",
-  "Guidance Program Evaluation",
-  "Counseling Evaluation",
-  "Student Satisfaction",
   "Other",
 ];
 
