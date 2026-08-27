@@ -58,20 +58,77 @@ const CAMPUSES = [
   'Mamburao Campus',
 ];
 
-const PROGRAMS = [
-  'Bachelor of Science in Information Technology',
-  'Bachelor of Science in Computer Science',
-  'Bachelor of Science in Business Administration',
-  'Bachelor of Science in Accountancy',
-  'Bachelor of Science in Hospitality Management',
-  'Bachelor of Science in Agriculture',
-  'Bachelor of Science in Forestry',
-  'Bachelor of Science in Biology',
-  'Bachelor of Science in Nursing',
-  'Bachelor of Secondary Education',
-  'Bachelor of Elementary Education',
-  'Other',
-];
+// Official program offerings per campus. Majors are flattened into their
+// own entry (e.g. "... — Major in X") since `profiles.program` is a single
+// text field, not a separate program+major pair.
+const PROGRAMS_BY_CAMPUS: Record<string, string[]> = {
+  'Labangan Campus': [
+    'Master in Public Administration (MPA)',
+    'Bachelor of Science in Social Work (BSSW)',
+    'Bachelor of Science in Development Communication (BSDevCom)',
+    'Bachelor of Arts in History (BAHist)',
+    'Bachelor of Arts in Communication (BACom)',
+    'Bachelor in Human Services (BSM)',
+    'Bachelor of Science in Business Administration (BSBA) — Major in Financial Management',
+    'Bachelor of Science in Business Administration (BSBA) — Major in Operations Management',
+    'Bachelor of Science in Accounting Information System (BSAIS)',
+    'Bachelor of Science in Office Administration (BSOA)',
+    'Bachelor of Public Administration (BPA)',
+    'Bachelor of Science in Hospitality Management (BSHM)',
+    'Bachelor of Science in Management Accounting (BSMA)',
+    'Bachelor of Science in Accountancy (BSA)',
+    'Bachelor of Science in Architecture (BSArchi)',
+    'Bachelor of Science in Civil Engineering (BSCE)',
+    'Bachelor of Science in Electrical Engineering (BSEE)',
+    'Bachelor of Science in Industrial Engineering (BSIE)',
+    'Bachelor of Science in Criminology (BSCrim)',
+    'Bachelor of Science in Industrial Security Management (BSISM)',
+    'Other',
+  ],
+  'San Jose Campus': [
+    'Doctor of Education in Educational Management (EdD)',
+    'Master of Arts in Education major in Educational Management (MAEd)',
+    'Master of Arts in Teaching (MAT) — Major in English',
+    'Master of Arts in Teaching (MAT) — Major in Filipino',
+    'Master in Information Technology (MIT)',
+    'Bachelor of Elementary Education (BEEd)',
+    'Bachelor of Secondary Education (BSEd) — Major in English',
+    'Bachelor of Secondary Education (BSEd) — Major in Filipino',
+    'Bachelor of Secondary Education (BSEd) — Major in Mathematics',
+    'Bachelor of Secondary Education (BSEd) — Major in Science',
+    'Teacher Certificate Program',
+    'Bachelor of Technology and Livelihood Education (BTLEd) — Major in Home Economics',
+    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Automotive Technology',
+    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Electrical Technology',
+    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Electronics Technology',
+    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Food Technology and Service Management',
+    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Welding and Fabrication Technology',
+    'Bachelor of Physical Education (BPEd)',
+    'Bachelor of Science in Information Technology (BSIT)',
+    'Bachelor of Science in Midwifery (BSM)',
+    'Diploma in Midwifery',
+    'Other',
+  ],
+  'Murtha Campus': [
+    'Master of Science in Agriculture (MSAgri)',
+    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Animal Production',
+    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Horticulture',
+    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Agricultural Crops Production',
+    'Bachelor of Science in Agriculture (BSAgri)',
+    'Bachelor of Science in Agroforestry (BSAgro)',
+    'Other',
+  ],
+  // No official program list provided yet for this campus — kept as a
+  // generic placeholder until the real offerings are confirmed.
+  'Mamburao Campus': [
+    'Bachelor of Science in Information Technology',
+    'Bachelor of Science in Business Administration',
+    'Bachelor of Science in Accountancy',
+    'Bachelor of Secondary Education',
+    'Bachelor of Elementary Education',
+    'Other',
+  ],
+};
 
 export default function LoginPage({
   onLogin,
@@ -789,7 +846,12 @@ export default function LoginPage({
                   >
                     <Select
                       value={campus}
-                      onValueChange={setCampus}
+                      onValueChange={(value) => {
+                        setCampus(value);
+                        // The previously selected program almost certainly
+                        // doesn't exist at the newly selected campus.
+                        setProgram('');
+                      }}
                     >
                       <SelectTrigger className="select-style pl-11">
                         <SelectValue placeholder="Select campus" />
@@ -852,7 +914,7 @@ export default function LoginPage({
                         </SelectTrigger>
 
                         <SelectContent className="rounded-2xl max-h-72">
-                          {PROGRAMS.map((item) => (
+                          {(PROGRAMS_BY_CAMPUS[campus] || []).map((item) => (
                             <SelectItem
                               key={item}
                               value={item}
