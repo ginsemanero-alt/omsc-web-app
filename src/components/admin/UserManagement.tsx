@@ -301,7 +301,6 @@ export default function UserManagement() {
                     <SelectContent className="rounded-2xl border-none">
                       <SelectItem value="san-jose">San Jose</SelectItem>
                       <SelectItem value="sablayan">Sablayan</SelectItem>
-                      <SelectItem value="mamburao">Mamburao</SelectItem>
                       <SelectItem value="labangan">Labangan</SelectItem>
                       <SelectItem value="lubang">Lubang</SelectItem>
                     </SelectContent>
@@ -445,7 +444,6 @@ export default function UserManagement() {
                         <SelectContent className="rounded-xl border-none">
                           <SelectItem value="san-jose">San Jose</SelectItem>
                           <SelectItem value="sablayan">Sablayan</SelectItem>
-                          <SelectItem value="mamburao">Mamburao</SelectItem>
                           <SelectItem value="labangan">Labangan</SelectItem>
                           <SelectItem value="lubang">Lubang</SelectItem>
                         </SelectContent>

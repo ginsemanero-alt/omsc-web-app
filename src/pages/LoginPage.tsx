@@ -55,7 +55,6 @@ const CAMPUSES = [
   'San Jose Campus',
   'Labangan Campus',
   'Murtha Campus',
-  'Mamburao Campus',
 ];
 
 // Official program offerings per campus. Majors are flattened into their
@@ -116,16 +115,6 @@ const PROGRAMS_BY_CAMPUS: Record<string, string[]> = {
     'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Agricultural Crops Production',
     'Bachelor of Science in Agriculture (BSAgri)',
     'Bachelor of Science in Agroforestry (BSAgro)',
-    'Other',
-  ],
-  // No official program list provided yet for this campus — kept as a
-  // generic placeholder until the real offerings are confirmed.
-  'Mamburao Campus': [
-    'Bachelor of Science in Information Technology',
-    'Bachelor of Science in Business Administration',
-    'Bachelor of Science in Accountancy',
-    'Bachelor of Secondary Education',
-    'Bachelor of Elementary Education',
     'Other',
   ],
 };
