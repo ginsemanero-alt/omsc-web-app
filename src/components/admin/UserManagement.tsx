@@ -68,22 +68,36 @@ export default function UserManagement() {
   const executeUserUpdate = async () => {
     if (!pendingAction) return;
     try {
-      const updateData: any = { 
-        status: editStatus,
-        campus_id: editCampus // Laging kasama ang campus_id sa update
-      };
-
+      // `campus` is the field the rest of the app actually reads (registration,
+      // TopNavBar, Analytics) — a now-removed `campus_id` field was being
+      // written here instead, so editing a user's campus silently had no
+      // visible effect anywhere.
       const { error } = await supabase
         .from('users')
-        .update(updateData)
+        .update({ status: editStatus, campus: editCampus })
         .eq('id', pendingAction.id);
 
       if (error) throw error;
-      
-      toast({ 
-        title: "SUCCESS", 
-        description: "User records updated.", 
-        className: "bg-indigo-600 text-white font-black rounded-2xl" 
+
+      // Analytics reads student demographics from `profiles.campus`, not
+      // `users.campus`, so a student's campus edit needs to reach both rows
+      // to actually show up there. Admins have no profiles row.
+      const targetUser = users.find((u) => String(u.id) === String(pendingAction.id));
+      if (targetUser?.student_id) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ campus: editCampus })
+          .eq('student_id', targetUser.student_id);
+
+        if (profileError) {
+          console.warn('Profile campus sync failed:', profileError);
+        }
+      }
+
+      toast({
+        title: "SUCCESS",
+        description: "User records updated.",
+        className: "bg-indigo-600 text-white font-black rounded-2xl"
       });
       closeModals();
       fetchUsers();
@@ -411,7 +425,7 @@ export default function UserManagement() {
                   <div className="flex flex-wrap gap-2 mt-2">
                     <p className="text-[9px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50 px-2 rounded-md">{user.role}</p>
                     <p className="text-[9px] font-black text-slate-500 uppercase tracking-tighter bg-slate-100 px-2 rounded-md flex items-center gap-1">
-                      <MapPin size={10} /> {user.campus_id || 'Unassigned'}
+                      <MapPin size={10} /> {user.campus || 'Unassigned'}
                     </p>
                   </div>
                 </div>
@@ -436,7 +450,7 @@ export default function UserManagement() {
                     {/* Campus Select - Always visible during edit to allow changes */}
                     <div className="flex flex-col gap-1">
                       <label className="text-[8px] font-black uppercase text-slate-400 ml-2">Campus</label>
-                      <Select defaultValue={user.campus_id || ''} onValueChange={setEditCampus}>
+                      <Select defaultValue={user.campus || ''} onValueChange={setEditCampus}>
                         <SelectTrigger className="w-40 h-10 border-none bg-slate-50 rounded-xl font-black text-[10px]">
                           <SelectValue placeholder="Assign Campus" />
                         </SelectTrigger>
@@ -468,7 +482,7 @@ export default function UserManagement() {
                       onClick={() => { 
                         setEditingId(user.id); 
                         setEditStatus(user.status || 'active'); 
-                        setEditCampus(user.campus_id || ''); 
+                        setEditCampus(user.campus || '');
                       }} 
                       className="rounded-2xl font-black uppercase text-[10px] h-10 border-slate-100 px-6 hover:bg-indigo-50 transition-all"
                     >
