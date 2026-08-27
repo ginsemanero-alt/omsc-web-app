@@ -299,10 +299,9 @@ export default function UserManagement() {
                       <SelectValue placeholder="Assign Campus" />
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl border-none">
-                      <SelectItem value="san-jose">San Jose</SelectItem>
-                      <SelectItem value="sablayan">Sablayan</SelectItem>
-                      <SelectItem value="labangan">Labangan</SelectItem>
-                      <SelectItem value="lubang">Lubang</SelectItem>
+                      <SelectItem value="San Jose Campus">San Jose Campus</SelectItem>
+                      <SelectItem value="Labangan Campus">Labangan Campus</SelectItem>
+                      <SelectItem value="Murtha Campus">Murtha Campus</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -442,10 +441,9 @@ export default function UserManagement() {
                           <SelectValue placeholder="Assign Campus" />
                         </SelectTrigger>
                         <SelectContent className="rounded-xl border-none">
-                          <SelectItem value="san-jose">San Jose</SelectItem>
-                          <SelectItem value="sablayan">Sablayan</SelectItem>
-                          <SelectItem value="labangan">Labangan</SelectItem>
-                          <SelectItem value="lubang">Lubang</SelectItem>
+                          <SelectItem value="San Jose Campus">San Jose Campus</SelectItem>
+                          <SelectItem value="Labangan Campus">Labangan Campus</SelectItem>
+                          <SelectItem value="Murtha Campus">Murtha Campus</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
