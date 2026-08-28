@@ -11,7 +11,6 @@ import {
   Video,
   Download,
   Eye,
-  Loader2,
   HardDrive,
   Search,
   Calendar,
@@ -27,6 +26,7 @@ export default function IECMaterials() {
   const [activeTab, setActiveTab] = useState('articles');
   const [materials, setMaterials] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   const [previewItem, setPreviewItem] = useState<any>(null);
@@ -39,6 +39,7 @@ export default function IECMaterials() {
   async function fetchMaterials() {
     try {
       setLoading(true);
+      setLoadFailed(false);
       const { data, error } = await supabase
         .from('materials')
         .select('*')
@@ -48,6 +49,7 @@ export default function IECMaterials() {
       setMaterials(data || []);
     } catch (error) {
       console.error('Error fetching materials:', error);
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -147,9 +149,25 @@ export default function IECMaterials() {
         </TabsList>
 
         {loading ? (
-          <div className="h-64 flex flex-col items-center justify-center gap-4">
-            <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
-            <p className="text-slate-400 font-bold uppercase text-xs tracking-widest">Loading Content</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-pulse">
+            {[0, 1, 2, 3].map((n) => (
+              <div key={n} className="h-40 bg-slate-100 rounded-[2rem]" />
+            ))}
+          </div>
+        ) : loadFailed ? (
+          <div className="h-64 flex flex-col items-center justify-center gap-4 text-center px-4">
+            <p className="text-base font-black text-slate-800 uppercase tracking-tight">
+              Couldn't load materials
+            </p>
+            <p className="text-sm text-slate-500 max-w-sm">
+              Check your internet connection and try again.
+            </p>
+            <Button
+              onClick={fetchMaterials}
+              className="h-11 px-8 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
+            >
+              Try Again
+            </Button>
           </div>
         ) : (
           <>

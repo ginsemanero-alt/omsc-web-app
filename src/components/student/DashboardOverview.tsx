@@ -6,12 +6,13 @@ import { Progress } from '../../components/ui/progress';
 import { useNavigate } from 'react-router-dom';
 import {
   BookOpen, ClipboardList, Calendar,
-  Loader2, ArrowRight, MapPin, FileText
+  ArrowRight, MapPin, FileText
 } from 'lucide-react';
 
 export default function DashboardOverview() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [userName, setUserName] = useState('Student');
   const [userCampus, setUserCampus] = useState('San Jose Campus');
   const [activeSurveys, setActiveSurveys] = useState<any[]>([]);
@@ -26,6 +27,7 @@ export default function DashboardOverview() {
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadFailed(false);
 
       // 1. Get Auth Session User
       const { data: { session } } = await supabase.auth.getSession();
@@ -65,6 +67,13 @@ export default function DashboardOverview() {
           .limit(3),
       ]);
 
+      // supabase queries resolve (not reject) on error, so Promise.all won't
+      // throw — inspect each result and surface a retryable failure instead of
+      // silently rendering an empty dashboard.
+      if (progRes.error || surveyRes.error || matRes.error || latestMatRes.error) {
+        throw progRes.error || surveyRes.error || matRes.error || latestMatRes.error;
+      }
+
       if (progRes.data) setPrograms(progRes.data);
       if (surveyRes.data) setActiveSurveys(surveyRes.data);
       if (latestMatRes.data) setLatestMaterials(latestMatRes.data);
@@ -77,6 +86,7 @@ export default function DashboardOverview() {
 
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -87,12 +97,50 @@ export default function DashboardOverview() {
   }, [fetchDashboardData]);
 
   if (loading) {
+    // A skeleton of the real layout rather than a second full-screen spinner —
+    // ProtectedRoute already showed one while verifying the session.
     return (
-      <div className="h-[80vh] flex flex-col items-center justify-center gap-4 px-4">
-        <Loader2 className="h-12 w-12 animate-spin text-indigo-600" />
-        <p className="text-slate-500 font-bold italic animate-pulse text-center uppercase tracking-widest text-[10px]">
-          Syncing with OMSC Hub...
-        </p>
+      <div className="space-y-6 md:space-y-10 w-full overflow-hidden animate-pulse">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b-2 pb-6 border-slate-100">
+          <div className="space-y-3">
+            <div className="h-12 w-72 max-w-full bg-slate-200 rounded-2xl" />
+            <div className="h-3 w-48 bg-slate-100 rounded-full" />
+          </div>
+          <div className="h-24 w-full md:w-52 bg-slate-200 rounded-2xl md:rounded-[2.5rem]" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
+          {[0, 1, 2].map((n) => (
+            <div key={n} className="h-32 bg-slate-100 rounded-2xl md:rounded-[3rem]" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+          <div className="lg:col-span-2 h-96 bg-slate-100 rounded-2xl md:rounded-[4rem]" />
+          <div className="h-96 bg-slate-200 rounded-2xl md:rounded-[4rem]" />
+        </div>
+      </div>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-5 px-4 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-rose-50 flex items-center justify-center">
+          <MapPin className="h-8 w-8 text-rose-500" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-lg font-black text-slate-800 uppercase tracking-tight">
+            Couldn't load your dashboard
+          </p>
+          <p className="text-sm text-slate-500 max-w-sm">
+            Check your internet connection and try again.
+          </p>
+        </div>
+        <Button
+          onClick={fetchDashboardData}
+          className="h-12 px-8 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
+        >
+          Try Again
+        </Button>
       </div>
     );
   }

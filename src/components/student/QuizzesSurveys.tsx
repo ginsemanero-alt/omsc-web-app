@@ -108,9 +108,11 @@ export default function QuizzesSurveys() {
 
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [loading, setLoading] = useState(true);
+  const [surveysLoadFailed, setSurveysLoadFailed] = useState(false);
 
   const [results, setResults] = useState<SurveyResult[]>([]);
   const [resultsLoading, setResultsLoading] = useState(true);
+  const [resultsLoadFailed, setResultsLoadFailed] = useState(false);
 
   const [activeSurveyId, setActiveSurveyId] = useState<string | number | null>(
     null
@@ -187,6 +189,7 @@ export default function QuizzesSurveys() {
 
     try {
       setResultsLoading(true);
+      setResultsLoadFailed(false);
 
       const { data: responsesData, error: responsesError } = await supabase
         .from('survey_responses')
@@ -236,6 +239,7 @@ export default function QuizzesSurveys() {
       setResults(formattedResults);
     } catch (error: any) {
       console.error('Results Fetch Error:', error);
+      setResultsLoadFailed(true);
     } finally {
       setResultsLoading(false);
     }
@@ -251,6 +255,7 @@ export default function QuizzesSurveys() {
 
     try {
       setLoading(true);
+      setSurveysLoadFailed(false);
 
       const { data: surveysData, error: surveyError } = await supabase
         .from('surveys')
@@ -281,6 +286,7 @@ export default function QuizzesSurveys() {
       setSurveys(formattedSurveys);
     } catch (error: any) {
       console.error('Fetch Error:', error);
+      setSurveysLoadFailed(true);
 
       toast({
         title: 'Unable to Load Surveys',
@@ -836,6 +842,21 @@ export default function QuizzesSurveys() {
               </p>
             </div>
           </div>
+        ) : resultsLoadFailed ? (
+          <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 px-6">
+            <h2 className="text-lg sm:text-xl font-black text-slate-700">
+              Couldn't load your results
+            </h2>
+            <p className="text-sm text-slate-400 mt-2 max-w-md">
+              Check your internet connection and try again.
+            </p>
+            <Button
+              onClick={fetchMyResults}
+              className="mt-5 h-11 px-8 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
+            >
+              Try Again
+            </Button>
+          </div>
         ) : results.length === 0 ? (
           <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 px-6">
             <FileCheck2 className="w-12 h-12 text-slate-300 mb-4" />
@@ -906,7 +927,24 @@ export default function QuizzesSurveys() {
       {/* SURVEY LIST */}
       {view === 'available' && (!activeSurvey ? (
         <>
-          {surveys.length === 0 ? (
+          {surveysLoadFailed ? (
+            <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 px-6">
+              <h2 className="text-lg sm:text-xl font-black text-slate-700">
+                Couldn't load assessments
+              </h2>
+
+              <p className="text-sm text-slate-400 mt-2 max-w-md">
+                Check your internet connection and try again.
+              </p>
+
+              <Button
+                onClick={fetchActiveSurveys}
+                className="mt-5 h-11 px-8 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
+              >
+                Try Again
+              </Button>
+            </div>
+          ) : surveys.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 px-6">
               <ClipboardList className="w-12 h-12 text-slate-300 mb-4" />
 
