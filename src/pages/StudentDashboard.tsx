@@ -30,7 +30,7 @@ export default function StudentDashboard({ onLogout }: StudentDashboardProps) {
     toast({
       title: "LOGOUT SUCCESSFULLY",
       description: "You have been signed out. Come back soon!",
-      className: "bg-indigo-600 text-white font-black uppercase tracking-tight italic border-none rounded-2xl shadow-2xl py-6",
+      className: "bg-indigo-600 text-white font-black uppercase tracking-tight border-none rounded-2xl shadow-2xl py-6",
     });
 
     setTimeout(() => {

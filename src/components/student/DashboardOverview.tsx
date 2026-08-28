@@ -150,7 +150,7 @@ export default function DashboardOverview() {
       {/* Header Banner */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b-2 pb-6 border-slate-100">
         <div className="space-y-1">
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 tracking-tighter italic uppercase leading-none">
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 tracking-tighter uppercase leading-none">
             Mabuhay, <span className="text-indigo-600">{userName}!</span>
           </h1>
           <p className="text-slate-400 text-[10px] md:text-sm font-black uppercase tracking-[0.2em] flex items-center gap-2 pt-2">
@@ -159,7 +159,7 @@ export default function DashboardOverview() {
         </div>
         <div className="bg-slate-900 p-4 md:p-6 rounded-2xl md:rounded-[2.5rem] shadow-xl text-white min-w-[160px] md:min-w-[200px] w-full md:w-auto">
           <p className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Academic Year</p>
-          <p className="text-lg md:text-xl font-black italic">2025 - 2026</p>
+          <p className="text-lg md:text-xl font-black">2025 - 2026</p>
         </div>
       </div>
 
@@ -187,7 +187,7 @@ export default function DashboardOverview() {
         <Card className="lg:col-span-2 p-5 sm:p-8 md:p-12 rounded-2xl md:rounded-[4rem] border-none shadow-sm bg-white space-y-10">
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-10">
-              <h2 className="text-2xl md:text-3xl font-black text-slate-900 italic uppercase tracking-tight">Latest Guidance Programs</h2>
+              <h2 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tight">Latest Guidance Programs</h2>
               <Button variant="ghost" onClick={() => navigate('/student/programs')} className="text-indigo-600 font-black uppercase text-[10px] tracking-widest p-0 sm:p-2 self-start sm:self-auto">
                 Explore All <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -198,7 +198,7 @@ export default function DashboardOverview() {
                 programs.map((program) => (
                   <div key={program.id} className="p-4 sm:p-6 md:p-8 bg-slate-50 rounded-xl md:rounded-[2.5rem] flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300">
                     <div className="space-y-1">
-                      <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase italic leading-tight">{program.title}</h3>
+                      <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase leading-tight">{program.title}</h3>
                       <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[9px] font-black uppercase text-slate-400 tracking-widest">
                         <span className="flex items-center gap-1.5">
                           <Calendar className="h-3 w-3" />
@@ -223,7 +223,7 @@ export default function DashboardOverview() {
 
           <div className="border-t-2 border-slate-100 pt-8 md:pt-10">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-10">
-              <h2 className="text-2xl md:text-3xl font-black text-slate-900 italic uppercase tracking-tight">Latest IEC Materials</h2>
+              <h2 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tight">Latest IEC Materials</h2>
               <Button variant="ghost" onClick={() => navigate('/student/materials')} className="text-indigo-600 font-black uppercase text-[10px] tracking-widest p-0 sm:p-2 self-start sm:self-auto">
                 Explore All <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -237,7 +237,7 @@ export default function DashboardOverview() {
                       <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 shrink-0">
                         <FileText className="h-4 w-4" />
                       </div>
-                      <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase italic leading-tight truncate">{material.title}</h3>
+                      <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase leading-tight truncate">{material.title}</h3>
                     </div>
                     <Button onClick={() => navigate('/student/materials')} className="bg-slate-900 text-white hover:bg-indigo-600 rounded-xl h-12 px-6 font-black uppercase text-[10px] tracking-widest w-full sm:w-auto transition-colors">
                       View
@@ -258,7 +258,7 @@ export default function DashboardOverview() {
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl pointer-events-none" />
           
           <div className="relative z-10 space-y-6 md:space-y-10 w-full">
-            <h2 className="text-2xl md:text-3xl font-black italic tracking-tight uppercase leading-none">Awareness<br/>Surveys</h2>
+            <h2 className="text-2xl md:text-3xl font-black tracking-tight uppercase leading-none">Awareness<br/>Surveys</h2>
             
             <div className="space-y-6">
               {activeSurveys.length > 0 ? (
@@ -296,7 +296,7 @@ export default function DashboardOverview() {
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
         <div className="absolute bottom-6 left-6 right-6 md:bottom-16 md:left-16 md:right-16 text-white space-y-3 md:space-y-4">
           <p className="text-indigo-400 font-black uppercase tracking-[0.3em] text-[8px] md:text-[10px]">Community Highlight</p>
-          <h2 className="text-2xl md:text-6xl font-black italic uppercase leading-none">Campus Life<br/>at OMSC {userCampus.replace('Campus', '')}</h2>
+          <h2 className="text-2xl md:text-6xl font-black uppercase leading-none">Campus Life<br/>at OMSC {userCampus.replace('Campus', '')}</h2>
           <Button onClick={() => navigate('/student/materials')} className="bg-white text-slate-900 hover:bg-indigo-600 hover:text-white h-12 md:h-14 px-6 md:px-10 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all w-full sm:w-auto">
             See Awareness Materials
           </Button>

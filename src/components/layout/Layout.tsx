@@ -24,12 +24,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="max-w-[1440px] mx-auto px-6 h-full flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
             <GraduationCap className="w-8 h-8 text-primary" />
-            <h1 className="font-bold text-xl uppercase tracking-tighter italic text-slate-900">
+            <h1 className="font-bold text-xl uppercase tracking-tighter text-slate-900">
               OMSC Guidance
             </h1>
           </div>
           
-          <nav className="hidden md:flex items-center gap-8 font-bold text-xs uppercase italic text-slate-600">
+          <nav className="hidden md:flex items-center gap-8 font-bold text-xs uppercase text-slate-600">
             <Link to="/" className="hover:text-primary transition-colors">Home</Link>
             <Link to="/programs" className="hover:text-primary transition-colors">Programs</Link>
             <Link to="/materials" className="hover:text-primary transition-colors">Materials</Link>
@@ -38,7 +38,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
           <Button 
             onClick={() => navigate('/login')}
-            className="bg-primary text-white font-black italic uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl shadow-md shadow-blue-100 hover:scale-105 transition-all"
+            className="bg-primary text-white font-black uppercase text-[10px] tracking-widest px-6 h-10 rounded-xl shadow-md shadow-blue-100 hover:scale-105 transition-all"
           >
             Login
           </Button>

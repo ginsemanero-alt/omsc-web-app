@@ -128,7 +128,7 @@ export default function TopNavBar({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64 rounded-2xl p-2 shadow-xl border-slate-100">
-                <DropdownMenuLabel className="font-black italic text-indigo-600 px-3 py-2 uppercase tracking-tight">
+                <DropdownMenuLabel className="font-black text-indigo-600 px-3 py-2 uppercase tracking-tight">
                   {displayName}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />

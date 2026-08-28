@@ -2409,7 +2409,7 @@ export default function AnalyticsDashboard() {
                 </span>
               </div>
 
-              <h1 className="text-3xl md:text-5xl font-black tracking-tighter uppercase italic text-slate-900">
+              <h1 className="text-3xl md:text-5xl font-black tracking-tighter uppercase text-slate-900">
                 Analytics{" "}
                 <span className="text-indigo-600">
                   Dashboard

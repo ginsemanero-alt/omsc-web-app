@@ -345,7 +345,7 @@ export default function ProgramManagement() {
                             ))}
                           </div>
                         ) : (
-                          <p className="text-[9px] text-slate-400 font-bold italic uppercase tracking-wider ml-1">No file attachments bound to slot.</p>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider ml-1">No file attachments bound to slot.</p>
                         )}
                       </div>
                     </div>
@@ -361,7 +361,7 @@ export default function ProgramManagement() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl bg-white rounded-2xl md:rounded-[2.5rem] p-5 md:p-8 max-h-[92vh] overflow-y-auto border-none shadow-2xl font-sans">
           <DialogHeader>
-            <DialogTitle className="text-2xl md:text-3xl font-black uppercase italic tracking-tight text-slate-900">
+            <DialogTitle className="text-2xl md:text-3xl font-black uppercase tracking-tight text-slate-900">
               Setup <span className="text-indigo-600">Program Manual</span>
             </DialogTitle>
           </DialogHeader>

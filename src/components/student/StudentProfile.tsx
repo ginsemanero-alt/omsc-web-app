@@ -142,7 +142,7 @@ export default function StudentProfile() {
       {/* HEADER BANNER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b pb-6 border-slate-200">
         <div>
-          <h1 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">
+          <h1 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tighter uppercase leading-none">
             Student <span className="text-indigo-600">Profile</span>
           </h1>
           <p className="text-slate-400 font-bold uppercase text-[9px] md:text-[10px] tracking-widest mt-2 flex items-center gap-1.5">
@@ -163,7 +163,7 @@ export default function StudentProfile() {
             <div className="space-y-4">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
                 <GraduationCap className="w-5 h-5 text-indigo-600" />
-                <h2 className="text-lg font-black uppercase italic tracking-tight text-slate-800">
+                <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
                   Academic Information
                 </h2>
               </div>
@@ -237,7 +237,7 @@ export default function StudentProfile() {
             <div className="space-y-4">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
                 <User className="w-5 h-5 text-indigo-600" />
-                <h2 className="text-lg font-black uppercase italic tracking-tight text-slate-800">
+                <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
                   Demographics & Diversity
                 </h2>
               </div>

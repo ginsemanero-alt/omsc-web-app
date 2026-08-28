@@ -1163,7 +1163,7 @@ export default function IECMaterials() {
         <DialogContent className="max-w-2xl bg-white rounded-3xl p-6 md:p-8 max-h-[92vh] overflow-y-auto border-none shadow-2xl">
 
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black uppercase italic tracking-tight text-slate-900">
+            <DialogTitle className="text-2xl font-black uppercase tracking-tight text-slate-900">
               {editingId ? 'Edit' : 'Upload'}{' '}
               <span className="text-indigo-600">
                 Guidance Material

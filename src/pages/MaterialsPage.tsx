@@ -159,13 +159,13 @@ const MaterialsPage: React.FC = () => {
         {/* --- HEADER (Mobile Optimized) --- */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-10 md:mb-12 gap-6">
           <div className="space-y-3 text-center md:text-left">
-            <Badge className="bg-indigo-100 text-indigo-600 border-none font-black px-4 py-1 rounded-full uppercase italic text-[9px] md:text-[10px] tracking-widest inline-block">
+            <Badge className="bg-indigo-100 text-indigo-600 border-none font-black px-4 py-1 rounded-full uppercase text-[9px] md:text-[10px] tracking-widest inline-block">
               Resources Library
             </Badge>
-            <h1 className="text-3xl md:text-6xl font-black italic uppercase text-slate-900 tracking-tighter leading-none">
+            <h1 className="text-3xl md:text-6xl font-black uppercase text-slate-900 tracking-tighter leading-none">
               IEC <br className="hidden md:block" /> Materials
             </h1>
-            <p className="text-slate-500 font-medium max-w-md italic mx-auto md:mx-0 text-sm leading-relaxed">
+            <p className="text-slate-500 font-medium max-w-md mx-auto md:mx-0 text-sm leading-relaxed">
               Access educational and information materials for your personal development and guidance support.
             </p>
           </div>
@@ -185,7 +185,7 @@ const MaterialsPage: React.FC = () => {
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-64 space-y-4">
             <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
-            <p className="text-[10px] font-black uppercase italic text-slate-400 tracking-widest">Fetching Library...</p>
+            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Fetching Library...</p>
           </div>
         ) : filteredMaterials.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
@@ -216,7 +216,7 @@ const MaterialsPage: React.FC = () => {
                       />
                     )}
                     <div className="absolute top-3 right-3 md:top-4 md:right-4">
-                      <Badge className={`border-none font-black italic uppercase text-[8px] md:text-[9px] px-2.5 py-1 rounded-lg shadow-sm flex items-center ${getTypeBadgeClass(material.type)}`}>
+                      <Badge className={`border-none font-black uppercase text-[8px] md:text-[9px] px-2.5 py-1 rounded-lg shadow-sm flex items-center ${getTypeBadgeClass(material.type)}`}>
                         <TypeIcon className="h-3 w-3 mr-1" strokeWidth={3} />
                         {material.type}
                       </Badge>
@@ -224,10 +224,10 @@ const MaterialsPage: React.FC = () => {
                   </div>
 
                   <div className="p-6 md:p-8 flex flex-col flex-grow space-y-3">
-                    <h3 className="text-xl md:text-2xl font-black italic uppercase tracking-tighter leading-tight text-slate-900 line-clamp-2">
+                    <h3 className="text-xl md:text-2xl font-black uppercase tracking-tighter leading-tight text-slate-900 line-clamp-2">
                       {material.title}
                     </h3>
-                    <p className="text-xs md:text-sm font-medium text-slate-400 leading-relaxed italic line-clamp-3">
+                    <p className="text-xs md:text-sm font-medium text-slate-400 leading-relaxed line-clamp-3">
                       {material.description}
                     </p>
 
@@ -254,7 +254,7 @@ const MaterialsPage: React.FC = () => {
           </div>
         ) : (
           <div className="text-center py-16 md:py-24 bg-white rounded-[2rem] md:rounded-[3rem] shadow-sm border-2 border-dashed border-slate-200 px-6">
-            <p className="text-slate-400 font-black italic uppercase tracking-[0.2em] text-xs md:text-sm">
+            <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-xs md:text-sm">
               No materials found matching search criteria.
             </p>
           </div>
