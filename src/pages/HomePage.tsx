@@ -117,7 +117,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       </header>
 
       {/* ================= HERO SECTION (RESPONSIVE) ================= */}
-      <section className="relative h-[85vh] md:h-[700px] overflow-hidden mt-[70px] md:mt-[80px] bg-black">
+      <section className="relative h-[85vh] md:h-[700px] overflow-hidden bg-black">
         <div className="absolute inset-0 z-0 pointer-events-none">
           {/* Ginawang Object-Cover para sa mobile */}
           <iframe
