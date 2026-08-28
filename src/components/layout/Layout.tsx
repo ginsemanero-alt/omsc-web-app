@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { GraduationCap } from 'lucide-react';
 import { Button } from "../ui/button"; // Ayusin ang path base sa folder mo
 import Footer from "../../components/ui/Footer"; 
@@ -10,10 +10,16 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // HomePage renders its own (blue) fixed navbar. Rendering this one too would
+  // stack two navbars and reintroduce the top-offset mismatch, so skip it here.
+  const isHomePage = location.pathname === '/';
 
   return (
     <div className="min-h-screen flex flex-col bg-background font-sans">
       {/* --- NAVBAR --- */}
+      {!isHomePage && (
       <header className="fixed top-0 left-0 right-0 h-[72px] bg-white border-b z-50 shadow-sm">
         <div className="max-w-[1440px] mx-auto px-6 h-full flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
@@ -38,9 +44,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </Button>
         </div>
       </header>
+      )}
 
       {/* --- DYNAMIC CONTENT --- */}
-      <main className="pt-[72px] flex-grow">
+      <main className={`${isHomePage ? '' : 'pt-[72px]'} flex-grow`}>
         {children}
       </main>
 

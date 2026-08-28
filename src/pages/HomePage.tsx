@@ -84,14 +84,18 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
           {/* Desktop Nav */}
           <nav className="hidden lg:flex items-center gap-2 font-bold text-[11px] uppercase tracking-wider">
-            {["Home", "Programs", "Materials", "About"].map((item) => (
-              <button key={item} onClick={() => handleNavigation(item)} className="relative px-4 py-2 text-white">
-                <span className={activePage === item ? "opacity-100" : "opacity-70 hover:opacity-100"}>
-                  {item === "materials" ? "IEC Materials" : item}
-                </span>
-                {activePage === item && <div className="absolute bottom-0 left-0 right-0 h-1 bg-white rounded-full" />}
-              </button>
-            ))}
+            {["Home", "Programs", "Materials", "About"].map((item) => {
+              const key = item.toLowerCase();
+              const label = item === "Materials" ? "IEC Materials" : item;
+              return (
+                <button key={item} onClick={() => handleNavigation(item)} className="relative px-4 py-2 text-white">
+                  <span className={activePage === key ? "opacity-100" : "opacity-70 hover:opacity-100"}>
+                    {label}
+                  </span>
+                  {activePage === key && <div className="absolute bottom-0 left-0 right-0 h-1 bg-white rounded-full" />}
+                </button>
+              );
+            })}
           </nav>
 
           <div className="flex items-center gap-2">
@@ -105,10 +109,10 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
         {/* Mobile Dropdown Menu */}
         {isMenuOpen && (
-          <div className="lg:hidden absolute top-[70px] left-0 right-0 bg-[#0055aa] border-t border-white/10 p-6 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-top duration-300">
-            {["home", "programs", "materials", "about"].map((item) => (
+          <div className="lg:hidden absolute top-[70px] md:top-[80px] left-0 right-0 bg-[#0055aa] border-t border-white/10 p-6 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-top duration-300">
+            {["Home", "Programs", "Materials", "About"].map((item) => (
               <button key={item} onClick={() => handleNavigation(item)} className="text-left text-white font-black uppercase text-lg border-b border-white/5 pb-2">
-                {item}
+                {item === "Materials" ? "IEC Materials" : item}
               </button>
             ))}
             <Button onClick={() => (window.location.href = "/login")} className="w-full bg-white text-[#0066cc] font-black h-12 rounded-xl mt-4">Login</Button>
@@ -117,7 +121,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       </header>
 
       {/* ================= HERO SECTION (RESPONSIVE) ================= */}
-      <section className="relative h-[85vh] md:h-[700px] overflow-hidden bg-black">
+      <section className="relative h-[85vh] md:h-[700px] overflow-hidden mt-[70px] md:mt-[80px] bg-black">
         <div className="absolute inset-0 z-0 pointer-events-none">
           {/* Ginawang Object-Cover para sa mobile */}
           <iframe
