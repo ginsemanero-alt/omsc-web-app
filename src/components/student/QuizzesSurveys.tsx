@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
@@ -119,6 +119,24 @@ export default function QuizzesSurveys() {
   const [answers, setAnswers] = useState<Record<string, any>>({});
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+
+  // Anchor at the top of the active assessment card. Moving between questions
+  // scrolls this into view instead of jumping the whole window to top:0, which
+  // on mobile threw the user up past the page title on every "Next".
+  const assessmentTopRef = useRef<HTMLDivElement>(null);
+
+  const scrollToAssessmentTop = () => {
+    const prefersReducedMotion = window.matchMedia(
+      '(prefers-reduced-motion: reduce)'
+    ).matches;
+
+    requestAnimationFrame(() => {
+      assessmentTopRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'start',
+      });
+    });
+  };
 
   const [showInstructions, setShowInstructions] = useState(false);
   const [showReview, setShowReview] = useState(false);
@@ -410,7 +428,7 @@ export default function QuizzesSurveys() {
 
     if (currentQuestionIndex < totalQuestions - 1) {
       setCurrentQuestionIndex((previous) => previous + 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollToAssessmentTop();
       return;
     }
 
@@ -419,6 +437,7 @@ export default function QuizzesSurveys() {
      * Go to review screen instead of submitting immediately.
      */
     setShowReview(true);
+    scrollToAssessmentTop();
   };
 
   /*
@@ -430,11 +449,7 @@ export default function QuizzesSurveys() {
     if (currentQuestionIndex <= 0) return;
 
     setCurrentQuestionIndex((previous) => previous - 1);
-
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth',
-    });
+    scrollToAssessmentTop();
   };
 
   /*
@@ -475,11 +490,7 @@ export default function QuizzesSurveys() {
   const handleEditQuestion = (index: number) => {
     setCurrentQuestionIndex(index);
     setShowReview(false);
-
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth',
-    });
+    scrollToAssessmentTop();
   };
 
   /*
@@ -1038,6 +1049,9 @@ export default function QuizzesSurveys() {
             overflow-hidden
           "
         >
+          {/* Scroll target for question navigation — offset clears the fixed top nav */}
+          <div ref={assessmentTopRef} className="scroll-mt-24" />
+
           {/* TOP BAR */}
           <div className="p-4 sm:p-6 lg:p-8 border-b border-slate-100">
             <div className="flex items-center justify-between gap-4">
@@ -1375,6 +1389,7 @@ export default function QuizzesSurveys() {
                     onClick={() => {
                       setShowReview(false);
                       setCurrentQuestionIndex(totalQuestions - 1);
+                      scrollToAssessmentTop();
                     }}
                     className="
                       h-12 sm:h-14
