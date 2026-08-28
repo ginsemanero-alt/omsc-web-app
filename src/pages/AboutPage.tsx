@@ -15,17 +15,17 @@ const AboutPage: React.FC = () => {
     },
     {
       title: "Individual Student Planning",
-      desc: "Appraisal, educational and occupational planning, alongside structural student positioning and placement.",
+      desc: "Student appraisal, educational and career planning, and assistance with course selection and placement.",
       color: "bg-indigo-50 text-indigo-600"
     },
     {
       title: "Responsive Services",
-      desc: "Individual counseling, small-group intervention frameworks, peer consultations, and professional referral structures.",
+      desc: "Individual and small-group counseling, peer support, crisis response, and referral to other professionals.",
       color: "bg-rose-50 text-rose-600"
     },
     {
       title: "System Support",
-      desc: "Program management, fair-share responsibilities, professional staff development, community outreach, and research.",
+      desc: "Program management, staff development, community outreach, and research and evaluation.",
       color: "bg-amber-50 text-amber-600"
     }
   ];
@@ -46,7 +46,7 @@ const AboutPage: React.FC = () => {
             
             <div className="space-y-6 lg:col-span-7 text-center lg:text-left">
               <Badge className="bg-indigo-100 text-indigo-600 border-none font-black px-4 py-1 rounded-full uppercase text-[9px] md:text-[10px] tracking-widest inline-block">
-                OMSC Administration Profile
+                About the Center
               </Badge>
               <h1 className="text-3xl md:text-6xl font-black uppercase text-slate-900 tracking-tighter leading-tight">
                 The Guidance and <br />
@@ -88,14 +88,14 @@ const AboutPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
           
           <div className="lg:col-span-1 space-y-4 sticky top-24 bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
-            <h3 className="text-xl font-black uppercase tracking-tight text-slate-900">Collaborative Ecosystem</h3>
+            <h3 className="text-xl font-black uppercase tracking-tight text-slate-900">A Collaborative Approach</h3>
             <p className="text-xs md:text-sm text-slate-500 leading-relaxed">
               While school Counselors are available to respond to the unique needs of each student, the Guidance and Counseling approach is collaborative among teachers, parents and administrators. As a developmental program, it addresses the needs of all students in OMSC by facilitating their growth as well as helping to create positive and safe learning environments.
             </p>
           </div>
 
           <div className="lg:col-span-2 space-y-6">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Comprehensive Delivery Core Components</h3>
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Core Service Components</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {components.map((c, i) => (
                 <Card key={i} className="p-5 bg-white border-none shadow-sm rounded-2xl md:rounded-[2rem] flex flex-col justify-between border border-slate-100/40">
@@ -137,32 +137,32 @@ const AboutPage: React.FC = () => {
         </div>
       </section>
 
-      {/* --- ORGANIZATIONAL CHART ANCHOR FRAME --- */}
+      {/* --- ORGANIZATIONAL CHART --- */}
       <section className="py-16 max-w-[900px] mx-auto px-4 md:px-6 text-center">
         <div className="mb-8 space-y-2">
-          <h2 className="text-2xl md:text-4xl font-black uppercase text-slate-900 tracking-tighter">Organizative Layout Framework</h2>
-          <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Official Governance Structure Hierarchy</p>
+          <h2 className="text-2xl md:text-4xl font-black uppercase text-slate-900 tracking-tighter">Organizational Chart</h2>
+          <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Guidance and Testing Center Structure</p>
         </div>
         <Card className="p-4 md:p-6 bg-white border-dashed border-2 border-slate-200 rounded-[2rem] shadow-sm group overflow-hidden">
           <div className="relative overflow-hidden rounded-xl bg-slate-50 min-h-[160px] flex items-center justify-center">
             <Users className="w-12 h-12 text-slate-200 absolute group-hover:scale-125 transition-transform duration-700" />
-            <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest z-10">OMSC Guidance Structure Mapping Node View</p>
+            <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest z-10">Organizational chart coming soon</p>
           </div>
         </Card>
       </section>
 
-      {/* --- SECURED OFFICIAL CONTACT INTERACTION CENTER --- */}
+      {/* --- CONTACT --- */}
       <section className="mt-8 max-w-[900px] mx-auto px-4 md:px-6">
         <div className="bg-slate-950 rounded-[2rem] md:rounded-[3rem] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-600/20 rounded-full -mr-16 -mt-16 blur-2xl" />
           
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
             <div className="space-y-2 flex-1 text-center md:text-left">
-              <h2 className="text-2xl md:text-4xl font-black uppercase text-white tracking-tighter leading-none">Official Comm Hub</h2>
-              <p className="text-slate-400 font-medium text-xs md:text-sm">Reach our professional diagnostic support staff via our active secure contact endpoints.</p>
+              <h2 className="text-2xl md:text-4xl font-black uppercase text-white tracking-tighter leading-none">Get in Touch</h2>
+              <p className="text-slate-400 font-medium text-xs md:text-sm">Reach the Guidance and Testing Center through any of the channels below.</p>
             </div>
-            
-            {/* Contact Parameters Manifest Grid */}
+
+            {/* Contact details */}
             <div className="space-y-3.5 shrink-0 min-w-[280px] bg-white/5 p-5 rounded-2xl border border-white/10">
               <div className="flex items-center gap-3 text-xs font-mono font-bold text-slate-200 lowercase">
                 <Mail className="w-4 h-4 text-indigo-400 shrink-0" />
