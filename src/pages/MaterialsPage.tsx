@@ -45,22 +45,6 @@ const MaterialsPage: React.FC = () => {
       try {
         setIsLoading(true);
 
-        // --- STEP 1: Subukang tawagin ang Express API Endpoint ---
-        try {
-          const res = await fetch('/api/materials');
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) {
-              setMaterials(data);
-              setIsLoading(false);
-              return;
-            }
-          }
-        } catch (e) {
-          console.warn("[Materials Hub] Local server bypassed, routing directly to Supabase.");
-        }
-
-        // --- STEP 2: Fallback query direkta sa `materials` table ng Supabase ---
         const { data: sbMaterials, error } = await supabase
           .from('materials')
           .select('*')
@@ -185,7 +169,7 @@ const MaterialsPage: React.FC = () => {
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-64 space-y-4">
             <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
-            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Fetching Library...</p>
+            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Loading...</p>
           </div>
         ) : filteredMaterials.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">

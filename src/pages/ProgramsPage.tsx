@@ -51,23 +51,7 @@ const ProgramsPage: React.FC = () => {
     const fetchPrograms = async () => {
       try {
         setIsLoading(true);
-        
-        // --- STEP 1: Subukang tawagin ang Express API Endpoint Server ---
-        try {
-          const res = await fetch("/api/programs");
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) {
-              setPrograms(data.sort((a: Program, b: Program) => b.id - a.id));
-              setIsLoading(false);
-              return;
-            }
-          }
-        } catch (e) {
-          console.warn("[Programs Core Hub] Local express server connection bypassed. Routing directly to Supabase.");
-        }
 
-        // --- STEP 2: Fallback query direkta sa `programs` relational table ng Supabase ---
         const { data: sbPrograms, error } = await supabase
           .from('programs')
           .select('*')
@@ -77,7 +61,7 @@ const ProgramsPage: React.FC = () => {
           const mappedPrograms = sbPrograms.map((p: any) => ({
             id: p.id,
             title: p.title || "Untitled Seminar Event",
-            description: p.description || "No operational description layers supplied.",
+            description: p.description || "No description provided.",
             location: p.location || "OMSC Main Venue",
             date: p.date || p.scheduled_date || new Date().toISOString(),
             participants: p.participants || p.max_slots || 0,
@@ -133,7 +117,7 @@ const ProgramsPage: React.FC = () => {
           <div className="relative w-full lg:w-80 group">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
             <Input
-              placeholder="Search programs by title or location context..."
+              placeholder="Search programs..."
               className="pl-12 h-14 rounded-2xl border-none shadow-sm font-bold bg-white w-full focus:ring-2 focus:ring-indigo-100 text-sm transition-all"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -215,7 +199,7 @@ const ProgramsPage: React.FC = () => {
                       {program.title}
                     </h3>
                     <p className="text-xs md:text-sm font-medium text-slate-400 leading-relaxed line-clamp-3">
-                      {program.description || "No description provided for this guidance program."}
+                      {program.description || "No description provided."}
                     </p>
                   </div>
 
@@ -247,7 +231,11 @@ const ProgramsPage: React.FC = () => {
                       <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-indigo-50 transition-colors shrink-0">
                         <Users className="h-3.5 w-3.5 md:h-4 md:w-4 text-indigo-600" />
                       </div>
-                      <span>{program.participants || "Open to All"} Expected Slots</span>
+                      <span>
+                        {program.participants
+                          ? `${program.participants} Slots`
+                          : "Open to All"}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -257,7 +245,7 @@ const ProgramsPage: React.FC = () => {
         ) : (
           <div className="text-center py-16 md:py-24 bg-white rounded-[2rem] md:rounded-[3rem] shadow-sm border-2 border-dashed border-slate-200 px-6">
             <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-xs md:text-sm">
-              No programs found matching your search registry filters.
+              No programs match your search.
             </p>
           </div>
         )}
