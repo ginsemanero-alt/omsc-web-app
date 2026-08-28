@@ -416,21 +416,25 @@ export default function SurveyBuilder() {
 
       if (responseError) throw responseError;
 
-      const { data: profilesData } = await supabase
-        .from("profiles")
-        .select("id, full_name");
+      // survey_responses.user_id is users.id (a bigint), NOT profiles.id
+      // (the auth uuid) — matching it against profiles.id never hit, which
+      // is why every row fell back to showing the raw id. Join on users.
+      const { data: usersData } = await supabase
+        .from("users")
+        .select("id, name, student_id");
 
       const merged = (responseData || []).map((response: any) => {
-        const student = profilesData?.find(
-          (profile: any) =>
-            String(profile.id) === String(response.user_id)
+        const student = usersData?.find(
+          (user: any) =>
+            String(user.id) === String(response.user_id)
         );
 
         return {
           ...response,
           studentName:
-            student?.full_name ||
+            student?.name ||
             `Student ID: ${String(response.user_id || "")}`,
+          studentNumber: student?.student_id || null,
         };
       });
 
@@ -1450,6 +1454,9 @@ export default function SurveyBuilder() {
                         </h3>
 
                         <p className="text-[9px] text-slate-400 uppercase mt-1">
+                          {response.studentNumber
+                            ? `${response.studentNumber} · `
+                            : ""}
                           {response.created_at
                             ? new Date(
                                 response.created_at
