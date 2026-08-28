@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import TopNavBar from '../components/layout/TopNavBar';
 import DashboardOverview from '../components/student/DashboardOverview';
 import ProgramsActivities from '../components/student/ProgramsActivities';
@@ -56,6 +56,7 @@ export default function StudentDashboard({ onLogout }: StudentDashboardProps) {
           <Route path="/materials" element={<IECMaterials />} />
           <Route path="/survey" element={<QuizzesSurveys />} />
           <Route path="/profile" element={<StudentProfile />} />
+          <Route path="*" element={<Navigate to="/student" replace />} />
         </Routes>
       </main>
     </div>

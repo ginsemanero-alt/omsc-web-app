@@ -254,7 +254,7 @@ export default function DashboardOverview() {
         </Card>
 
         {/* Real Active Surveys Section */}
-        <Card className="p-6 sm:p-8 md:p-12 rounded-2xl md:rounded-[4rem] border-none shadow-2xl bg-indigo-600 text-white flex flex-col justify-between overflow-hidden relative min-h-[350px]">
+        <Card className="self-start p-6 sm:p-8 md:p-12 rounded-2xl md:rounded-[4rem] border-none shadow-2xl bg-indigo-600 text-white flex flex-col overflow-hidden relative">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl pointer-events-none" />
           
           <div className="relative z-10 space-y-6 md:space-y-10 w-full">
@@ -289,8 +289,8 @@ export default function DashboardOverview() {
       {/* Community Banner Block */}
       <Card className="relative h-[300px] md:h-[450px] rounded-3xl md:rounded-[5rem] border-none overflow-hidden group shadow-2xl">
         <img
-          src="https://c.animaapp.com/mljmun0txvpkRP/img/ai_1.png"
-          alt="OMSC Campus Highlight"
+          src="https://i.ibb.co/SDCTBBY7/download-4.jpg"
+          alt="OMSC Guidance and Testing Center"
           className="absolute inset-0 w-full h-full object-cover scale-110 group-hover:scale-100 transition-transform duration-[2000ms]"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />

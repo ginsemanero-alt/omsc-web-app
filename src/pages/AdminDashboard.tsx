@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import TopNavBar from '../components/layout/TopNavBar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
 import ProgramManagement from '../components/admin/ProgramManager';
@@ -93,6 +93,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           <Route path="/analytics" element={<AnalyticsDashboard />} />
           <Route path="/reports" element={<ReportsCenter />} />
           <Route path="/users" element={<UserManagement />} />
+          <Route path="*" element={<Navigate to="/admin" replace />} />
         </Routes>
       </main>
     </div>

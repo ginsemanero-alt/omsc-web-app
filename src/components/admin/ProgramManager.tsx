@@ -269,8 +269,8 @@ export default function ProgramManagement() {
 
           return (
             <Card key={program.id} className="overflow-hidden rounded-2xl md:rounded-[2rem] border-none shadow-sm bg-white hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col md:flex-row">
-              <div className="md:w-72 h-48 md:h-auto bg-slate-900 relative shrink-0">
-                <img src={program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop'} className="w-full h-full object-cover" alt="" />
+              <div className="md:w-64 h-44 md:h-auto md:min-h-[11rem] bg-slate-900 relative shrink-0">
+                <img src={program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop'} className="absolute inset-0 w-full h-full object-cover" alt="" />
                 <div className="absolute top-4 left-4">
                   <span className={`text-white text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-md ${
                     program.status === 'ongoing' ? 'bg-emerald-500 animate-pulse' : program.status === 'completed' ? 'bg-slate-700' : 'bg-indigo-600'
@@ -280,7 +280,7 @@ export default function ProgramManagement() {
                 </div>
               </div>
 
-              <div className="p-6 md:p-8 flex-1 flex flex-col justify-between gap-4">
+              <div className="p-6 md:p-8 flex-1 flex flex-col gap-4">
                 <div>
                   <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
                     <div>
