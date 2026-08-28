@@ -119,6 +119,7 @@ const PROGRAMS_BY_CAMPUS: Record<string, string[]> = {
   ],
 };
 
+
 export default function LoginPage({
   onLogin,
   onBackToHome,
@@ -303,16 +304,6 @@ export default function LoginPage({
     e.preventDefault();
 
     if (isRegister && !validateRegistration()) {
-      return;
-    }
-
-    if (!isRegister && !agreed) {
-      toast({
-        variant: 'destructive',
-        title: 'ACTION REQUIRED',
-        description:
-          'Please agree to the Guidance Terms & Privacy Policy to continue.',
-      });
       return;
     }
 
@@ -1232,7 +1223,8 @@ export default function LoginPage({
             </div>
           )}
 
-          {/* TERMS */}
+          {/* TERMS (registration only — sign-in doesn't re-collect consent) */}
+          {isRegister && (
           <div className="mt-7">
             <div
               className={`flex items-start gap-3 p-4 rounded-2xl border transition-all ${
@@ -1271,6 +1263,7 @@ export default function LoginPage({
               </label>
             </div>
           </div>
+          )}
 
           {/* SUBMIT */}
           <Button
