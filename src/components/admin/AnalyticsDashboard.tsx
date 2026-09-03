@@ -242,6 +242,53 @@ const StatCard: React.FC<StatCardProps> = ({
 };
 
 /* =========================================================
+   INCLUSION BREAKDOWN LIST
+
+   Counts-only list (campus / program / year level) for the PWD and
+   IP cards — never names, per the privacy notice shown at
+   registration.
+========================================================= */
+
+interface BreakdownRow {
+  label: string;
+  count: number;
+}
+
+const InclusionBreakdownList: React.FC<{
+  title: string;
+  rows: BreakdownRow[];
+  accentClassName: string;
+}> = ({ title, rows, accentClassName }) => (
+  <div>
+    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">
+      {title}
+    </p>
+
+    {rows.length === 0 ? (
+      <p className="text-[10px] font-bold text-slate-300">None</p>
+    ) : (
+      <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+        {rows.map((row) => (
+          <div
+            key={row.label}
+            className="flex items-center justify-between gap-3 text-xs"
+          >
+            <span className="text-slate-600 font-bold truncate">
+              {row.label}
+            </span>
+            <span
+              className={`shrink-0 font-black px-2 py-0.5 rounded-full text-[10px] ${accentClassName}`}
+            >
+              {row.count}
+            </span>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+);
+
+/* =========================================================
    HELPERS
 ========================================================= */
 
@@ -943,6 +990,50 @@ export default function AnalyticsDashboard() {
       nonPwd,
       ip,
       nonIp,
+    };
+  }, [filteredProfiles]);
+
+  /* =======================================================
+     PWD / IP BREAKDOWN
+
+     Registration's privacy notice promises students that PWD/IP
+     status won't be displayed at the individual level — only
+     aggregated. So this breaks representation down by campus,
+     program, and year level (counts only, never names) instead of
+     listing which specific students are PWD/IP.
+  ======================================================= */
+
+  const inclusionBreakdown = useMemo(() => {
+    const buildBreakdown = (filterFn: (p: Profile) => boolean) => {
+      const byCampus: Record<string, number> = {};
+      const byProgram: Record<string, number> = {};
+      const byYearLevel: Record<string, number> = {};
+
+      filteredProfiles.filter(filterFn).forEach((profile) => {
+        const campus = safeString(profile.campus) || "Not Specified";
+        const program = safeString(profile.program) || "Not Specified";
+        const year = getYearLevel(profile.year_level);
+
+        byCampus[campus] = (byCampus[campus] || 0) + 1;
+        byProgram[program] = (byProgram[program] || 0) + 1;
+        byYearLevel[year] = (byYearLevel[year] || 0) + 1;
+      });
+
+      const toSortedArray = (counts: Record<string, number>) =>
+        Object.entries(counts)
+          .map(([label, count]) => ({ label, count }))
+          .sort((a, b) => b.count - a.count);
+
+      return {
+        byCampus: toSortedArray(byCampus),
+        byProgram: toSortedArray(byProgram),
+        byYearLevel: toSortedArray(byYearLevel),
+      };
+    };
+
+    return {
+      pwd: buildBreakdown((p) => p.is_pwd === true),
+      ip: buildBreakdown((p) => p.is_ip === true),
     };
   }, [filteredProfiles]);
 
@@ -2313,6 +2404,10 @@ export default function AnalyticsDashboard() {
 
           non_pwd:
             inclusionAnalytics.nonPwd,
+
+          by_campus: inclusionBreakdown.pwd.byCampus,
+          by_program: inclusionBreakdown.pwd.byProgram,
+          by_year_level: inclusionBreakdown.pwd.byYearLevel,
         },
 
         ip: {
@@ -2321,6 +2416,10 @@ export default function AnalyticsDashboard() {
 
           non_ip:
             inclusionAnalytics.nonIp,
+
+          by_campus: inclusionBreakdown.ip.byCampus,
+          by_program: inclusionBreakdown.ip.byProgram,
+          by_year_level: inclusionBreakdown.ip.byYearLevel,
         },
       },
 
@@ -3854,6 +3953,26 @@ export default function AnalyticsDashboard() {
 
             </div>
 
+            {inclusionAnalytics.pwd > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-100">
+                <InclusionBreakdownList
+                  title="By Campus"
+                  rows={inclusionBreakdown.pwd.byCampus}
+                  accentClassName="bg-blue-50 text-blue-600"
+                />
+                <InclusionBreakdownList
+                  title="By Program"
+                  rows={inclusionBreakdown.pwd.byProgram}
+                  accentClassName="bg-blue-50 text-blue-600"
+                />
+                <InclusionBreakdownList
+                  title="By Year Level"
+                  rows={inclusionBreakdown.pwd.byYearLevel}
+                  accentClassName="bg-blue-50 text-blue-600"
+                />
+              </div>
+            )}
+
           </Card>
 
           <Card className="border-none shadow-xl rounded-[2rem] p-6 bg-white">
@@ -3903,6 +4022,26 @@ export default function AnalyticsDashboard() {
               </div>
 
             </div>
+
+            {inclusionAnalytics.ip > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-100">
+                <InclusionBreakdownList
+                  title="By Campus"
+                  rows={inclusionBreakdown.ip.byCampus}
+                  accentClassName="bg-emerald-50 text-emerald-600"
+                />
+                <InclusionBreakdownList
+                  title="By Program"
+                  rows={inclusionBreakdown.ip.byProgram}
+                  accentClassName="bg-emerald-50 text-emerald-600"
+                />
+                <InclusionBreakdownList
+                  title="By Year Level"
+                  rows={inclusionBreakdown.ip.byYearLevel}
+                  accentClassName="bg-emerald-50 text-emerald-600"
+                />
+              </div>
+            )}
 
           </Card>
 
