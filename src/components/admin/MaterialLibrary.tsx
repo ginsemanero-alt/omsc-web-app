@@ -662,7 +662,20 @@ export default function IECMaterials() {
 
       window.URL.revokeObjectURL(blobUrl);
     } catch {
-      window.open(url, '_blank');
+      // window.open() here would get silently blocked by Chrome's popup
+      // blocker — by this point we're inside an async catch block, well
+      // after the click that triggered it, so the browser no longer
+      // treats it as user-initiated. A synthetic <a> click, same as the
+      // success path above, isn't subject to that restriction.
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename || 'material';
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   };
 
