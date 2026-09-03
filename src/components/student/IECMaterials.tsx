@@ -141,11 +141,11 @@ export default function IECMaterials() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-slate-100/50 p-1.5 rounded-2xl mb-8 border border-slate-100">
-          <TabsTrigger value="articles" className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Articles</TabsTrigger>
-          <TabsTrigger value="infographics" className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Infographics</TabsTrigger>
-          <TabsTrigger value="videos" className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Videos</TabsTrigger>
-          <TabsTrigger value="audio" className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Audio</TabsTrigger>
-          <TabsTrigger value="links" className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Links</TabsTrigger>
+          <TabsTrigger value="articles" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Articles</TabsTrigger>
+          <TabsTrigger value="infographics" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Infographics</TabsTrigger>
+          <TabsTrigger value="videos" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Videos</TabsTrigger>
+          <TabsTrigger value="audio" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Audio</TabsTrigger>
+          <TabsTrigger value="links" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Links</TabsTrigger>
         </TabsList>
 
         {loading ? (

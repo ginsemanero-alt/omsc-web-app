@@ -851,21 +851,21 @@ export default function IECMaterials() {
 
           <TabsTrigger
             value="articles"
-            className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs"
+            className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs"
           >
             Articles
           </TabsTrigger>
 
           <TabsTrigger
             value="infographics"
-            className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs"
+            className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs"
           >
             Infographics
           </TabsTrigger>
 
           <TabsTrigger
             value="videos"
-            className="px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs"
+            className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs"
           >
             Video / Audio / Links
           </TabsTrigger>

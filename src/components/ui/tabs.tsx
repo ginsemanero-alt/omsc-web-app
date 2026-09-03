@@ -12,7 +12,13 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
+      // Tab labels ("Video / Audio / Links", etc.) don't always fit a
+      // phone screen — this was inline-flex with no overflow handling, so
+      // rows of 3-5 tabs silently pushed past the page's own width on
+      // mobile instead of scrolling. max-w-full + overflow-x-auto turns
+      // that into a horizontally scrollable strip; justify-start (not
+      // -center) avoids clipping the first tab off-screen when it does.
+      "inline-flex h-9 max-w-full items-center justify-start overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground",
       className
     )}
     {...props}
@@ -27,7 +33,9 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow",
+      // shrink-0: without it, a scrollable flex parent can still squeeze
+      // these down to unreadable widths instead of letting them scroll.
+      "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow",
       className
     )}
     {...props}
