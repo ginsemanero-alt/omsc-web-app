@@ -300,7 +300,7 @@ export default function UserManagement() {
                     type="email"
                     value={staffEmail}
                     onChange={(e) => setStaffEmail(e.target.value)}
-                    placeholder="staff@omsc.edu.ph"
+                    placeholder="staff@omsu.edu.ph"
                     autoComplete="off"
                     className="h-12 bg-slate-50 border-none rounded-2xl font-bold"
                   />

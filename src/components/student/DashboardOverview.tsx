@@ -290,13 +290,13 @@ export default function DashboardOverview() {
       <Card className="relative h-[300px] md:h-[450px] rounded-3xl md:rounded-[5rem] border-none overflow-hidden group shadow-2xl">
         <img
           src="https://i.ibb.co/SDCTBBY7/download-4.jpg"
-          alt="OMSC Guidance and Testing Center"
+          alt="OMSU Guidance and Testing Center"
           className="absolute inset-0 w-full h-full object-cover scale-110 group-hover:scale-100 transition-transform duration-[2000ms]"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
         <div className="absolute bottom-6 left-6 right-6 md:bottom-16 md:left-16 md:right-16 text-white space-y-3 md:space-y-4">
           <p className="text-indigo-400 font-black uppercase tracking-[0.3em] text-[8px] md:text-[10px]">Community Highlight</p>
-          <h2 className="text-2xl md:text-6xl font-black uppercase leading-none">Campus Life<br/>at OMSC {userCampus.replace('Campus', '')}</h2>
+          <h2 className="text-2xl md:text-6xl font-black uppercase leading-none">Campus Life<br/>at OMSU {userCampus.replace('Campus', '')}</h2>
           <Button onClick={() => navigate('/student/materials')} className="bg-white text-slate-900 hover:bg-indigo-600 hover:text-white h-12 md:h-14 px-6 md:px-10 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all w-full sm:w-auto">
             See Awareness Materials
           </Button>

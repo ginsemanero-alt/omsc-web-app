@@ -9,7 +9,7 @@ const Footer: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
           {/* About Section */}
           <div>
-            <h3 className="text-h4 text-gray-100 mb-4">OMSC Guidance</h3>
+            <h3 className="text-h4 text-gray-100 mb-4">OMSU Guidance</h3>
             <p className="text-body-sm text-gray-300 leading-relaxed">
               Occidental Mindoro State University Guidance Information and Awareness System &mdash;
               supporting student development and institutional compliance with CHED standards.
@@ -63,7 +63,7 @@ const Footer: React.FC = () => {
               </li>
               <li className="flex items-center space-x-3">
                 <Facebook className="h-5 w-5 text-gray-300 flex-shrink-0" strokeWidth={1.5} />
-                <span className="text-body-sm text-gray-300">OMSC Guidance and Testing Center</span>
+                <span className="text-body-sm text-gray-300">OMSU Guidance and Testing Center</span>
               </li>
             </ul>
           </div>

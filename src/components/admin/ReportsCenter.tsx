@@ -405,7 +405,7 @@ export default function ReportsCenter() {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(16);
         doc.setTextColor(15);
-        doc.text("OMSC GUIDANCE AND TESTING CENTER", 14, 18);
+        doc.text("OMSU GUIDANCE AND TESTING CENTER", 14, 18);
 
         doc.setFontSize(12);
         doc.text("Guidance Awareness & Analytics Report", 14, 26);
@@ -514,7 +514,7 @@ export default function ReportsCenter() {
         styles: { fontSize: 8 },
       });
 
-      doc.save(`OMSC_Guidance_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+      doc.save(`OMSU_Guidance_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
 
       toast({ title: "Report Generated", description: "Your PDF report has downloaded." });
     } catch (error: any) {
@@ -539,7 +539,7 @@ export default function ReportsCenter() {
       const workbook = XLSX.utils.book_new();
 
       const coverSheet = XLSX.utils.aoa_to_sheet([
-        ["OMSC GUIDANCE AND TESTING CENTER"],
+        ["OMSU GUIDANCE AND TESTING CENTER"],
         ["Guidance Awareness & Analytics Report"],
         [`Report Period: ${rangeLabel}`],
         [`Generated: ${generatedAtLabel}`],
@@ -589,7 +589,7 @@ export default function ReportsCenter() {
       const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
       const blob = new Blob([buffer], { type: "application/octet-stream" });
 
-      saveAs(blob, `OMSC_Guidance_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      saveAs(blob, `OMSU_Guidance_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
 
       toast({ title: "Report Generated", description: "Your Excel report has downloaded." });
     } catch (error: any) {
@@ -631,7 +631,7 @@ export default function ReportsCenter() {
             Reports <span className="text-indigo-600">Center</span>
           </h1>
           <p className="text-slate-400 font-bold uppercase text-[9px] tracking-widest mt-1">
-            OMSC Guidance and Testing Center — generated reports
+            OMSU Guidance and Testing Center — generated reports
           </p>
         </div>
 

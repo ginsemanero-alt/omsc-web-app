@@ -77,7 +77,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           <div className="flex items-center gap-2 md:gap-3 cursor-pointer" onClick={() => handleNavigation("home")}>
             <GraduationCap className="w-7 h-7 md:w-9 md:h-9 text-white" />
             <div>
-              <h1 className="font-black text-sm md:text-xl uppercase tracking-tight text-white leading-tight">OMSC Web-Based</h1>
+              <h1 className="font-black text-sm md:text-xl uppercase tracking-tight text-white leading-tight">OMSU Web-Based</h1>
               <p className="text-[8px] md:text-[10px] uppercase tracking-[0.2em] text-blue-100 font-bold">Guidance System</p>
             </div>
           </div>

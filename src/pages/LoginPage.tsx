@@ -508,7 +508,7 @@ export default function LoginPage({
                       Reset Password
                     </h2>
                     <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">
-                      OMSC Guidance System
+                      OMSU Guidance System
                     </p>
                   </div>
                 </div>
@@ -562,7 +562,7 @@ export default function LoginPage({
                     <Input
                       className="input-style pl-11"
                       type="email"
-                      placeholder="student@omsc.edu.ph"
+                      placeholder="student@omsu.edu.ph"
                       value={resetEmail}
                       onChange={(e) => setResetEmail(e.target.value)}
                       autoComplete="email"
@@ -615,7 +615,7 @@ export default function LoginPage({
                       Privacy & Terms
                     </h2>
                     <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">
-                      OMSC Guidance System
+                      OMSU Guidance System
                     </p>
                   </div>
                 </div>
@@ -798,7 +798,7 @@ export default function LoginPage({
                       <Input
                         className="input-style pl-11"
                         type="email"
-                        placeholder="student@omsc.edu.ph"
+                        placeholder="student@omsu.edu.ph"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         autoComplete="email"
@@ -1167,7 +1167,7 @@ export default function LoginPage({
                 <Input
                   className="input-style pl-11 h-14 text-base"
                   type="email"
-                  placeholder="student@omsc.edu.ph"
+                  placeholder="student@omsu.edu.ph"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"

@@ -62,7 +62,7 @@ const ProgramsPage: React.FC = () => {
             id: p.id,
             title: p.title || "Untitled Seminar Event",
             description: p.description || "No description provided.",
-            location: p.location || "OMSC Main Venue",
+            location: p.location || "OMSU Main Venue",
             date: p.date || p.scheduled_date || new Date().toISOString(),
             participants: p.participants || p.max_slots || 0,
             status: p.status || "upcoming",
@@ -103,13 +103,13 @@ const ProgramsPage: React.FC = () => {
         <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-10 md:mb-12 gap-6">
           <div className="space-y-4 text-center md:text-left">
             <Badge className="bg-indigo-100 text-indigo-600 border-none font-black px-4 py-1 rounded-full uppercase text-[9px] md:text-[10px] tracking-widest inline-block">
-              OMSC Guidance
+              OMSU Guidance
             </Badge>
             <h1 className="text-3xl md:text-6xl font-black uppercase text-slate-900 tracking-tighter leading-none">
               Guidance <br className="hidden md:block" /> Programs
             </h1>
             <p className="text-slate-500 font-medium max-w-md mx-auto md:mx-0 text-sm leading-relaxed">
-              Explore upcoming orientation structures, events, and developmental seminars designed for the growth of OMSC students.
+              Explore upcoming orientation structures, events, and developmental seminars designed for the growth of OMSU students.
             </p>
           </div>
 

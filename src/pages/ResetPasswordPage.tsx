@@ -142,7 +142,7 @@ export default function ResetPasswordPage() {
             </h1>
 
             <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mt-2">
-              OMSC Guidance System
+              OMSU Guidance System
             </p>
           </div>
 

@@ -8,7 +8,7 @@ export default function PublicNavbar() {
       <div className="max-w-[1440px] mx-auto px-6 h-full flex items-center justify-between">
         <div className="flex items-center gap-2">
           <GraduationCap className="w-8 h-8 text-primary" />
-          <h1 className="font-bold text-xl">OMSC Guidance</h1>
+          <h1 className="font-bold text-xl">OMSU Guidance</h1>
         </div>
         
         <nav className="hidden md:flex items-center gap-6 font-medium text-slate-600">

@@ -25,7 +25,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
             <GraduationCap className="w-8 h-8 text-primary" />
             <h1 className="font-bold text-xl uppercase tracking-tighter text-slate-900">
-              OMSC Guidance
+              OMSU Guidance
             </h1>
           </div>
           

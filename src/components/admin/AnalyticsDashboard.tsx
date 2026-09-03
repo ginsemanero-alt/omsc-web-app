@@ -1780,7 +1780,7 @@ export default function AnalyticsDashboard() {
     doc.setFontSize(18);
 
     doc.text(
-      "OMSC GUIDANCE ANALYTICS REPORT",
+      "OMSU GUIDANCE ANALYTICS REPORT",
       14,
       20
     );
@@ -1999,7 +1999,7 @@ export default function AnalyticsDashboard() {
     });
 
     doc.save(
-      `OMSC_Guidance_Analytics_${new Date()
+      `OMSU_Guidance_Analytics_${new Date()
         .toISOString()
         .slice(0, 10)}.pdf`
     );
@@ -2013,7 +2013,7 @@ export default function AnalyticsDashboard() {
     const rows: any[][] = [];
 
     rows.push([
-      "OMSC GUIDANCE ANALYTICS REPORT",
+      "OMSU GUIDANCE ANALYTICS REPORT",
     ]);
 
     rows.push([]);
@@ -2177,7 +2177,7 @@ export default function AnalyticsDashboard() {
 
     saveAs(
       blob,
-      `OMSC_Guidance_Analytics_${new Date()
+      `OMSU_Guidance_Analytics_${new Date()
         .toISOString()
         .slice(0, 10)}.csv`
     );
@@ -2363,7 +2363,7 @@ export default function AnalyticsDashboard() {
 
     saveAs(
       blob,
-      `OMSC_Guidance_Analytics_${new Date()
+      `OMSU_Guidance_Analytics_${new Date()
         .toISOString()
         .slice(0, 10)}.json`
     );

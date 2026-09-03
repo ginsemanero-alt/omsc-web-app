@@ -74,7 +74,7 @@ const AboutPage: React.FC = () => {
               <div className="absolute inset-0 bg-indigo-600 rounded-[2rem] md:rounded-[2.5rem] rotate-2 scale-105 opacity-10" />
               <img
                 src="https://i.ibb.co/SDCTBBY7/download-4.jpg"
-                alt="OMSC Institutional Core Banner"
+                alt="OMSU Institutional Core Banner"
                 className="relative w-full h-[260px] md:h-[380px] object-cover rounded-[2rem] md:rounded-[2.5rem] shadow-xl z-10"
               />
             </div>
@@ -90,7 +90,7 @@ const AboutPage: React.FC = () => {
           <div className="lg:col-span-1 space-y-4 sticky top-24 bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
             <h3 className="text-xl font-black uppercase tracking-tight text-slate-900">A Collaborative Approach</h3>
             <p className="text-xs md:text-sm text-slate-500 leading-relaxed">
-              While school Counselors are available to respond to the unique needs of each student, the Guidance and Counseling approach is collaborative among teachers, parents and administrators. As a developmental program, it addresses the needs of all students in OMSC by facilitating their growth as well as helping to create positive and safe learning environments.
+              While school Counselors are available to respond to the unique needs of each student, the Guidance and Counseling approach is collaborative among teachers, parents and administrators. As a developmental program, it addresses the needs of all students in OMSU by facilitating their growth as well as helping to create positive and safe learning environments.
             </p>
           </div>
 
@@ -170,7 +170,7 @@ const AboutPage: React.FC = () => {
               </div>
               <div className="flex items-center gap-3 text-xs font-bold text-slate-200 uppercase tracking-tight">
                 <Facebook className="w-4 h-4 text-indigo-400 shrink-0" />
-                <span className="text-[11px]">OMSC Guidance and Testing Center</span>
+                <span className="text-[11px]">OMSU Guidance and Testing Center</span>
               </div>
               <div className="flex items-center gap-3 text-xs font-mono font-bold text-slate-200">
                 <Phone className="w-4 h-4 text-indigo-400 shrink-0" />

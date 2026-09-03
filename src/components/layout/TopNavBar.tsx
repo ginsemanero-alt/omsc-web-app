@@ -89,7 +89,7 @@ export default function TopNavBar({
                  <GraduationCap className="w-6 h-6 text-primary-foreground" strokeWidth={1.5} />
                </div>
                <div className="hidden sm:block">
-                 <h1 className="text-sm font-bold text-foreground leading-none">OMSC Guidance</h1>
+                 <h1 className="text-sm font-bold text-foreground leading-none">OMSU Guidance</h1>
                  <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">{campus}</p>
                </div>
             </div>

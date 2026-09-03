@@ -994,7 +994,7 @@ export default function SurveyBuilder() {
               <div className="flex items-center gap-2 text-indigo-600 mb-2">
                 <ClipboardList className="w-5 h-5" />
                 <span className="text-[10px] font-black uppercase tracking-widest">
-                  OMSC Guidance & Testing Center
+                  OMSU Guidance & Testing Center
                 </span>
               </div>
 
