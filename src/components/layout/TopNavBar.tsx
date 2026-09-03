@@ -1,4 +1,20 @@
-import { GraduationCap, LogOut, ChevronDown, Menu, X } from 'lucide-react';
+import {
+  GraduationCap,
+  LogOut,
+  ChevronDown,
+  Menu,
+  X,
+  Home,
+  Calendar,
+  BookOpen,
+  ClipboardList,
+  MessageSquare,
+  FolderOpen,
+  BarChart3,
+  FileStack,
+  Users,
+  type LucideIcon,
+} from 'lucide-react';
 import { useState, useEffect } from 'react'; // Idinagdag ang useEffect
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase'; // Siguraduhin na tama ang path ng supabase client mo
@@ -16,8 +32,23 @@ import { Avatar, AvatarFallback } from '../../components/ui/avatar';
 interface NavigationItem {
   label: string;
   path: string;
-  icon?: any;
+  icon?: string;
 }
+
+// navigationItems (from AdminDashboard/StudentDashboard) carries icon names
+// as plain strings, not component references — this maps each one to its
+// actual lucide-react component for rendering.
+const NAV_ICONS: Record<string, LucideIcon> = {
+  Home,
+  Calendar,
+  BookOpen,
+  ClipboardList,
+  MessageSquare,
+  FolderOpen,
+  BarChart3,
+  FileStack,
+  Users,
+};
 
 interface TopNavBarProps {
   role: 'student' | 'admin';
@@ -97,19 +128,23 @@ export default function TopNavBar({
           </div>
 
           <nav className="hidden md:flex items-center gap-2">
-            {navigationItems.map((item: NavigationItem) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`px-4 py-2 rounded-md text-sm transition-colors ${
-                  currentPath === item.path
-                    ? 'bg-primary/10 text-primary font-medium border-b-2 border-primary rounded-none'
-                    : 'text-muted-foreground hover:bg-neutral-100'
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
+            {navigationItems.map((item: NavigationItem) => {
+              const ItemIcon = item.icon ? NAV_ICONS[item.icon] : null;
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm transition-colors ${
+                    currentPath === item.path
+                      ? 'bg-primary/10 text-primary font-medium border-b-2 border-primary rounded-none'
+                      : 'text-muted-foreground hover:bg-neutral-100'
+                  }`}
+                >
+                  {ItemIcon && <ItemIcon className="w-4 h-4" />}
+                  {item.label}
+                </Link>
+              );
+            })}
           </nav>
 
           <div className="flex items-center gap-2">
@@ -163,20 +198,28 @@ export default function TopNavBar({
           </div>
 
           <nav className="flex flex-col gap-2">
-            {navigationItems.map((item: NavigationItem) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setIsSidebarOpen(false)}
-                className={`flex items-center px-4 py-3 rounded-xl text-base transition-all ${
-                  currentPath === item.path
-                    ? 'bg-primary text-white shadow-lg font-bold'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
+            {/* Re-mounted (not just hidden) each time the sidebar opens, so
+                the fade/slide-in replays instead of only playing once ever. */}
+            {isSidebarOpen &&
+              navigationItems.map((item: NavigationItem, index) => {
+                const ItemIcon = item.icon ? NAV_ICONS[item.icon] : null;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setIsSidebarOpen(false)}
+                    style={{ animationDelay: `${index * 40}ms` }}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-base transition-all animate-in fade-in slide-in-from-left-4 duration-300 fill-mode-both ${
+                      currentPath === item.path
+                        ? 'bg-primary text-white shadow-lg font-bold'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {ItemIcon && <ItemIcon className="w-5 h-5 shrink-0" />}
+                    {item.label}
+                  </Link>
+                );
+              })}
           </nav>
 
           <div className="mt-auto pt-6 border-t">

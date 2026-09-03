@@ -136,5 +136,10 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+  // tailwindcss-animate was installed but never registered here, so every
+  // animate-in/fade-in/slide-in-from-*/duration-* class used across the
+  // app (LoginPage modals, UserManagement, StudentDashboard, etc.) was a
+  // no-op — the plugin defines those utilities, so without it Tailwind
+  // just silently drops them.
+  plugins: [require("tailwindcss-animate")],
 }

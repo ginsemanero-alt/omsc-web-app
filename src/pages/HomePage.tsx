@@ -13,7 +13,16 @@ import {
   ArrowRight,
   Menu, // Idinagdag para sa mobile menu
   X,    // Idinagdag para sa close button
+  Home,
+  Info,
 } from "lucide-react";
+
+const MOBILE_NAV_ICONS: Record<string, React.ElementType> = {
+  Home,
+  Programs: Calendar,
+  Materials: BookOpen,
+  About: Info,
+};
 
 interface HomePageProps {
   onNavigate: (page: "Home" | "Programs" | "Materials" | "About" | "Login") => void;
@@ -126,12 +135,27 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         {/* Mobile Dropdown Menu */}
         {isMenuOpen && (
           <div className="lg:hidden absolute top-[70px] md:top-[80px] left-0 right-0 bg-[#0055aa] border-t border-white/10 p-6 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-top duration-300">
-            {["Home", "Programs", "Materials", "About"].map((item) => (
-              <button key={item} onClick={() => handleNavigation(item)} className="text-left text-white font-black uppercase text-lg border-b border-white/5 pb-2">
-                {item === "Materials" ? "IEC Materials" : item}
-              </button>
-            ))}
-            <Button onClick={() => (window.location.href = "/login")} className="w-full bg-white text-[#0066cc] font-black h-12 rounded-xl mt-4">Login</Button>
+            {["Home", "Programs", "Materials", "About"].map((item, index) => {
+              const ItemIcon = MOBILE_NAV_ICONS[item];
+              return (
+                <button
+                  key={item}
+                  onClick={() => handleNavigation(item)}
+                  style={{ animationDelay: `${index * 50}ms` }}
+                  className="flex items-center gap-3 text-left text-white font-black uppercase text-lg border-b border-white/5 pb-2 animate-in fade-in slide-in-from-left-4 duration-300 fill-mode-both"
+                >
+                  {ItemIcon && <ItemIcon size={20} className="shrink-0 opacity-80" />}
+                  {item === "Materials" ? "IEC Materials" : item}
+                </button>
+              );
+            })}
+            <Button
+              onClick={() => (window.location.href = "/login")}
+              style={{ animationDelay: "200ms" }}
+              className="w-full bg-white text-[#0066cc] font-black h-12 rounded-xl mt-4 animate-in fade-in slide-in-from-left-4 duration-300 fill-mode-both"
+            >
+              Login
+            </Button>
           </div>
         )}
       </header>
