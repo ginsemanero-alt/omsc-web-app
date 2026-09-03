@@ -491,11 +491,11 @@ export default function LoginPage({
       {showForgotPassword && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200"
             onClick={() => setShowForgotPassword(false)}
           />
 
-          <Card className="relative z-10 w-full max-w-md bg-white rounded-[2rem] sm:rounded-[3rem] shadow-2xl border-none overflow-hidden">
+          <Card className="relative z-10 w-full max-w-md bg-white rounded-[2rem] sm:rounded-[3rem] shadow-2xl border-none overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6 sm:p-8 md:p-10">
               <div className="flex items-start justify-between gap-4 mb-6">
                 <div className="flex items-center gap-3">
@@ -598,11 +598,11 @@ export default function LoginPage({
       {showTerms && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200"
             onClick={() => setShowTerms(false)}
           />
 
-          <Card className="relative z-10 w-full max-w-lg bg-white rounded-[2rem] sm:rounded-[3rem] shadow-2xl border-none overflow-hidden">
+          <Card className="relative z-10 w-full max-w-lg bg-white rounded-[2rem] sm:rounded-[3rem] shadow-2xl border-none overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6 sm:p-8 md:p-10">
               <div className="flex items-start justify-between gap-4 mb-6">
                 <div className="flex items-center gap-3">
@@ -703,7 +703,7 @@ export default function LoginPage({
         </div>
       )}
 
-      <Card className="w-full max-w-2xl bg-white border-none shadow-2xl rounded-[2rem] sm:rounded-[3rem] overflow-hidden">
+      <Card className="w-full max-w-2xl bg-white border-none shadow-2xl rounded-[2rem] sm:rounded-[3rem] overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
         {/* HEADER */}
         <div className="relative px-6 pt-6 sm:px-8 sm:pt-8">
           <button
@@ -718,9 +718,9 @@ export default function LoginPage({
           <div className="flex flex-col items-center text-center mt-8 sm:mt-6">
             <div className="w-16 h-16 sm:w-20 sm:h-20 bg-indigo-600 rounded-[1.5rem] sm:rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100">
               {isRegister ? (
-                <UserPlus className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+                <UserPlus key="register-icon" className="w-8 h-8 sm:w-10 sm:h-10 text-white animate-in zoom-in-50 spin-in-6 duration-300" />
               ) : (
-                <GraduationCap className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+                <GraduationCap key="login-icon" className="w-8 h-8 sm:w-10 sm:h-10 text-white animate-in zoom-in-50 spin-in-6 duration-300" />
               )}
             </div>
 
@@ -739,9 +739,12 @@ export default function LoginPage({
         </div>
 
         {/* FORM */}
+        {/* key={isRegister ...} remounts on toggle so the fade/slide
+            replays each time instead of only ever playing once. */}
         <form
+          key={isRegister ? 'register' : 'login'}
           onSubmit={handleSubmit}
-          className="px-5 sm:px-8 md:px-10 py-7 sm:py-8"
+          className="px-5 sm:px-8 md:px-10 py-7 sm:py-8 animate-in fade-in slide-in-from-bottom-2 duration-300"
         >
           {isRegister ? (
             <div className="space-y-7">
