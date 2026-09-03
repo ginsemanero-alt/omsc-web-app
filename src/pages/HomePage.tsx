@@ -33,8 +33,19 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [activePage, setActivePage] = useState("home");
   const [isMenuOpen, setIsMenuOpen] = useState(false); // Mobile menu state
+  const [showHeroVideo, setShowHeroVideo] = useState(false);
 
   const youtubeVideoId = "A2JuNCYrUHE";
+
+  useEffect(() => {
+    // The hero background is a full YouTube embed — ~1MB of YouTube's own
+    // JS/iframe overhead that was previously loading immediately and
+    // competing with the page's own critical resources (fonts, JS bundle)
+    // for bandwidth and main-thread time. Deferring it a beat lets the
+    // actual page paint first; the dark hero background covers the gap.
+    const timer = window.setTimeout(() => setShowHeroVideo(true), 1000);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const handleNavigation = (page: any) => {
     setActivePage(page.toLowerCase());
@@ -101,7 +112,12 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           <div className="flex items-center gap-2">
             <Button onClick={() => (window.location.href = "/login")} className="hidden sm:flex bg-white text-[#0066cc] text-[10px] px-6 rounded-xl">Login</Button>
             {/* Mobile Menu Toggle */}
-            <button className="lg:hidden text-white p-2" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+            <button
+              className="lg:hidden text-white p-2"
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              aria-label={isMenuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={isMenuOpen}
+            >
               {isMenuOpen ? <X size={28} /> : <Menu size={28} />}
             </button>
           </div>
@@ -124,12 +140,15 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       <section className="relative h-[85vh] md:h-[700px] overflow-hidden mt-[70px] md:mt-[80px] bg-black">
         <div className="absolute inset-0 z-0 pointer-events-none">
           {/* Ginawang Object-Cover para sa mobile */}
-          <iframe
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[180%] h-[180%] md:w-full md:h-full md:scale-[1.35]"
-            src={`https://www.youtube.com/embed/${youtubeVideoId}?autoplay=1&mute=1&loop=1&playlist=${youtubeVideoId}&controls=0&modestbranding=1`}
-            frameBorder="0"
-            allow="autoplay; encrypted-media"
-          ></iframe>
+          {showHeroVideo && (
+            <iframe
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[180%] h-[180%] md:w-full md:h-full md:scale-[1.35]"
+              src={`https://www.youtube.com/embed/${youtubeVideoId}?autoplay=1&mute=1&loop=1&playlist=${youtubeVideoId}&controls=0&modestbranding=1`}
+              frameBorder="0"
+              allow="autoplay; encrypted-media"
+              title="OMSU Guidance background video"
+            ></iframe>
+          )}
         </div>
         <div className="absolute inset-0 bg-gradient-to-b md:bg-gradient-to-r from-[#003366]/95 via-[#003366]/70 to-transparent z-10" />
 
@@ -205,7 +224,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               programs.map((program) => (
                 <Card key={program.id} className="rounded-3xl border-none overflow-hidden bg-white shadow-sm flex flex-col">
                   <div className="aspect-video bg-slate-900 relative">
-                    {program.image_url ? <img src={program.image_url} className="w-full h-full object-cover" alt="" /> : <div className="flex h-full items-center justify-center text-white"><ImageIcon size={30} /></div>}
+                    {program.image_url ? <img src={program.image_url} className="w-full h-full object-cover" alt="" loading="lazy" decoding="async" /> : <div className="flex h-full items-center justify-center text-white"><ImageIcon size={30} /></div>}
                   </div>
                   <div className="p-6 flex-1 flex flex-col">
                     <h3 className="text-md font-black uppercase leading-tight line-clamp-2 mb-4">{program.title}</h3>

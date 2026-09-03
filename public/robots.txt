@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /student
+Disallow: /login
+Disallow: /reset-password
+Disallow: /api/
+
+Sitemap: https://www.webguidance.online/sitemap.xml

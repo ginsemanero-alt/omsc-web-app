@@ -78,8 +78,9 @@ export default function TopNavBar({
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden text-foreground" 
+              className="md:hidden text-foreground"
               onClick={() => setIsSidebarOpen(true)}
+              aria-label="Open menu"
             >
               <Menu className="w-6 h-6" />
             </Button>
@@ -156,7 +157,7 @@ export default function TopNavBar({
                  <span className="text-[10px] text-slate-400 font-bold uppercase">{campus}</span>
                </div>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(false)}>
+            <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(false)} aria-label="Close menu">
               <X className="w-6 h-6" />
             </Button>
           </div>

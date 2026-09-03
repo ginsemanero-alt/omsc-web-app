@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
+import { compressImageFile } from '../../lib/imageCompress';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -144,8 +145,15 @@ export default function ProgramManagement() {
       let finalImageUrl = formData.image_url;
 
       if (selectedFile) {
-        const path = `posters/${Date.now()}_${selectedFile.name}`;
-        const { error: uploadError } = await supabase.storage.from('program-posters').upload(path, selectedFile);
+        // Posters are displayed in a card a few hundred px wide — resizing
+        // to 1280px max before upload cuts typical camera/screenshot
+        // uploads by 80-90% with no visible quality loss at display size.
+        const uploadFile = await compressImageFile(selectedFile);
+        const path = `posters/${Date.now()}_${uploadFile.name}`;
+        // Path always includes Date.now(), so the same URL can never point
+        // to different content later — safe to cache for a full year
+        // instead of Supabase's 1 hour default.
+        const { error: uploadError } = await supabase.storage.from('program-posters').upload(path, uploadFile, { cacheControl: '31536000' });
         if (uploadError) throw uploadError;
         const { data } = supabase.storage.from('program-posters').getPublicUrl(path);
         finalImageUrl = data.publicUrl;
@@ -180,7 +188,7 @@ export default function ProgramManagement() {
 
       if (materialFile && currentProgramId) {
         const matPath = `${currentProgramId}/handout_${Date.now()}_${materialFile.name}`;
-        const { error: storageError } = await supabase.storage.from('materials').upload(matPath, materialFile);
+        const { error: storageError } = await supabase.storage.from('materials').upload(matPath, materialFile, { cacheControl: '31536000' });
         if (storageError) throw storageError;
         const { data: matUrl } = supabase.storage.from('materials').getPublicUrl(matPath);
         

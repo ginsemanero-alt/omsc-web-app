@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { compressImageFile } from '../../lib/imageCompress';
 
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -336,14 +337,21 @@ export default function IECMaterials() {
     folder: string,
     file: File
   ): Promise<string> => {
-    const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    // No-ops for non-image files (video/audio/PDF) and already-small
+    // images — only resizes oversized thumbnails/image materials.
+    const compressed = await compressImageFile(file);
+
+    const safeFileName = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_');
 
     const path = `${folder}/${Date.now()}_${safeFileName}`;
 
+    // Path always includes Date.now(), so the same URL can never point to
+    // different content later — safe to cache for a full year instead of
+    // the previous 1 hour default.
     const { error } = await supabase.storage
       .from(bucket)
-      .upload(path, file, {
-        cacheControl: '3600',
+      .upload(path, compressed, {
+        cacheControl: '31536000',
         upsert: false,
       });
 

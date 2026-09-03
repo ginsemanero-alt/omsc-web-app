@@ -1,0 +1,17 @@
+# Web Guidance
+
+> Official web portal of the Occidental Mindoro State University (OMSU) Guidance and Testing Center. Provides information about guidance programs and services, IEC (Information, Education, and Communication) materials, and knowledge assessments that measure student awareness of those programs.
+
+OMSU organizes its guidance work into six official services: Information Services, Individual Inventory, Research and Evaluation, Career Orientation, Testing Services, and Counseling Services. Programs are also tagged by how they're delivered: Group Guidance, Individual Student Planning, Responsive Services, or System Support.
+
+## Public pages
+
+- [Home](https://www.webguidance.online/): Overview of the guidance system and its purpose.
+- [Programs](https://www.webguidance.online/programs): Guidance programs offered, filterable by service and delivery component.
+- [Materials](https://www.webguidance.online/materials): IEC materials — articles, infographics, videos, audio, and guides — on guidance services and student welfare.
+- [About](https://www.webguidance.online/about): About the OMSU Guidance and Testing Center.
+
+## Notes
+
+- Student accounts and knowledge assessments require sign-in and are not part of the public content above.
+- Administrative pages (program/content management, analytics, reports) are staff-only and intentionally excluded from indexing.
