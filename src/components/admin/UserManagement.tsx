@@ -37,12 +37,47 @@ export default function UserManagement() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('users') 
+        .from('users')
         .select('*')
         .order('name', { ascending: true });
 
       if (error) throw error;
-      setUsers(data || []);
+
+      // PWD/IP status lives in `profiles` (student-only demographics),
+      // not `users` — bridge the two via student_id. This is the one
+      // place in the app that shows PWD/IP tied to a specific student:
+      // it's an account-management view where the admin already sees
+      // the student's name, unlike Analytics, which the registration
+      // privacy notice promises will only ever show PWD/IP in aggregate.
+      const studentIds = (data || [])
+        .map((u) => u.student_id)
+        .filter(Boolean);
+
+      let profilesByStudentId: Record<string, { is_pwd: boolean; is_ip: boolean }> = {};
+
+      if (studentIds.length > 0) {
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('student_id, is_pwd, is_ip')
+          .in('student_id', studentIds);
+
+        if (profilesError) {
+          console.warn('Unable to load PWD/IP status:', profilesError);
+        } else {
+          profilesByStudentId = (profiles || []).reduce((acc, p) => {
+            if (p.student_id) acc[p.student_id] = { is_pwd: !!p.is_pwd, is_ip: !!p.is_ip };
+            return acc;
+          }, {} as Record<string, { is_pwd: boolean; is_ip: boolean }>);
+        }
+      }
+
+      const merged = (data || []).map((user) => ({
+        ...user,
+        is_pwd: profilesByStudentId[user.student_id]?.is_pwd ?? false,
+        is_ip: profilesByStudentId[user.student_id]?.is_ip ?? false,
+      }));
+
+      setUsers(merged);
     } catch (err: any) {
       toast({ variant: "destructive", title: "DATABASE ERROR", description: err.message });
     } finally {
@@ -427,6 +462,12 @@ export default function UserManagement() {
                     <p className="text-[9px] font-black text-slate-500 uppercase tracking-tighter bg-slate-100 px-2 rounded-md flex items-center gap-1">
                       <MapPin size={10} /> {user.campus || 'Unassigned'}
                     </p>
+                    {user.is_pwd && (
+                      <p className="text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50 px-2 rounded-md">PWD</p>
+                    )}
+                    {user.is_ip && (
+                      <p className="text-[9px] font-black text-emerald-600 uppercase tracking-tighter bg-emerald-50 px-2 rounded-md">IP</p>
+                    )}
                   </div>
                 </div>
               </div>
