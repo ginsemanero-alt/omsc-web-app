@@ -14,6 +14,7 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [inclusionFilter, setInclusionFilter] = useState('all');
   
   // Edit States
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -236,7 +237,11 @@ export default function UserManagement() {
     const query = searchQuery.toLowerCase();
     const matchesSearch = user.name?.toLowerCase().includes(query) || user.email?.toLowerCase().includes(query);
     const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-    return matchesSearch && matchesRole;
+    const matchesInclusion =
+      inclusionFilter === 'all' ||
+      (inclusionFilter === 'pwd' && user.is_pwd) ||
+      (inclusionFilter === 'ip' && user.is_ip);
+    return matchesSearch && matchesRole && matchesInclusion;
   });
 
   return (
@@ -429,6 +434,16 @@ export default function UserManagement() {
             <SelectItem value="all">All Roles</SelectItem>
             <SelectItem value="admin">Admins</SelectItem>
             <SelectItem value="student">Students</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={inclusionFilter} onValueChange={setInclusionFilter}>
+          <SelectTrigger className="w-full md:w-48 h-12 bg-slate-50 border-none rounded-2xl font-black uppercase text-[10px]">
+            <SelectValue placeholder="All Students" />
+          </SelectTrigger>
+          <SelectContent className="rounded-2xl border-none shadow-xl">
+            <SelectItem value="all">PWD / IP: All</SelectItem>
+            <SelectItem value="pwd">PWD Only</SelectItem>
+            <SelectItem value="ip">IP Only</SelectItem>
           </SelectContent>
         </Select>
       </div>
