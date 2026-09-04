@@ -67,7 +67,57 @@
     --shadow-lg: 0 4px 10px hsla(0, 0%, 0%, 0.15);
     --shadow-xl: 0 6px 20px hsla(0, 0%, 0%, 0.2);
   }
-  
+
+  /* Scoped to the student dashboard only — see useTheme.ts /
+     StudentDashboard.tsx, which apply the `dark` class to a wrapper
+     around just that subtree, never document-wide. Any component built
+     on the semantic tokens below (bg-background, text-foreground,
+     border-border, etc.) picks these up automatically. */
+  .dark {
+    --color-background: 222 25% 8%;
+    --color-foreground: 210 20% 92%;
+    --color-border: 222 15% 20%;
+    --color-input: 222 15% 22%;
+    --color-ring: 210 85% 60%;
+
+    --color-primary: 222 75% 58%;
+    --color-primary-foreground: 0 0% 100%;
+    --color-primary-hover: 222 75% 65%;
+    --color-primary-active: 222 75% 70%;
+
+    --color-secondary: 222 55% 55%;
+    --color-secondary-foreground: 0 0% 100%;
+    --color-secondary-hover: 222 55% 62%;
+    --color-secondary-active: 222 55% 68%;
+
+    --color-tertiary: 222 20% 16%;
+    --color-tertiary-foreground: 210 20% 88%;
+
+    --color-accent: 266 75% 68%;
+    --color-accent-foreground: 0 0% 100%;
+
+    --color-success: 145 50% 45%;
+    --color-success-foreground: 0 0% 100%;
+
+    --color-warning: 45 90% 55%;
+    --color-warning-foreground: 0 0% 10%;
+
+    --color-error: 0 70% 60%;
+    --color-error-foreground: 0 0% 100%;
+
+    --color-info: 210 80% 60%;
+    --color-info-foreground: 0 0% 100%;
+
+    --color-muted: 222 18% 16%;
+    --color-muted-foreground: 220 10% 65%;
+
+    --color-card: 222 22% 11%;
+    --color-card-foreground: 210 20% 92%;
+
+    --color-popover: 222 22% 11%;
+    --color-popover-foreground: 210 20% 92%;
+  }
+
   * {
     @apply border-border;
   }

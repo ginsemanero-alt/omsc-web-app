@@ -101,7 +101,7 @@ export default function DashboardOverview() {
     // ProtectedRoute already showed one while verifying the session.
     return (
       <div className="space-y-6 md:space-y-10 w-full overflow-hidden animate-pulse">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b-2 pb-6 border-slate-100">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b-2 pb-6 border-slate-100 dark:border-slate-800">
           <div className="space-y-3">
             <div className="h-12 w-72 max-w-full bg-slate-200 rounded-2xl" />
             <div className="h-3 w-48 bg-slate-100 rounded-full" />
@@ -128,7 +128,7 @@ export default function DashboardOverview() {
           <MapPin className="h-8 w-8 text-rose-500" />
         </div>
         <div className="space-y-1">
-          <p className="text-lg font-black text-slate-800 uppercase tracking-tight">
+          <p className="text-lg font-black text-slate-800 dark:text-slate-100 uppercase tracking-tight">
             Couldn't load your dashboard
           </p>
           <p className="text-sm text-slate-500 max-w-sm">
@@ -148,9 +148,9 @@ export default function DashboardOverview() {
   return (
     <div className="space-y-6 md:space-y-10 w-full overflow-hidden">
       {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b-2 pb-6 border-slate-100">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b-2 pb-6 border-slate-100 dark:border-slate-800">
         <div className="space-y-1">
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 tracking-tighter uppercase leading-none">
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 dark:text-white tracking-tighter uppercase leading-none">
             Mabuhay, <span className="text-indigo-600">{userName}!</span>
           </h1>
           <p className="text-slate-400 text-[10px] md:text-sm font-black uppercase tracking-[0.2em] flex items-center gap-2 pt-2">
@@ -166,13 +166,13 @@ export default function DashboardOverview() {
       {/* Real Statistics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
         {stats.map((stat) => (
-          <Card key={stat.label} className="p-6 md:p-8 border-none shadow-sm bg-white rounded-2xl md:rounded-[3rem] hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
+          <Card key={stat.label} className="p-6 md:p-8 border-none shadow-sm bg-white dark:bg-slate-900 rounded-2xl md:rounded-[3rem] hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
             <div className="flex items-start justify-between">
               <div className="space-y-1">
                 <p className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] leading-tight">{stat.label}</p>
-                <p className="text-3xl md:text-4xl font-black text-slate-900">{stat.value}</p>
+                <p className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white">{stat.value}</p>
               </div>
-              <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-slate-50 flex items-center justify-center transition-all ${stat.color}`}>
+              <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-slate-50 dark:bg-slate-800/60 flex items-center justify-center transition-all ${stat.color}`}>
                 <stat.icon className="w-6 h-6 md:w-7 md:h-7" strokeWidth={2.5} />
               </div>
             </div>
@@ -184,10 +184,10 @@ export default function DashboardOverview() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
         
         {/* Latest Programs & Materials Section */}
-        <Card className="lg:col-span-2 p-5 sm:p-8 md:p-12 rounded-2xl md:rounded-[4rem] border-none shadow-sm bg-white space-y-10">
+        <Card className="lg:col-span-2 p-5 sm:p-8 md:p-12 rounded-2xl md:rounded-[4rem] border-none shadow-sm bg-white dark:bg-slate-900 space-y-10">
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-10">
-              <h2 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tight">Latest Guidance Programs</h2>
+              <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Latest Guidance Programs</h2>
               <Button variant="ghost" onClick={() => navigate('/student/programs')} className="text-indigo-600 font-black uppercase text-[10px] tracking-widest p-0 sm:p-2 self-start sm:self-auto">
                 Explore All <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -196,9 +196,9 @@ export default function DashboardOverview() {
             <div className="space-y-4">
               {programs.length > 0 ? (
                 programs.map((program) => (
-                  <div key={program.id} className="p-4 sm:p-6 md:p-8 bg-slate-50 rounded-xl md:rounded-[2.5rem] flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300">
+                  <div key={program.id} className="p-4 sm:p-6 md:p-8 bg-slate-50 dark:bg-slate-800/60 rounded-xl md:rounded-[2.5rem] flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300">
                     <div className="space-y-1">
-                      <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase leading-tight">{program.title}</h3>
+                      <h3 className="text-lg md:text-xl font-black text-slate-800 dark:text-slate-100 uppercase leading-tight">{program.title}</h3>
                       <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[9px] font-black uppercase text-slate-400 tracking-widest">
                         <span className="flex items-center gap-1.5">
                           <Calendar className="h-3 w-3" />
@@ -214,16 +214,16 @@ export default function DashboardOverview() {
                   </div>
                 ))
               ) : (
-                <div className="text-center py-10 bg-slate-50 rounded-xl border-2 border-dashed border-slate-100">
+                <div className="text-center py-10 bg-slate-50 dark:bg-slate-800/60 rounded-xl border-2 border-dashed border-slate-100 dark:border-slate-800">
                   <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest">No posted guidance programs yet.</p>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="border-t-2 border-slate-100 pt-8 md:pt-10">
+          <div className="border-t-2 border-slate-100 dark:border-slate-800 pt-8 md:pt-10">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-10">
-              <h2 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tight">Latest IEC Materials</h2>
+              <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Latest IEC Materials</h2>
               <Button variant="ghost" onClick={() => navigate('/student/materials')} className="text-indigo-600 font-black uppercase text-[10px] tracking-widest p-0 sm:p-2 self-start sm:self-auto">
                 Explore All <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -232,12 +232,12 @@ export default function DashboardOverview() {
             <div className="space-y-4">
               {latestMaterials.length > 0 ? (
                 latestMaterials.map((material) => (
-                  <div key={material.id} className="p-4 sm:p-6 md:p-8 bg-slate-50 rounded-xl md:rounded-[2.5rem] flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300">
+                  <div key={material.id} className="p-4 sm:p-6 md:p-8 bg-slate-50 dark:bg-slate-800/60 rounded-xl md:rounded-[2.5rem] flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 shrink-0">
                         <FileText className="h-4 w-4" />
                       </div>
-                      <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase leading-tight truncate">{material.title}</h3>
+                      <h3 className="text-lg md:text-xl font-black text-slate-800 dark:text-slate-100 uppercase leading-tight truncate">{material.title}</h3>
                     </div>
                     <Button onClick={() => navigate('/student/materials')} className="bg-slate-900 text-white hover:bg-indigo-600 rounded-xl h-12 px-6 font-black uppercase text-[10px] tracking-widest w-full sm:w-auto transition-colors">
                       View
@@ -245,7 +245,7 @@ export default function DashboardOverview() {
                   </div>
                 ))
               ) : (
-                <div className="text-center py-10 bg-slate-50 rounded-xl border-2 border-dashed border-slate-100">
+                <div className="text-center py-10 bg-slate-50 dark:bg-slate-800/60 rounded-xl border-2 border-dashed border-slate-100 dark:border-slate-800">
                   <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest">No posted IEC materials yet.</p>
                 </div>
               )}

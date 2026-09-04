@@ -140,9 +140,9 @@ export default function StudentProfile() {
     <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6 md:space-y-10 font-sans w-full overflow-hidden animate-in fade-in duration-300">
       
       {/* HEADER BANNER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b pb-6 border-slate-200">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b pb-6 border-slate-200 dark:border-slate-700">
         <div>
-          <h1 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tighter uppercase leading-none">
+          <h1 className="text-3xl md:text-5xl font-black text-slate-900 dark:text-white tracking-tighter uppercase leading-none">
             Student <span className="text-indigo-600">Profile</span>
           </h1>
           <p className="text-slate-400 font-bold uppercase text-[9px] md:text-[10px] tracking-widest mt-2 flex items-center gap-1.5">
@@ -152,18 +152,18 @@ export default function StudentProfile() {
       </div>
 
       {fetching ? (
-        <div className="h-64 flex flex-col items-center justify-center bg-white rounded-2xl border shadow-sm">
+        <div className="h-64 flex flex-col items-center justify-center bg-white dark:bg-slate-900 rounded-2xl border shadow-sm">
           <Loader2 className="animate-spin text-indigo-600 w-10 h-10" />
         </div>
       ) : (
-        <Card className="p-6 md:p-10 border-none shadow-xl bg-white rounded-2xl md:rounded-[3rem] relative overflow-hidden border-t-4 border-t-indigo-600 shadow-slate-100">
+        <Card className="p-6 md:p-10 border-none shadow-xl bg-white dark:bg-slate-900 rounded-2xl md:rounded-[3rem] relative overflow-hidden border-t-4 border-t-indigo-600 shadow-slate-100">
           <form onSubmit={handleSaveProfile} className="space-y-8">
             
             {/* SECTION 1: ACADEMIC INFORMATION */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
                 <GraduationCap className="w-5 h-5 text-indigo-600" />
-                <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
+                <h2 className="text-lg font-black uppercase tracking-tight text-slate-800 dark:text-slate-100">
                   Academic Information
                 </h2>
               </div>
@@ -177,7 +177,7 @@ export default function StudentProfile() {
                     type="email" 
                     value={email} 
                     disabled 
-                    className="h-12 bg-slate-100 border-none rounded-xl font-bold px-4 text-xs text-slate-500 cursor-not-allowed"
+                    className="h-12 bg-slate-100 dark:bg-slate-800 border-none rounded-xl font-bold px-4 text-xs text-slate-500 dark:text-slate-400 cursor-not-allowed"
                   />
                 </div>
 
@@ -191,7 +191,7 @@ export default function StudentProfile() {
                     value={fullName} 
                     onChange={(e) => setFullName(e.target.value)} 
                     required 
-                    className="h-12 bg-slate-50 border-none rounded-xl font-bold px-4 text-xs focus:ring-1 focus:ring-indigo-500"
+                    className="h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold px-4 text-xs focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
 
@@ -200,10 +200,10 @@ export default function StudentProfile() {
                     Course / Program
                   </Label>
                   <Select value={program} onValueChange={setProgram} required>
-                    <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold px-4 text-xs">
+                    <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold px-4 text-xs">
                       <SelectValue placeholder="Select Course" />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl border-none shadow-2xl bg-white">
+                    <SelectContent className="rounded-xl border-none shadow-2xl bg-white dark:bg-slate-900">
                       <SelectItem value="BSIT">BSIT - Bachelor of Science in Information Technology</SelectItem>
                       <SelectItem value="BSBA">BSBA - Bachelor of Science in Business Administration</SelectItem>
                       <SelectItem value="BSED">BSED - Bachelor of Secondary Education</SelectItem>
@@ -219,10 +219,10 @@ export default function StudentProfile() {
                     Year Level
                   </Label>
                   <Select value={yearLevel} onValueChange={setYearLevel} required>
-                    <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold px-4 text-xs">
+                    <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold px-4 text-xs">
                       <SelectValue placeholder="Select Year Level" />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl border-none shadow-2xl bg-white">
+                    <SelectContent className="rounded-xl border-none shadow-2xl bg-white dark:bg-slate-900">
                       <SelectItem value="1st Year">1st Year</SelectItem>
                       <SelectItem value="2nd Year">2nd Year</SelectItem>
                       <SelectItem value="3rd Year">3rd Year</SelectItem>
@@ -235,9 +235,9 @@ export default function StudentProfile() {
 
             {/* SECTION 2: DEMOGRAPHICS */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
                 <User className="w-5 h-5 text-indigo-600" />
-                <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
+                <h2 className="text-lg font-black uppercase tracking-tight text-slate-800 dark:text-slate-100">
                   Demographics & Diversity
                 </h2>
               </div>
@@ -248,10 +248,10 @@ export default function StudentProfile() {
                     Gender
                   </Label>
                   <Select value={gender} onValueChange={setGender} required>
-                    <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold px-4 text-xs">
+                    <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold px-4 text-xs">
                       <SelectValue placeholder="Select Gender" />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl border-none shadow-2xl bg-white">
+                    <SelectContent className="rounded-xl border-none shadow-2xl bg-white dark:bg-slate-900">
                       <SelectItem value="Male">Male</SelectItem>
                       <SelectItem value="Female">Female</SelectItem>
                       <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
@@ -271,7 +271,7 @@ export default function StudentProfile() {
                     value={age} 
                     onChange={(e) => setAge(e.target.value)} 
                     required 
-                    className="h-12 bg-slate-50 border-none rounded-xl font-bold px-4 text-xs focus:ring-1 focus:ring-indigo-500"
+                    className="h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold px-4 text-xs focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
               </div>
@@ -281,14 +281,14 @@ export default function StudentProfile() {
                 <div 
                   onClick={() => setIsPwd(!isPwd)}
                   className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
-                    isPwd ? 'bg-indigo-50 border-indigo-500 text-indigo-900' : 'bg-slate-50 border-slate-200 text-slate-600'
+                    isPwd ? 'bg-indigo-50 border-indigo-500 text-indigo-900' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
                   }`}
                 >
                   <div className="space-y-0.5">
                     <p className="font-extrabold text-xs">Person with Disability (PWD)</p>
                     <p className="text-[10px] text-slate-400 font-medium">Are you a registered PWD student?</p>
                   </div>
-                  <Badge className={`uppercase text-[9px] font-black px-3 py-1 ${isPwd ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                  <Badge className={`uppercase text-[9px] font-black px-3 py-1 ${isPwd ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
                     {isPwd ? 'YES' : 'NO'}
                   </Badge>
                 </div>
@@ -296,14 +296,14 @@ export default function StudentProfile() {
                 <div 
                   onClick={() => setIsIp(!isIp)}
                   className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
-                    isIp ? 'bg-indigo-50 border-indigo-500 text-indigo-900' : 'bg-slate-50 border-slate-200 text-slate-600'
+                    isIp ? 'bg-indigo-50 border-indigo-500 text-indigo-900' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
                   }`}
                 >
                   <div className="space-y-0.5">
                     <p className="font-extrabold text-xs">Indigenous People (IP)</p>
                     <p className="text-[10px] text-slate-400 font-medium">Do you belong to an IP community?</p>
                   </div>
-                  <Badge className={`uppercase text-[9px] font-black px-3 py-1 ${isIp ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                  <Badge className={`uppercase text-[9px] font-black px-3 py-1 ${isIp ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
                     {isIp ? 'YES' : 'NO'}
                   </Badge>
                 </div>

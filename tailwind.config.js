@@ -7,62 +7,71 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        border: "hsl(222, 15%, 85%)",
-        input: "hsl(0, 0%, 85%)",
-        ring: "hsl(210, 85%, 55%)",
-        background: "hsl(0, 0%, 99%)",
-        foreground: "hsl(222, 25%, 20%)",
+        // These reference the CSS custom properties defined in index.css
+        // (:root for light, .dark for the student dashboard's scoped dark
+        // mode) instead of hardcoded values — without the var() + hsl()
+        // wrapping, a .dark ancestor class has nothing to actually change,
+        // since Tailwind would bake in the light value at build time.
+        // hsl(var(--x) / <alpha-value>) is what makes opacity modifiers
+        // (bg-background/90, etc.) work on top of a CSS variable.
+        border: "hsl(var(--color-border) / <alpha-value>)",
+        input: "hsl(var(--color-input) / <alpha-value>)",
+        ring: "hsl(var(--color-ring) / <alpha-value>)",
+        background: "hsl(var(--color-background) / <alpha-value>)",
+        foreground: "hsl(var(--color-foreground) / <alpha-value>)",
         primary: {
-          DEFAULT: "hsl(222, 75%, 52%)",
-          foreground: "hsl(0, 0%, 100%)",
-          hover: "hsl(222, 75%, 42%)",
-          active: "hsl(222, 75%, 38%)",
+          DEFAULT: "hsl(var(--color-primary) / <alpha-value>)",
+          foreground: "hsl(var(--color-primary-foreground) / <alpha-value>)",
+          hover: "hsl(var(--color-primary-hover) / <alpha-value>)",
+          active: "hsl(var(--color-primary-active) / <alpha-value>)",
         },
         secondary: {
-          DEFAULT: "hsl(222, 65%, 60%)",
-          foreground: "hsl(0, 0%, 100%)",
-          hover: "hsl(222, 65%, 50%)",
-          active: "hsl(222, 65%, 45%)",
+          DEFAULT: "hsl(var(--color-secondary) / <alpha-value>)",
+          foreground: "hsl(var(--color-secondary-foreground) / <alpha-value>)",
+          hover: "hsl(var(--color-secondary-hover) / <alpha-value>)",
+          active: "hsl(var(--color-secondary-active) / <alpha-value>)",
         },
         tertiary: {
-          DEFAULT: "hsl(240, 35%, 95%)",
-          foreground: "hsl(222, 35%, 25%)",
+          DEFAULT: "hsl(var(--color-tertiary) / <alpha-value>)",
+          foreground: "hsl(var(--color-tertiary-foreground) / <alpha-value>)",
         },
         accent: {
-          DEFAULT: "hsl(266, 80%, 60%)",
-          foreground: "hsl(0, 0%, 100%)",
+          DEFAULT: "hsl(var(--color-accent) / <alpha-value>)",
+          foreground: "hsl(var(--color-accent-foreground) / <alpha-value>)",
         },
         success: {
-          DEFAULT: "hsl(145, 60%, 40%)",
-          foreground: "hsl(0, 0%, 100%)",
+          DEFAULT: "hsl(var(--color-success) / <alpha-value>)",
+          foreground: "hsl(var(--color-success-foreground) / <alpha-value>)",
         },
         warning: {
-          DEFAULT: "hsl(45, 100%, 50%)",
-          foreground: "hsl(0, 0%, 10%)",
+          DEFAULT: "hsl(var(--color-warning) / <alpha-value>)",
+          foreground: "hsl(var(--color-warning-foreground) / <alpha-value>)",
         },
         error: {
-          DEFAULT: "hsl(0, 80%, 50%)",
-          foreground: "hsl(0, 0%, 100%)",
+          DEFAULT: "hsl(var(--color-error) / <alpha-value>)",
+          foreground: "hsl(var(--color-error-foreground) / <alpha-value>)",
         },
         info: {
-          DEFAULT: "hsl(210, 85%, 45%)",
-          foreground: "hsl(0, 0%, 100%)",
+          DEFAULT: "hsl(var(--color-info) / <alpha-value>)",
+          foreground: "hsl(var(--color-info-foreground) / <alpha-value>)",
         },
-     muted: {
-          DEFAULT: "hsl(0, 0%, 95%)",
-          foreground: "hsl(0, 0%, 40%)",
+        muted: {
+          DEFAULT: "hsl(var(--color-muted) / <alpha-value>)",
+          foreground: "hsl(var(--color-muted-foreground) / <alpha-value>)",
         },
+        // No dark-mode variable defined for this one (kept the same in
+        // both themes — a destructive-red reads fine on both).
         destructive: {
           DEFAULT: "hsl(0, 80%, 50%)",
           foreground: "hsl(0, 0%, 100%)",
         },
         card: {
-          DEFAULT: "hsl(0, 0%, 100%)",
-          foreground: "hsl(222, 25%, 20%)",
+          DEFAULT: "hsl(var(--color-card) / <alpha-value>)",
+          foreground: "hsl(var(--color-card-foreground) / <alpha-value>)",
         },
         popover: {
-          DEFAULT: "hsl(0, 0%, 100%)",
-          foreground: "hsl(222, 25%, 20%)",
+          DEFAULT: "hsl(var(--color-popover) / <alpha-value>)",
+          foreground: "hsl(var(--color-popover-foreground) / <alpha-value>)",
         },
         neutral: {
           50: "hsl(0, 0%, 98%)",

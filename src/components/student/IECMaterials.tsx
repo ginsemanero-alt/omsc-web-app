@@ -121,12 +121,12 @@ export default function IECMaterials() {
   return (
     <div className="space-y-8 p-6 max-w-7xl mx-auto animate-in fade-in duration-700">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm">
         <div className="space-y-1">
-          <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">
+          <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">
             IEC <span className="text-indigo-600">Materials</span>
           </h1>
-          <p className="text-slate-500 font-medium flex items-center gap-2">
+          <p className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-2">
             <Calendar className="w-4 h-4 text-indigo-400" />
             Guidance Resources Library
           </p>
@@ -138,32 +138,32 @@ export default function IECMaterials() {
             placeholder="Search materials..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-11 h-12 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20"
+            className="pl-11 h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20"
           />
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="bg-slate-100/50 p-1.5 rounded-2xl mb-8 border border-slate-100">
-          <TabsTrigger value="articles" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Articles</TabsTrigger>
-          <TabsTrigger value="infographics" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Infographics</TabsTrigger>
-          <TabsTrigger value="videos" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Videos</TabsTrigger>
-          <TabsTrigger value="audio" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Audio</TabsTrigger>
-          <TabsTrigger value="links" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs">Links</TabsTrigger>
+        <TabsList className="bg-slate-100/50 dark:bg-slate-800/50 p-1.5 rounded-2xl mb-8 border border-slate-100 dark:border-slate-800">
+          <TabsTrigger value="articles" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">Articles</TabsTrigger>
+          <TabsTrigger value="infographics" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">Infographics</TabsTrigger>
+          <TabsTrigger value="videos" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">Videos</TabsTrigger>
+          <TabsTrigger value="audio" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">Audio</TabsTrigger>
+          <TabsTrigger value="links" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">Links</TabsTrigger>
         </TabsList>
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-pulse">
             {[0, 1, 2, 3].map((n) => (
-              <div key={n} className="h-40 bg-slate-100 rounded-[2rem]" />
+              <div key={n} className="h-40 bg-slate-100 dark:bg-slate-800 rounded-[2rem]" />
             ))}
           </div>
         ) : loadFailed ? (
           <div className="h-64 flex flex-col items-center justify-center gap-4 text-center px-4">
-            <p className="text-base font-black text-slate-800 uppercase tracking-tight">
+            <p className="text-base font-black text-slate-800 dark:text-slate-100 uppercase tracking-tight">
               Couldn't load materials
             </p>
-            <p className="text-sm text-slate-500 max-w-sm">
+            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm">
               Check your internet connection and try again.
             </p>
             <Button
@@ -178,19 +178,19 @@ export default function IECMaterials() {
             {/* ARTICLES TAB */}
             <TabsContent value="articles" className="grid grid-cols-1 md:grid-cols-2 gap-6 outline-none">
               {articles.length > 0 ? articles.map((item) => (
-                <Card key={item.id} className="p-6 bg-white border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all group">
+                <Card key={item.id} className="p-6 bg-white dark:bg-slate-900 border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all group">
                   <div className="flex gap-5">
-                    <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-50 transition-colors">
+                    <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-50 transition-colors">
                       <FileText className="w-8 h-8 text-indigo-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-xl font-black text-slate-800 truncate uppercase mb-1">{item.title}</h3>
+                      <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-1">{item.title}</h3>
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">{item.format || 'Document'}</p>
                       <div className="flex gap-2">
                         <Button onClick={() => handlePreview(item)} className="flex-1 h-11 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs">
                           <Eye className="w-3 h-3 mr-2" /> Preview
                         </Button>
-                        <Button onClick={() => downloadFile(item.file_url, item.title)} variant="outline" className="flex-1 h-11 border-slate-200 rounded-xl font-black uppercase text-xs">
+                        <Button onClick={() => downloadFile(item.file_url, item.title)} variant="outline" className="flex-1 h-11 border-slate-200 dark:border-slate-700 rounded-xl font-black uppercase text-xs">
                           <Download className="w-3 h-3 mr-2" /> Save
                         </Button>
                       </div>
@@ -203,8 +203,8 @@ export default function IECMaterials() {
             {/* INFOGRAPHICS TAB */}
             <TabsContent value="infographics" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 outline-none">
               {infographics.length > 0 ? infographics.map((item) => (
-                <Card key={item.id} className="overflow-hidden bg-white border-none shadow-sm rounded-[2.5rem] group hover:shadow-2xl transition-all duration-500">
-                  <div className="relative h-64 bg-slate-100 overflow-hidden">
+                <Card key={item.id} className="overflow-hidden bg-white dark:bg-slate-900 border-none shadow-sm rounded-[2.5rem] group hover:shadow-2xl transition-all duration-500">
+                  <div className="relative h-64 bg-slate-100 dark:bg-slate-800 overflow-hidden">
                     <img src={item.file_url} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
                     {/* Darkened backdrop is a nice-to-have hover effect on
                         desktop — kept hover-only. The button itself is the
@@ -213,13 +213,13 @@ export default function IECMaterials() {
                         unreachable on mobile/tablet. */}
                     <div className="absolute inset-0 bg-black/40 opacity-0 md:group-hover:opacity-100 transition-opacity" />
                     <div className="absolute inset-0 flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                      <Button onClick={() => handlePreview(item)} className="rounded-full bg-white text-slate-900 h-12 w-12 p-0 shadow-xl">
+                      <Button onClick={() => handlePreview(item)} className="rounded-full bg-white dark:bg-slate-900 text-slate-900 dark:text-white h-12 w-12 p-0 shadow-xl">
                         <Maximize2 className="w-5 h-5" />
                       </Button>
                     </div>
                   </div>
                   <div className="p-6">
-                    <h3 className="font-black text-slate-800 truncate uppercase mb-4">{item.title}</h3>
+                    <h3 className="font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-4">{item.title}</h3>
                     <Button onClick={() => downloadFile(item.file_url, item.title)} className="w-full h-12 bg-slate-900 hover:bg-indigo-600 rounded-2xl font-black uppercase text-xs">
                       <Download className="w-4 h-4 mr-2" /> Download
                     </Button>
@@ -231,13 +231,13 @@ export default function IECMaterials() {
             {/* VIDEOS TAB */}
             <TabsContent value="videos" className="grid grid-cols-1 md:grid-cols-2 gap-6 outline-none">
               {videos.length > 0 ? videos.map((item) => (
-                <Card key={item.id} className="p-8 bg-white border-none shadow-sm rounded-[2.5rem] group">
+                <Card key={item.id} className="p-8 bg-white dark:bg-slate-900 border-none shadow-sm rounded-[2.5rem] group">
                   <div className="flex items-center gap-6">
                     <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center">
                       <Youtube className="w-10 h-10 text-red-600" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-xl font-black text-slate-800 uppercase mb-4">{item.title}</h3>
+                      <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 uppercase mb-4">{item.title}</h3>
                       <Button onClick={() => handlePreview(item)} className="bg-red-600 hover:bg-red-700 h-12 px-8 rounded-2xl font-black uppercase text-xs shadow-lg shadow-red-100 text-white">
                         Watch Now
                       </Button>
@@ -250,13 +250,13 @@ export default function IECMaterials() {
             {/* AUDIO TAB */}
             <TabsContent value="audio" className="grid grid-cols-1 md:grid-cols-2 gap-6 outline-none">
               {audioItems.length > 0 ? audioItems.map((item) => (
-                <Card key={item.id} className="p-6 bg-white border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all group">
+                <Card key={item.id} className="p-6 bg-white dark:bg-slate-900 border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all group">
                   <div className="flex items-center gap-5">
                     <div className="w-16 h-16 bg-purple-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-purple-100 transition-colors">
                       <Music className="w-8 h-8 text-purple-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-xl font-black text-slate-800 truncate uppercase mb-3">{item.title}</h3>
+                      <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-3">{item.title}</h3>
                       <audio src={item.file_url} controls className="w-full h-10" />
                     </div>
                   </div>
@@ -267,13 +267,13 @@ export default function IECMaterials() {
             {/* LINKS TAB */}
             <TabsContent value="links" className="grid grid-cols-1 md:grid-cols-2 gap-6 outline-none">
               {links.length > 0 ? links.map((item) => (
-                <Card key={item.id} className="p-6 bg-white border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all group">
+                <Card key={item.id} className="p-6 bg-white dark:bg-slate-900 border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all group">
                   <div className="flex items-center gap-5">
                     <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-100 transition-colors">
                       <LinkIcon className="w-8 h-8 text-indigo-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-xl font-black text-slate-800 truncate uppercase mb-4">{item.title}</h3>
+                      <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-4">{item.title}</h3>
                       <a
                         href={item.file_url}
                         target="_blank"
@@ -294,9 +294,9 @@ export default function IECMaterials() {
       {/* --- PREVIEW MODAL --- */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
         <DialogContent className="max-w-5xl w-[95vw] h-[90vh] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl flex flex-col">
-          <DialogHeader className="p-6 bg-white border-b border-slate-100 flex flex-row items-center justify-between shrink-0">
+          <DialogHeader className="p-6 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between shrink-0">
             <div>
-              <DialogTitle className="font-black uppercase tracking-tighter text-xl text-slate-900">{previewItem?.title}</DialogTitle>
+              <DialogTitle className="font-black uppercase tracking-tighter text-xl text-slate-900 dark:text-white">{previewItem?.title}</DialogTitle>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Material Preview Mode</p>
             </div>
           </DialogHeader>
@@ -314,7 +314,7 @@ export default function IECMaterials() {
                 fallback={
                   <div className="flex flex-col items-center justify-center gap-3">
                     <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
                       Loading PDF...
                     </p>
                   </div>
@@ -350,13 +350,13 @@ export default function IECMaterials() {
               </div>
             ) : (
               <div className="text-center">
-                <HardDrive className="w-16 h-16 text-slate-700 mx-auto" />
-                <p className="font-bold text-slate-500 mt-4 uppercase text-xs">Format not supported for preview</p>
+                <HardDrive className="w-16 h-16 text-slate-700 dark:text-slate-200 mx-auto" />
+                <p className="font-bold text-slate-500 dark:text-slate-400 mt-4 uppercase text-xs">Format not supported for preview</p>
               </div>
             )}
           </div>
           
-          <div className="p-4 bg-white border-t border-slate-100 flex justify-end gap-3 shrink-0">
+          <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 shrink-0">
             <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="rounded-xl font-bold uppercase text-[10px]">Close</Button>
             
             {/* Hide download button for streaming/external-link types */}
@@ -374,7 +374,7 @@ export default function IECMaterials() {
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="col-span-full py-32 text-center bg-slate-50/50 rounded-[3rem] border-4 border-dashed border-slate-100">
+    <div className="col-span-full py-32 text-center bg-slate-50/50 dark:bg-slate-800/50 rounded-[3rem] border-4 border-dashed border-slate-100 dark:border-slate-800">
       <HardDrive className="w-16 h-16 text-slate-200 mx-auto mb-4" />
       <p className="text-slate-400 font-black uppercase text-xl tracking-tighter">{message}</p>
     </div>

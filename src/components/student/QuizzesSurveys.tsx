@@ -625,7 +625,7 @@ export default function QuizzesSurveys() {
                   ${
                     selected
                       ? 'border-indigo-600 bg-indigo-50 shadow-md'
-                      : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-indigo-300 hover:bg-slate-50'
                   }
                 `}
               >
@@ -687,7 +687,7 @@ export default function QuizzesSurveys() {
                     ${
                       selected
                         ? 'bg-indigo-600 text-white shadow-lg scale-[1.03]'
-                        : 'bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-indigo-50 hover:text-indigo-600'
                     }
                   `}
                 >
@@ -722,11 +722,11 @@ export default function QuizzesSurveys() {
           placeholder="Write your response here..."
           className="
             w-full min-h-[160px] sm:min-h-[190px]
-            rounded-2xl bg-slate-50
-            border border-slate-200
+            rounded-2xl bg-slate-50 dark:bg-slate-800
+            border border-slate-200 dark:border-slate-700
             p-4 sm:p-6
             text-sm sm:text-base
-            font-medium text-slate-700
+            font-medium text-slate-700 dark:text-slate-200
             outline-none resize-none
             focus:border-indigo-500
             focus:ring-4 focus:ring-indigo-100
@@ -748,11 +748,11 @@ export default function QuizzesSurveys() {
         placeholder="Write your response here..."
         className="
           w-full min-h-[160px]
-          rounded-2xl bg-slate-50
-          border border-slate-200
+          rounded-2xl bg-slate-50 dark:bg-slate-800
+          border border-slate-200 dark:border-slate-700
           p-5
           text-sm sm:text-base
-          font-medium text-slate-700
+          font-medium text-slate-700 dark:text-slate-200
           outline-none resize-none
           focus:border-indigo-500
           focus:ring-4 focus:ring-indigo-100
@@ -794,11 +794,11 @@ export default function QuizzesSurveys() {
             Student Portal
           </p>
 
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 dark:text-white tracking-tight">
             Assessments <span className="text-indigo-600">&</span> Surveys
           </h1>
 
-          <p className="text-sm sm:text-base text-slate-500 max-w-2xl leading-relaxed">
+          <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
             Take part in guidance assessments and surveys to help us
             understand student awareness and experiences.
           </p>
@@ -813,7 +813,7 @@ export default function QuizzesSurveys() {
           className={`h-10 px-5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
             view === 'available'
               ? 'bg-indigo-600 text-white shadow-md'
-              : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'
+              : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
           }`}
         >
           Available Surveys
@@ -824,7 +824,7 @@ export default function QuizzesSurveys() {
           className={`h-10 px-5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
             view === 'results'
               ? 'bg-indigo-600 text-white shadow-md'
-              : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'
+              : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
           }`}
         >
           My Results ({results.length})
@@ -843,8 +843,8 @@ export default function QuizzesSurveys() {
             </div>
           </div>
         ) : resultsLoadFailed ? (
-          <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 px-6">
-            <h2 className="text-lg sm:text-xl font-black text-slate-700">
+          <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 dark:bg-slate-800 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 px-6">
+            <h2 className="text-lg sm:text-xl font-black text-slate-700 dark:text-slate-200">
               Couldn't load your results
             </h2>
             <p className="text-sm text-slate-400 mt-2 max-w-md">
@@ -858,9 +858,9 @@ export default function QuizzesSurveys() {
             </Button>
           </div>
         ) : results.length === 0 ? (
-          <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 px-6">
+          <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 dark:bg-slate-800 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 px-6">
             <FileCheck2 className="w-12 h-12 text-slate-300 mb-4" />
-            <h2 className="text-lg sm:text-xl font-black text-slate-700">
+            <h2 className="text-lg sm:text-xl font-black text-slate-700 dark:text-slate-200">
               No Completed Surveys Yet
             </h2>
             <p className="text-sm text-slate-400 mt-2 max-w-md">
@@ -872,14 +872,14 @@ export default function QuizzesSurveys() {
             {results.map((result) => (
               <Card
                 key={result.id}
-                className="p-5 sm:p-6 rounded-3xl border border-slate-100 shadow-sm bg-white flex items-center gap-4"
+                className="p-5 sm:p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 flex items-center gap-4"
               >
                 <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
                   <FileCheck2 className="w-6 h-6 text-indigo-600" />
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-base sm:text-lg font-black text-slate-900 truncate">
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white truncate">
                     {result.title}
                   </h3>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
@@ -928,8 +928,8 @@ export default function QuizzesSurveys() {
       {view === 'available' && (!activeSurvey ? (
         <>
           {surveysLoadFailed ? (
-            <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 px-6">
-              <h2 className="text-lg sm:text-xl font-black text-slate-700">
+            <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 dark:bg-slate-800 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 px-6">
+              <h2 className="text-lg sm:text-xl font-black text-slate-700 dark:text-slate-200">
                 Couldn't load assessments
               </h2>
 
@@ -945,10 +945,10 @@ export default function QuizzesSurveys() {
               </Button>
             </div>
           ) : surveys.length === 0 ? (
-            <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 px-6">
+            <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 dark:bg-slate-800 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 px-6">
               <ClipboardList className="w-12 h-12 text-slate-300 mb-4" />
 
-              <h2 className="text-lg sm:text-xl font-black text-slate-700">
+              <h2 className="text-lg sm:text-xl font-black text-slate-700 dark:text-slate-200">
                 No Active Assessments
               </h2>
 
@@ -965,9 +965,9 @@ export default function QuizzesSurveys() {
                   className="
                     p-5 sm:p-7 lg:p-8
                     rounded-3xl
-                    border border-slate-100
+                    border border-slate-100 dark:border-slate-800
                     shadow-sm
-                    bg-white
+                    bg-white dark:bg-slate-900
                     hover:shadow-xl
                     transition-all duration-300
                   "
@@ -1017,7 +1017,7 @@ export default function QuizzesSurveys() {
                           ${
                             survey.type === 'knowledge'
                               ? 'bg-purple-50 text-purple-600'
-                              : 'bg-slate-100 text-slate-500'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
                           }
                         `}
                       >
@@ -1026,11 +1026,11 @@ export default function QuizzesSurveys() {
                     </div>
                   </div>
 
-                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 leading-tight">
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 dark:text-white leading-tight">
                     {survey.title}
                   </h2>
 
-                  <p className="mt-3 text-sm text-slate-500 leading-relaxed">
+                  <p className="mt-3 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                     {survey.description ||
                       'Please complete this assessment based on your own knowledge and experience.'}
                   </p>
@@ -1057,7 +1057,7 @@ export default function QuizzesSurveys() {
                       tracking-widest
                       ${
                         survey.is_completed
-                          ? 'bg-slate-100 text-slate-400'
+                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-400'
                           : 'bg-indigo-600 text-white hover:bg-indigo-700'
                       }
                     `}
@@ -1080,10 +1080,10 @@ export default function QuizzesSurveys() {
         <Card
           className="
             w-full
-            border border-slate-100
+            border border-slate-100 dark:border-slate-800
             shadow-sm
             rounded-3xl
-            bg-white
+            bg-white dark:bg-slate-900
             overflow-hidden
           "
         >
@@ -1091,14 +1091,14 @@ export default function QuizzesSurveys() {
           <div ref={assessmentTopRef} className="scroll-mt-24" />
 
           {/* TOP BAR */}
-          <div className="p-4 sm:p-6 lg:p-8 border-b border-slate-100">
+          <div className="p-4 sm:p-6 lg:p-8 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">
                   Assessment
                 </p>
 
-                <h2 className="mt-1 text-lg sm:text-xl lg:text-2xl font-black text-slate-900 truncate">
+                <h2 className="mt-1 text-lg sm:text-xl lg:text-2xl font-black text-slate-900 dark:text-white truncate">
                   {activeSurvey.title}
                 </h2>
               </div>
@@ -1110,7 +1110,7 @@ export default function QuizzesSurveys() {
                 className="
                   w-9 h-9 sm:w-10 sm:h-10
                   rounded-full
-                  bg-slate-50
+                  bg-slate-50 dark:bg-slate-800
                   flex items-center justify-center
                   text-slate-400
                   hover:text-rose-500
@@ -1128,7 +1128,7 @@ export default function QuizzesSurveys() {
             {!showInstructions && !showReview && !scoreSummary && (
               <div className="mt-6">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-500">
+                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Question {currentQuestionIndex + 1} of{' '}
                     {totalQuestions}
                   </span>
@@ -1138,7 +1138,7 @@ export default function QuizzesSurveys() {
                   </span>
                 </div>
 
-                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-indigo-600 rounded-full transition-all duration-300"
                     style={{
@@ -1165,11 +1165,11 @@ export default function QuizzesSurveys() {
                   Before You Begin
                 </p>
 
-                <h3 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 leading-tight">
+                <h3 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-tight">
                   Please answer carefully.
                 </h3>
 
-                <p className="mt-4 text-sm sm:text-base text-slate-500 leading-relaxed">
+                <p className="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
                   Answer each question based on your own knowledge,
                   understanding, and experience. Take a moment to review
                   your response before moving to the next question.
@@ -1251,7 +1251,7 @@ export default function QuizzesSurveys() {
                       Question {currentQuestionIndex + 1}
                     </p>
 
-                    <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 leading-tight">
+                    <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 dark:text-white leading-tight">
                       {currentQuestion.text}
                     </h3>
                   </div>
@@ -1271,7 +1271,7 @@ export default function QuizzesSurveys() {
                 </div>
 
                 {/* NAVIGATION */}
-                <div className="mt-8 sm:mt-10 pt-6 border-t border-slate-100 flex flex-col-reverse sm:flex-row gap-3">
+                <div className="mt-8 sm:mt-10 pt-6 border-t border-slate-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row gap-3">
                   <Button
                     variant="ghost"
                     onClick={handlePreviousQuestion}
@@ -1328,11 +1328,11 @@ export default function QuizzesSurveys() {
                     Final Review
                   </p>
 
-                  <h3 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900">
+                  <h3 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white">
                     Review Your Answers
                   </h3>
 
-                  <p className="mt-3 text-sm sm:text-base text-slate-500 leading-relaxed">
+                  <p className="mt-3 text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
                     Please review your responses carefully before
                     submitting. You can still edit any answer.
                   </p>
@@ -1348,8 +1348,8 @@ export default function QuizzesSurveys() {
                         className="
                           p-4 sm:p-6
                           rounded-2xl
-                          border border-slate-200
-                          bg-white
+                          border border-slate-200 dark:border-slate-700
+                          bg-white dark:bg-slate-900
                         "
                       >
                         <div className="flex items-start gap-3">
@@ -1357,8 +1357,8 @@ export default function QuizzesSurveys() {
                             className="
                               w-8 h-8
                               rounded-xl
-                              bg-slate-100
-                              text-slate-600
+                              bg-slate-100 dark:bg-slate-800
+                              text-slate-600 dark:text-slate-300
                               flex items-center justify-center
                               text-xs font-black
                               shrink-0
@@ -1368,12 +1368,12 @@ export default function QuizzesSurveys() {
                           </span>
 
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm sm:text-base font-black text-slate-800 leading-relaxed">
+                            <p className="text-sm sm:text-base font-black text-slate-800 dark:text-slate-100 leading-relaxed">
                               {question.text}
                             </p>
 
-                            <div className="mt-3 p-3 sm:p-4 rounded-xl bg-slate-50">
-                              <p className="text-xs sm:text-sm font-semibold text-slate-600 whitespace-pre-wrap break-words">
+                            <div className="mt-3 p-3 sm:p-4 rounded-xl bg-slate-50 dark:bg-slate-800">
+                              <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-words">
                                 {answer !== undefined &&
                                 answer !== null &&
                                 String(answer).trim() !== ''
@@ -1454,7 +1454,7 @@ export default function QuizzesSurveys() {
                       font-black uppercase
                       text-[10px] sm:text-xs
                       tracking-widest
-                      disabled:bg-slate-200
+                      disabled:bg-slate-200 dark:bg-slate-700
                       disabled:text-slate-400
                     "
                   >
@@ -1491,7 +1491,7 @@ export default function QuizzesSurveys() {
                     Assessment Complete
                   </p>
 
-                  <h3 className="text-3xl sm:text-4xl font-black text-slate-900">
+                  <h3 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">
                     {scoreSummary.correct} / {scoreSummary.total} Correct
                   </h3>
 
@@ -1499,7 +1499,7 @@ export default function QuizzesSurveys() {
                     {scoreSummary.percentage}% Score
                   </p>
 
-                  <p className="mt-4 text-sm sm:text-base text-slate-500 leading-relaxed">
+                  <p className="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
                     {scoreSummary.missed.length === 0
                       ? 'Perfect score! You answered every knowledge question correctly.'
                       : "Here's what to review — each item below links to where you can learn more."}
@@ -1517,25 +1517,25 @@ export default function QuizzesSurveys() {
                           <XCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
 
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm sm:text-base font-black text-slate-800 leading-relaxed">
+                            <p className="text-sm sm:text-base font-black text-slate-800 dark:text-slate-100 leading-relaxed">
                               {question.text}
                             </p>
 
                             <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              <div className="p-3 rounded-xl bg-white border border-rose-100">
+                              <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-100">
                                 <p className="text-[9px] font-black uppercase text-rose-500">
                                   Your Answer
                                 </p>
-                                <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-600">
+                                <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
                                   {studentAnswer || 'No answer'}
                                 </p>
                               </div>
 
-                              <div className="p-3 rounded-xl bg-white border border-emerald-100">
+                              <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-emerald-100">
                                 <p className="text-[9px] font-black uppercase text-emerald-600">
                                   Correct Answer
                                 </p>
-                                <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-600">
+                                <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
                                   {question.correct_option}
                                 </p>
                               </div>
@@ -1605,7 +1605,7 @@ export default function QuizzesSurveys() {
           <div
             className="
               w-full max-w-md
-              bg-white
+              bg-white dark:bg-slate-900
               rounded-3xl
               shadow-2xl
               p-6 sm:p-8
@@ -1616,18 +1616,18 @@ export default function QuizzesSurveys() {
               <CheckCircle2 className="w-7 h-7 text-indigo-600" />
             </div>
 
-            <h3 className="mt-5 text-xl sm:text-2xl font-black text-slate-900 text-center">
+            <h3 className="mt-5 text-xl sm:text-2xl font-black text-slate-900 dark:text-white text-center">
               Submit Your Response?
             </h3>
 
-            <p className="mt-3 text-sm text-slate-500 text-center leading-relaxed">
+            <p className="mt-3 text-sm text-slate-500 dark:text-slate-400 text-center leading-relaxed">
               You have reviewed your answers. Are you sure you want to
               submit this assessment?
             </p>
 
-            <div className="mt-4 p-4 rounded-2xl bg-slate-50">
-              <p className="text-xs text-slate-500 text-center leading-relaxed">
-                <strong className="text-slate-700">
+            <div className="mt-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800">
+              <p className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">
+                <strong className="text-slate-700 dark:text-slate-200">
                   Please note:
                 </strong>{' '}
                 After submission, your responses can no longer be
@@ -1644,7 +1644,7 @@ export default function QuizzesSurveys() {
                 className="
                   h-12
                   rounded-2xl
-                  bg-slate-50
+                  bg-slate-50 dark:bg-slate-800
                   font-black uppercase
                   text-[10px]
                   tracking-wider
@@ -1702,7 +1702,7 @@ function InstructionItem({
         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
       </div>
 
-      <p className="text-sm text-slate-600 leading-relaxed">
+      <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
         {children}
       </p>
     </div>
