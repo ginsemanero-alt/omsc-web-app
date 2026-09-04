@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, Suspense, lazy } from 'react';
 import { supabase } from '../../lib/supabase';
 import { compressImageFile } from '../../lib/imageCompress';
+// Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
+// this chunk unless someone actually opens a PDF preview.
+const PdfPreview = lazy(() => import('../shared/PdfPreview'));
 
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -40,7 +43,6 @@ import {
   AlertCircle,
   Tag,
   Filter,
-  ExternalLink,
 } from 'lucide-react';
 
 type MaterialType = 'PDF' | 'Image' | 'Video' | 'Audio' | 'Link';
@@ -1643,30 +1645,18 @@ export default function IECMaterials() {
             ) : previewItem &&
               previewItem.type === 'PDF' &&
               previewItem.file_url ? (
-              /* PDF — embedding via <iframe src="file.pdf"> depends on the
-                 browser having a built-in PDF viewer. Desktop Chrome
-                 usually does; mobile Chrome/Safari generally don't, and
-                 silently render "This page has been blocked by Chrome"
-                 inside the iframe instead — unrecoverable from here, since
-                 a cross-origin iframe gives the parent page no way to
-                 detect that failure. Opening it directly works the same
-                 everywhere. */
-              <div className="p-8 w-full max-w-xl flex flex-col items-center gap-6 text-center">
-                <div className="w-24 h-24 rounded-3xl bg-rose-500/10 flex items-center justify-center">
-                  <FileText className="w-12 h-12 text-rose-400" />
-                </div>
-                <p className="text-slate-300 text-sm">
-                  PDF preview opens best in its own tab.
-                </p>
-                <a
-                  href={previewItem.file_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 h-12 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-xs"
-                >
-                  Open PDF <ExternalLink className="w-4 h-4" />
-                </a>
-              </div>
+              <Suspense
+                fallback={
+                  <div className="flex flex-col items-center justify-center gap-3">
+                    <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      Loading PDF...
+                    </p>
+                  </div>
+                }
+              >
+                <PdfPreview url={previewItem.file_url} />
+              </Suspense>
             ) : previewItem &&
               previewItem.type === 'Image' &&
               (previewItem.file_url ||
