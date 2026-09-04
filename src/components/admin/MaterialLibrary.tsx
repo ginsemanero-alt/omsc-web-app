@@ -1835,13 +1835,19 @@ function MaterialActions({
   onDelete: () => void;
 }) {
   return (
-    <div className="absolute top-4 right-4 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+    // opacity-0 + group-hover only reveals these on devices with a real
+    // :hover (a mouse) — touch devices have no equivalent gesture, so an
+    // admin on mobile/tablet could never actually reach Edit/Delete here.
+    // Always visible below md; hover-reveal only kicks in on larger
+    // screens where a pointer is the norm.
+    <div className="absolute top-4 right-4 flex gap-1 z-10 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
 
       <Button
         size="icon"
         variant="secondary"
         className="h-8 w-8 rounded-xl bg-white shadow-sm"
         onClick={onEdit}
+        aria-label="Edit material"
       >
         <Edit className="w-3.5 h-3.5 text-slate-600" />
       </Button>
@@ -1851,6 +1857,7 @@ function MaterialActions({
         variant="destructive"
         className="h-8 w-8 rounded-xl shadow-sm"
         onClick={onDelete}
+        aria-label="Delete material"
       >
         <Trash2 className="w-3.5 h-3.5" />
       </Button>

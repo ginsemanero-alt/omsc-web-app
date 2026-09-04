@@ -206,7 +206,13 @@ export default function IECMaterials() {
                 <Card key={item.id} className="overflow-hidden bg-white border-none shadow-sm rounded-[2.5rem] group hover:shadow-2xl transition-all duration-500">
                   <div className="relative h-64 bg-slate-100 overflow-hidden">
                     <img src={item.file_url} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    {/* Darkened backdrop is a nice-to-have hover effect on
+                        desktop — kept hover-only. The button itself is the
+                        only way to preview, so it can't be hover-gated:
+                        touch devices have no :hover, and it'd otherwise be
+                        unreachable on mobile/tablet. */}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 md:group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                       <Button onClick={() => handlePreview(item)} className="rounded-full bg-white text-slate-900 h-12 w-12 p-0 shadow-xl">
                         <Maximize2 className="w-5 h-5" />
                       </Button>

@@ -311,10 +311,10 @@ export default function ProgramManagement() {
                     </div>
                     
                     <div className="flex gap-1 self-end sm:self-auto">
-                      <Button size="icon" variant="ghost" className="h-9 w-9 rounded-xl hover:bg-slate-50" onClick={() => handleOpenDialog(program)}>
+                      <Button size="icon" variant="ghost" className="h-9 w-9 rounded-xl hover:bg-slate-50" onClick={() => handleOpenDialog(program)} aria-label={`Edit ${program.title}`}>
                         <Edit className="w-4 h-4 text-slate-600"/>
                       </Button>
-                      <Button size="icon" variant="ghost" className="h-9 w-9 rounded-xl hover:bg-rose-50 text-rose-500" onClick={() => triggerDeleteConfirm(program.id, program.title)}>
+                      <Button size="icon" variant="ghost" className="h-9 w-9 rounded-xl hover:bg-rose-50 text-rose-500" onClick={() => triggerDeleteConfirm(program.id, program.title)} aria-label={`Delete ${program.title}`}>
                         <Trash2 className="w-4 h-4"/>
                       </Button>
                     </div>
