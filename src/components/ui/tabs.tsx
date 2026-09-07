@@ -8,22 +8,75 @@ const Tabs = TabsPrimitive.Root
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.List
-    ref={ref}
-    className={cn(
-      // Tab labels ("Video / Audio / Links", etc.) don't always fit a
-      // phone screen — this was inline-flex with no overflow handling, so
-      // rows of 3-5 tabs silently pushed past the page's own width on
-      // mobile instead of scrolling. max-w-full + overflow-x-auto turns
-      // that into a horizontally scrollable strip; justify-start (not
-      // -center) avoids clipping the first tab off-screen when it does.
-      "inline-flex h-9 max-w-full items-center justify-start overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground",
-      className
-    )}
-    {...props}
-  />
-))
+>(({ className, ...props }, ref) => {
+  const innerRef = React.useRef<HTMLDivElement | null>(null);
+  // Whether there's more to scroll to on each side — drives the edge
+  // fade below. Scrolling makes overflowing tabs reachable, but with
+  // nothing marking the row as scrollable it reads as "that's all the
+  // tabs there are" (e.g. Audio/Links silently hidden past Videos).
+  const [canScrollLeft, setCanScrollLeft] = React.useState(false);
+  const [canScrollRight, setCanScrollRight] = React.useState(false);
+
+  const updateScrollState = React.useCallback(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 2);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  }, []);
+
+  React.useEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+
+    updateScrollState();
+
+    const resizeObserver = new ResizeObserver(updateScrollState);
+    resizeObserver.observe(el);
+    el.addEventListener('scroll', updateScrollState, { passive: true });
+
+    return () => {
+      resizeObserver.disconnect();
+      el.removeEventListener('scroll', updateScrollState);
+    };
+  }, [updateScrollState]);
+
+  return (
+    <div className="relative max-w-full">
+      <TabsPrimitive.List
+        ref={(node) => {
+          innerRef.current = node;
+          if (typeof ref === 'function') ref(node);
+          else if (ref) ref.current = node;
+        }}
+        className={cn(
+          // Tab labels ("Video / Audio / Links", etc.) don't always fit a
+          // phone screen — this was inline-flex with no overflow handling, so
+          // rows of 3-5 tabs silently pushed past the page's own width on
+          // mobile instead of scrolling. max-w-full + overflow-x-auto turns
+          // that into a horizontally scrollable strip; justify-start (not
+          // -center) avoids clipping the first tab off-screen when it does.
+          "inline-flex h-9 max-w-full items-center justify-start overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground",
+          className
+        )}
+        style={{
+          // A colored overlay would need to match whatever background
+          // color this instance's className passes in — this fades the
+          // content itself instead (an alpha mask), so it looks right
+          // regardless of the tab bar's actual color.
+          maskImage:
+            canScrollLeft || canScrollRight
+              ? `linear-gradient(to right, ${canScrollLeft ? 'transparent, black 20px' : 'black'}, black ${canScrollRight ? 'calc(100% - 20px), transparent' : '100%'})`
+              : undefined,
+          WebkitMaskImage:
+            canScrollLeft || canScrollRight
+              ? `linear-gradient(to right, ${canScrollLeft ? 'transparent, black 20px' : 'black'}, black ${canScrollRight ? 'calc(100% - 20px), transparent' : '100%'})`
+              : undefined,
+        }}
+        {...props}
+      />
+    </div>
+  );
+})
 TabsList.displayName = TabsPrimitive.List.displayName
 
 const TabsTrigger = React.forwardRef<
