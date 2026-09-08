@@ -266,12 +266,12 @@ export default function UserManagement() {
                 : "I-apply na ba ang mga pagbabagong ginawa mo?"}
             </p>
 
-            <div className="flex gap-3">
-              <Button variant="ghost" className="flex-1 rounded-xl font-black uppercase text-[10px] h-12" onClick={closeModals}>
+            <div className="flex flex-wrap gap-3">
+              <Button variant="ghost" className="flex-1 min-w-[90px] rounded-xl font-black uppercase text-[10px] h-12" onClick={closeModals}>
                 No, Cancel
               </Button>
-              <Button 
-                className={`flex-1 text-white rounded-xl font-black uppercase text-[10px] h-12 shadow-lg 
+              <Button
+                className={`flex-1 min-w-[90px] text-white rounded-xl font-black uppercase text-[10px] h-12 shadow-lg
                   ${modalType === 'delete' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'}`}
                 onClick={() => modalType === 'delete' ? executeDelete() : executeUserUpdate()}
               >

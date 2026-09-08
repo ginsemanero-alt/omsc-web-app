@@ -186,12 +186,19 @@ export default function IECMaterials() {
                     <div className="flex-1 min-w-0">
                       <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-1">{item.title}</h3>
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">{item.format || 'Document'}</p>
-                      <div className="flex gap-2">
-                        <Button onClick={() => handlePreview(item)} className="flex-1 h-11 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs">
-                          <Eye className="w-3 h-3 mr-2" /> Preview
+                      <div className="flex flex-wrap gap-2">
+                        {/* min-w-[90px] + flex-wrap: on a container too
+                            narrow for both at a readable size, they wrap to
+                            full-width stacked buttons instead of getting
+                            squeezed to unreadable slivers (flex-1 alone
+                            can't shrink past a button's own content width
+                            anyway, since Button's whitespace-nowrap base
+                            style gives it an intrinsic min-width). */}
+                        <Button onClick={() => handlePreview(item)} className="flex-1 min-w-[90px] h-11 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs">
+                          <Eye className="w-3 h-3 mr-2 shrink-0" /> Preview
                         </Button>
-                        <Button onClick={() => downloadFile(item.file_url, item.title)} variant="outline" className="flex-1 h-11 border-slate-200 dark:border-slate-700 rounded-xl font-black uppercase text-xs">
-                          <Download className="w-3 h-3 mr-2" /> Save
+                        <Button onClick={() => downloadFile(item.file_url, item.title)} variant="outline" className="flex-1 min-w-[90px] h-11 border-slate-200 dark:border-slate-700 rounded-xl font-black uppercase text-xs">
+                          <Download className="w-3 h-3 mr-2 shrink-0" /> Save
                         </Button>
                       </div>
                     </div>

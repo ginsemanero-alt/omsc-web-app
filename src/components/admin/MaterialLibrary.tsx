@@ -954,15 +954,22 @@ export default function IECMaterials() {
                             : 'Handout Document'}
                         </p>
 
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
 
+                          {/* min-w-[90px] + flex-wrap: on a container too
+                              narrow for both at a readable size, they wrap
+                              to full-width stacked buttons instead of
+                              getting squeezed to unreadable slivers
+                              (Button's whitespace-nowrap base style gives
+                              it an intrinsic min-width flex-1 can't shrink
+                              past on its own). */}
                           <Button
                             onClick={() =>
                               handlePreview(item)
                             }
-                            className="flex-1 h-11 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs text-white"
+                            className="flex-1 min-w-[90px] h-11 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs text-white"
                           >
-                            <Eye className="w-3 h-3 mr-2" />
+                            <Eye className="w-3 h-3 mr-2 shrink-0" />
                             Preview
                           </Button>
 
@@ -975,9 +982,9 @@ export default function IECMaterials() {
                                 )
                               }
                               variant="outline"
-                              className="flex-1 h-11 border-slate-200 rounded-xl font-black uppercase text-xs"
+                              className="flex-1 min-w-[90px] h-11 border-slate-200 rounded-xl font-black uppercase text-xs"
                             >
-                              <Download className="w-3 h-3 mr-2" />
+                              <Download className="w-3 h-3 mr-2 shrink-0" />
                               Save
                             </Button>
                           )}
