@@ -3,9 +3,18 @@ import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import cors from 'cors';
 import bcrypt from 'bcryptjs'; // ← bcryptjs, hindi bcrypt (mas stable sa Vercel serverless)
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 
 const app = express();
+
+// Deployed on Vercel behind its edge proxy, so the real client IP arrives
+// in X-Forwarded-For, not the socket address — without this, every
+// request looks like it comes from Vercel's proxy and express-rate-limit
+// would lump every visitor into one shared bucket instead of limiting
+// per-client. `1` trusts exactly one hop (Vercel's own proxy), not an
+// arbitrary chain an attacker could spoof.
+app.set('trust proxy', 1);
 
 // --- CORS ALLOWLIST ---
 // ALLOWED_ORIGINS is a comma-separated list of origins allowed to call this
@@ -29,6 +38,64 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '1mb' }));
 
+// --- RATE LIMITING ---
+// In-memory counters — fine for this app's traffic, but a caveat worth
+// knowing: Vercel serverless functions can scale to multiple concurrent
+// instances, each with its own counter, so a sufficiently distributed
+// attacker could see somewhat more than these numbers before every path
+// converges on being blocked. Still a large improvement over the zero
+// limiting this had before; move to a shared store (e.g. Upstash Redis)
+// if this app's traffic ever grows enough to make that gap matter.
+const rateLimitHandler = (req, res) => {
+    res.status(429).json({ message: "Too many requests. Please try again later." });
+};
+
+// Login is the main brute-force target — keyed per IP+email so one
+// attacker guessing many passwords against one account is capped, without
+// a shared office/campus IP locking every student out of their own account.
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    // ipKeyGenerator (not raw req.ip) correctly collapses an IPv6 address
+    // to its /56 subnet first — otherwise an attacker on IPv6 could rotate
+    // addresses within their own prefix to dodge the per-IP+email bucket.
+    keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${(req.body?.email || '').trim().toLowerCase()}`,
+    handler: rateLimitHandler,
+});
+
+// Registration spam / mass fake-account creation.
+const registerLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
+});
+
+// Already gated by requiring a valid admin session token, but rate
+// limiting it too costs nothing and blunts a compromised admin token
+// being used to mass-create accounts.
+const createStaffLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
+});
+
+// Light blanket cap on every /api/* route as a general safety net against
+// scripted abuse/scraping, on top of the stricter limiters above.
+const globalApiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
+});
+app.use('/api/', globalApiLimiter);
+
 // --- SUPABASE CONFIG ---
 // Walang dotenv — Vercel env vars ay available na via process.env
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -48,7 +115,7 @@ app.get('/api/health', (req, res) => {
     res.status(200).json({ status: "OK", message: "Backend is running" });
 });
 
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', registerLimiter, async (req, res) => {
     const {
         studentId, name, email, password, campus,
         program, yearLevel, status, age, gender, isIp, isPwd
@@ -149,7 +216,7 @@ app.post('/api/register', async (req, res) => {
     }
 });
 
-app.post('/api/admin/create-staff', async (req, res) => {
+app.post('/api/admin/create-staff', createStaffLimiter, async (req, res) => {
     // Same privilege-escalation risk /api/register used to have if left
     // unchecked, so this endpoint requires the caller's own session token
     // and verifies they're an active admin before creating anything.
@@ -236,7 +303,7 @@ app.post('/api/admin/create-staff', async (req, res) => {
     }
 });
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', loginLimiter, async (req, res) => {
     const { email, password } = req.body;
     const cleanEmail = email?.trim().toLowerCase();
 
