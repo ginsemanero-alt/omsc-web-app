@@ -402,8 +402,14 @@ export default function LoginPage({
           toast({
             title: 'WELCOME',
             description: `Access Granted! Hello, ${data.name}.`,
+            // Green for a successful student sign-in, matching every other
+            // success state in the app (ACCOUNT CREATED above, and the
+            // admin logout toast) — admin sign-in keeps the indigo brand
+            // color it always had.
             className:
-              'bg-indigo-600 text-white font-black rounded-2xl shadow-2xl',
+              data.role === 'student'
+                ? 'bg-emerald-600 text-white font-black rounded-2xl shadow-2xl'
+                : 'bg-indigo-600 text-white font-black rounded-2xl shadow-2xl',
           });
 
           onLogin(data.role, data.name);
