@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -251,6 +253,49 @@ export default function UserManagement() {
     return matchesSearch && matchesRole && matchesInclusion;
   });
 
+  // Exports whatever the admin is currently looking at (respects the
+  // search box and Role/PWD-IP filters above), not always the full table —
+  // matches how Reports Center's exports work. `password` is deliberately
+  // never included, even hashed.
+  const handleExportUsers = () => {
+    if (filteredUsers.length === 0) {
+      toast({ variant: "destructive", title: "Nothing to Export", description: "No users match the current search and filters." });
+      return;
+    }
+
+    const rows = filteredUsers.map((user) => ({
+      Name: user.name || '',
+      Email: user.email || '',
+      Role: user.role || '',
+      'Student ID': user.student_id || '',
+      Campus: user.campus || '',
+      Program: user.program || '',
+      'Year Level': user.year_level || '',
+      Status: user.status || '',
+      Age: user.age ?? '',
+      Gender: user.gender || '',
+      PWD: user.is_pwd ? 'Yes' : 'No',
+      'Indigenous Person': user.is_ip ? 'Yes' : 'No',
+      'Date Registered': user.created_at ? new Date(user.created_at).toLocaleDateString() : '',
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    worksheet['!cols'] = Object.keys(rows[0]).map(() => ({ wch: 18 }));
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Users');
+
+    const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([buffer], { type: 'application/octet-stream' });
+    saveAs(blob, `OMSU_Users_${new Date().toISOString().slice(0, 10)}.xlsx`);
+
+    toast({
+      title: "Export Ready",
+      description: `${filteredUsers.length} user(s) exported to Excel.`,
+      className: "bg-indigo-600 text-white font-black rounded-2xl"
+    });
+  };
+
   return (
     <div className="space-y-8 p-2 animate-in fade-in duration-500 relative">
       
@@ -297,13 +342,23 @@ export default function UserManagement() {
           </h1>
           <p className="text-slate-500 font-medium tracking-tight uppercase text-xs">Assign roles and campuses to staff</p>
         </div>
-        <Button
-          onClick={() => setShowAddStaff(true)}
-          className="h-12 rounded-2xl px-6 bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
-        >
-          <UserPlus className="w-4 h-4 mr-2" />
-          Add Staff Account
-        </Button>
+        <div className="flex flex-wrap gap-3">
+          <Button
+            onClick={handleExportUsers}
+            variant="outline"
+            className="h-12 rounded-2xl px-6 border-slate-200 text-slate-700 hover:bg-slate-50 font-black uppercase text-[10px] tracking-widest"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export Users
+          </Button>
+          <Button
+            onClick={() => setShowAddStaff(true)}
+            className="h-12 rounded-2xl px-6 bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
+          >
+            <UserPlus className="w-4 h-4 mr-2" />
+            Add Staff Account
+          </Button>
+        </div>
       </div>
 
       {/* ADD STAFF MODAL */}
