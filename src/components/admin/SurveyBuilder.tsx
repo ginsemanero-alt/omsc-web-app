@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { logActivity } from "../../lib/activityLog";
+import { useAuth } from "../../hooks/useAuth";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -98,6 +100,7 @@ function createQuestion(): Question {
 
 export default function SurveyBuilder() {
   const { toast } = useToast();
+  const { user, userName } = useAuth();
 
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [loading, setLoading] = useState(true);
@@ -203,7 +206,7 @@ export default function SurveyBuilder() {
         return;
       }
 
-      const { error } = await supabase.from("surveys").insert([
+      const { data: created, error } = await supabase.from("surveys").insert([
         {
           title,
           description,
@@ -212,9 +215,10 @@ export default function SurveyBuilder() {
           status: "draft",
           questions_data: [],
         },
-      ]);
+      ]).select();
 
       if (error) throw error;
+      logActivity({ actorEmail: user?.email, actorName: userName, action: "create", entityType: "survey", entityId: created?.[0]?.id, entityLabel: title });
 
       toast({
         title: "Survey Created",
@@ -262,6 +266,7 @@ export default function SurveyBuilder() {
         .eq("id", editingSurvey.id);
 
       if (error) throw error;
+      logActivity({ actorEmail: user?.email, actorName: userName, action: "update", entityType: "survey", entityId: editingSurvey.id, entityLabel: editingSurvey.title, details: `${cleanQuestions.length} question(s) saved` });
 
       toast({
         title: "Survey Updated",
@@ -316,6 +321,7 @@ export default function SurveyBuilder() {
         .eq("id", survey.id);
 
       if (error) throw error;
+      logActivity({ actorEmail: user?.email, actorName: userName, action: "update", entityType: "survey", entityId: survey.id, entityLabel: survey.title, details: `status changed to "${newStatus}"` });
 
       await fetchSurveys();
 
@@ -342,7 +348,7 @@ export default function SurveyBuilder() {
 
   async function duplicateSurvey(survey: Survey) {
     try {
-      const { error } = await supabase.from("surveys").insert([
+      const { data: copy, error } = await supabase.from("surveys").insert([
         {
           title: `${survey.title} - Copy`,
           description: survey.description || "",
@@ -351,9 +357,10 @@ export default function SurveyBuilder() {
           status: "draft",
           questions_data: survey.questions_data || [],
         },
-      ]);
+      ]).select();
 
       if (error) throw error;
+      logActivity({ actorEmail: user?.email, actorName: userName, action: "create", entityType: "survey", entityId: copy?.[0]?.id, entityLabel: `${survey.title} - Copy`, details: `duplicated from "${survey.title}"` });
 
       await fetchSurveys();
 
@@ -386,6 +393,7 @@ export default function SurveyBuilder() {
         .eq("id", deleteTargetId);
 
       if (error) throw error;
+      logActivity({ actorEmail: user?.email, actorName: userName, action: "delete", entityType: "survey", entityId: deleteTargetId, entityLabel: deleteTargetTitle });
 
       toast({
         title: "Survey Deleted",

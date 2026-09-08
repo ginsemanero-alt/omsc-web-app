@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, Suspense, lazy } from 'react';
 import { supabase } from '../../lib/supabase';
 import { compressImageFile } from '../../lib/imageCompress';
+import { logActivity } from '../../lib/activityLog';
+import { useAuth } from '../../hooks/useAuth';
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a PDF preview.
 const PdfPreview = lazy(() => import('../shared/PdfPreview'));
@@ -100,6 +102,7 @@ const DEFAULT_FORM: FormData = {
 
 export default function IECMaterials() {
   const { toast } = useToast();
+  const { user, userName } = useAuth();
 
   const [activeTab, setActiveTab] = useState('articles');
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -527,6 +530,7 @@ export default function IECMaterials() {
         if (error) {
           throw error;
         }
+        logActivity({ actorEmail: user?.email, actorName: userName, action: 'update', entityType: 'material', entityId: editingId, entityLabel: payload.title });
 
         toast({
           title: 'Material Updated',
@@ -539,13 +543,15 @@ export default function IECMaterials() {
       // -------------------------------------------------------
 
       else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('materials')
-          .insert([payload]);
+          .insert([payload])
+          .select();
 
         if (error) {
           throw error;
         }
+        logActivity({ actorEmail: user?.email, actorName: userName, action: 'create', entityType: 'material', entityId: data?.[0]?.id, entityLabel: payload.title });
 
         toast({
           title: 'Material Published',
@@ -601,6 +607,7 @@ export default function IECMaterials() {
       if (error) {
         throw error;
       }
+      logActivity({ actorEmail: user?.email, actorName: userName, action: 'delete', entityType: 'material', entityId: deleteTargetId, entityLabel: deleteTargetTitle });
 
       toast({
         title: 'Deleted Successfully',

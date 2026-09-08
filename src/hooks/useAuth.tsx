@@ -13,27 +13,31 @@ interface AuthContextValue {
   // that needs to read/write a table keyed on users.id should use this
   // instead of re-deriving it.
   dbUserId: number | null;
+  // users.name — surfaced mainly so admin actions can be attributed to a
+  // real person (see src/lib/activityLog.ts) instead of just an email.
+  userName: string | null;
   loading: boolean;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-async function fetchUserRecord(email: string): Promise<{ role: Role; dbUserId: number | null }> {
+async function fetchUserRecord(email: string): Promise<{ role: Role; dbUserId: number | null; userName: string | null }> {
   // users.id is this app's own bigint auto-increment id, not the Supabase
   // Auth user's uuid, so the two can't be joined on id. email is the only
   // column both share.
   const { data, error } = await supabase
     .from('users')
-    .select('id, role')
+    .select('id, role, name')
     .eq('email', email)
     .maybeSingle();
 
-  if (error || !data) return { role: null, dbUserId: null };
+  if (error || !data) return { role: null, dbUserId: null, userName: null };
 
   return {
     role: (data.role as Role) ?? null,
     dbUserId: typeof data.id === 'number' ? data.id : null,
+    userName: data.name ?? null,
   };
 }
 
@@ -41,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<Role>(null);
   const [dbUserId, setDbUserId] = useState<number | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -68,13 +73,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           const record = sessionUser?.email
             ? await fetchUserRecord(sessionUser.email)
-            : { role: null, dbUserId: null };
+            : { role: null, dbUserId: null, userName: null };
 
           if (!isMounted) return;
 
           setUser(sessionUser);
           setRole(record.role);
           setDbUserId(record.dbUserId);
+          setUserName(record.userName);
           setLoading(false);
         }, 0);
       }
@@ -91,10 +97,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setRole(null);
     setDbUserId(null);
+    setUserName(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, dbUserId, loading, signOut }}>
+    <AuthContext.Provider value={{ user, role, dbUserId, userName, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

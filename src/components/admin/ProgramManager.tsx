@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { compressImageFile } from '../../lib/imageCompress';
+import { logActivity } from '../../lib/activityLog';
+import { useAuth } from '../../hooks/useAuth';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -20,6 +22,7 @@ import {
 
 export default function ProgramManagement() {
   const { toast } = useToast();
+  const { user, userName } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const materialRef = useRef<HTMLInputElement>(null);
 
@@ -179,11 +182,13 @@ export default function ProgramManagement() {
       if (editingId) {
         const { error } = await supabase.from('programs').update(payload).eq('id', editingId);
         if (error) throw error;
+        logActivity({ actorEmail: user?.email, actorName: userName, action: 'update', entityType: 'program', entityId: editingId, entityLabel: payload.title });
       } else {
         const { data, error } = await supabase.from('programs').insert([payload]).select();
         if (error) throw error;
         if (!data || data.length === 0) throw new Error("Failed to capture generated record primary key.");
         currentProgramId = data[0].id;
+        logActivity({ actorEmail: user?.email, actorName: userName, action: 'create', entityType: 'program', entityId: currentProgramId, entityLabel: payload.title });
       }
 
       if (materialFile && currentProgramId) {
@@ -221,7 +226,8 @@ export default function ProgramManagement() {
       setLoading(true);
       const { error } = await supabase.from('programs').delete().eq('id', deleteTargetId);
       if (error) throw error;
-      
+      logActivity({ actorEmail: user?.email, actorName: userName, action: 'delete', entityType: 'program', entityId: deleteTargetId, entityLabel: deleteTargetTitle });
+
       toast({ title: "Purged Successfully", description: "The guidance folder element was unlinked." });
       setIsDeleteOpen(false);
       fetchPrograms();

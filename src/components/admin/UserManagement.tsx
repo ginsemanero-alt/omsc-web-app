@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { logActivity } from '../../lib/activityLog';
+import { useAuth } from '../../hooks/useAuth';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -10,6 +12,7 @@ import { useToast } from '../../hooks/use-toast';
 
 export default function UserManagement() {
   const { toast } = useToast();
+  const { user: authUser, userName: authUserName } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -129,6 +132,7 @@ export default function UserManagement() {
           console.warn('Profile campus sync failed:', profileError);
         }
       }
+      logActivity({ actorEmail: authUser?.email, actorName: authUserName, action: 'update', entityType: 'user', entityId: pendingAction.id, entityLabel: targetUser?.name || targetUser?.email, details: `status: ${editStatus}, campus: ${editCampus}` });
 
       toast({
         title: "SUCCESS",
@@ -145,9 +149,11 @@ export default function UserManagement() {
   const executeDelete = async () => {
     if (!pendingAction) return;
     try {
+      const targetUser = users.find((u) => String(u.id) === String(pendingAction.id));
       const { error } = await supabase.from('users').delete().eq('id', pendingAction.id);
       if (error) throw error;
-      toast({ 
+      logActivity({ actorEmail: authUser?.email, actorName: authUserName, action: 'delete', entityType: 'user', entityId: pendingAction.id, entityLabel: targetUser?.name || targetUser?.email });
+      toast({
         title: "DELETED", 
         description: "User removed successfully.", 
         className: "bg-slate-900 text-white font-black rounded-2xl" 
@@ -216,6 +222,7 @@ export default function UserManagement() {
       if (!response.ok) {
         throw new Error(data.message || "Failed to create staff account");
       }
+      logActivity({ actorEmail: authUser?.email, actorName: authUserName, action: 'create', entityType: 'user', entityId: data.userId, entityLabel: staffName.trim(), details: `admin account (${staffEmail.trim()})` });
 
       toast({
         title: "STAFF ACCOUNT CREATED",

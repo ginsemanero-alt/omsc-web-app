@@ -360,3 +360,45 @@ DROP POLICY IF EXISTS "Allow students to view surveys" ON surveys;
 DROP POLICY IF EXISTS "Enable read access for all authenticated users" ON surveys;
 
 DROP POLICY IF EXISTS "Allow all" ON users;
+
+-- ------------------------------------------------------------
+-- PHASE 6 — Admin activity log
+--
+-- Records who did what: create/update/delete on Programs, Materials,
+-- Surveys, and User Management (admin accounts and student account
+-- edits/deletes). Scope is admin actions only — no student activity
+-- is tracked here. Written by src/lib/activityLog.ts, called from
+-- each admin panel's mutation handlers after a write succeeds.
+--
+-- entity_id is text (not bigint/uuid) because it has to hold both —
+-- programs/materials/users use bigint ids, surveys use a uuid.
+--
+-- No UPDATE or DELETE policy at all, including for admins: an audit
+-- log that its own subjects can edit or erase isn't one. Rows are
+-- append-only from the app's perspective; only direct SQL access
+-- (which this project's admins already have, via the Supabase
+-- dashboard) can remove them, e.g. for retention/cleanup.
+-- ------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id bigserial PRIMARY KEY,
+  actor_email text NOT NULL,
+  actor_name text,
+  action text NOT NULL CHECK (action IN ('create', 'update', 'delete')),
+  entity_type text NOT NULL CHECK (entity_type IN ('program', 'material', 'survey', 'user')),
+  entity_id text,
+  entity_label text,
+  details text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS activity_logs_created_at_idx ON activity_logs (created_at DESC);
+
+ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS activity_logs_select_admin ON activity_logs;
+CREATE POLICY activity_logs_select_admin ON activity_logs
+  FOR SELECT USING (is_admin());
+DROP POLICY IF EXISTS activity_logs_insert_admin ON activity_logs;
+CREATE POLICY activity_logs_insert_admin ON activity_logs
+  FOR INSERT WITH CHECK (is_admin());

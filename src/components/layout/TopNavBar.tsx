@@ -13,6 +13,7 @@ import {
   BarChart3,
   FileStack,
   Users,
+  History,
   Sun,
   Moon,
   type LucideIcon,
@@ -50,6 +51,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   BarChart3,
   FileStack,
   Users,
+  History,
 };
 
 interface TopNavBarProps {
