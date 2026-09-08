@@ -44,14 +44,19 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false); // Mobile menu state
   const [showHeroVideo, setShowHeroVideo] = useState(false);
 
-  const youtubeVideoId = "A2JuNCYrUHE";
+  // Self-hosted on Supabase Storage instead of embedded from YouTube — the
+  // YouTube iframe player showed a stuck play/pause button whenever a
+  // browser (mobile Chrome/Safari especially) blocked its autoplay, since
+  // the wrapper's pointer-events-none stops a visitor from ever tapping it
+  // away. A plain <video> has no such button to get stuck: it either plays
+  // or silently shows its first frame, muted+loop+playsInline making
+  // autoplay reliable across mobile browsers in the first place.
+  const heroVideoUrl = "https://yfmlwrmjfhpftdcovmnb.supabase.co/storage/v1/object/public/site-assets/hero/omsu-hero.mp4";
 
   useEffect(() => {
-    // The hero background is a full YouTube embed — ~1MB of YouTube's own
-    // JS/iframe overhead that was previously loading immediately and
-    // competing with the page's own critical resources (fonts, JS bundle)
-    // for bandwidth and main-thread time. Deferring it a beat lets the
-    // actual page paint first; the dark hero background covers the gap.
+    // Still deferred a beat so the actual page paints first — much less
+    // to defer now than the old ~1MB YouTube iframe, but the dark hero
+    // background covers the gap either way.
     const timer = window.setTimeout(() => setShowHeroVideo(true), 1000);
     return () => window.clearTimeout(timer);
   }, []);
@@ -165,13 +170,17 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         <div className="absolute inset-0 z-0 pointer-events-none">
           {/* Ginawang Object-Cover para sa mobile */}
           {showHeroVideo && (
-            <iframe
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[180%] h-[180%] md:w-full md:h-full md:scale-[1.35]"
-              src={`https://www.youtube.com/embed/${youtubeVideoId}?autoplay=1&mute=1&loop=1&playlist=${youtubeVideoId}&controls=0&modestbranding=1`}
-              frameBorder="0"
-              allow="autoplay; encrypted-media"
-              title="OMSU Guidance background video"
-            ></iframe>
+            <video
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover"
+              src={heroVideoUrl}
+              autoPlay
+              muted
+              loop
+              playsInline
+              disablePictureInPicture
+              controlsList="nodownload noplaybackrate"
+              aria-label="OMSU Guidance background video"
+            />
           )}
         </div>
         <div className="absolute inset-0 bg-gradient-to-b md:bg-gradient-to-r from-[#003366]/95 via-[#003366]/70 to-transparent z-10" />
