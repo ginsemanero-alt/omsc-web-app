@@ -103,7 +103,6 @@ export default function StudentProfile() {
     try {
       // Payload na tumutugma sa 'profiles' table columns
       const payload = {
-        id: currentUserId,
         full_name: fullName,
         program: program,
         year_level: yearLevel,
@@ -114,9 +113,17 @@ export default function StudentProfile() {
         user_role: 'student'
       };
 
+      // A plain update, not upsert — a student's profiles row always
+      // already exists (registration creates it server-side with the
+      // service-role key). Upsert matters here: PostgREST implements it
+      // as INSERT ... ON CONFLICT DO UPDATE, so RLS checks the INSERT
+      // policy too even when the row already exists and it's really
+      // just an update — and profiles deliberately has no INSERT policy
+      // for students, so every save was silently rejected with a 403.
       const { error } = await supabase
         .from('profiles')
-        .upsert(payload, { onConflict: 'id' });
+        .update(payload)
+        .eq('id', currentUserId);
 
       if (error) throw error;
 
