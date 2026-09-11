@@ -402,3 +402,52 @@ CREATE POLICY activity_logs_select_admin ON activity_logs
 DROP POLICY IF EXISTS activity_logs_insert_admin ON activity_logs;
 CREATE POLICY activity_logs_insert_admin ON activity_logs
   FOR INSERT WITH CHECK (is_admin());
+
+-- ------------------------------------------------------------
+-- PHASE 7 — Storage policies for material-covers / material-files
+--
+-- MaterialLibrary.tsx's upload form (PDF/audio attachments, cover
+-- images) has always uploaded to buckets named `material-covers` and
+-- `material-files` — but neither bucket had ever actually been
+-- created, so every upload failed with "Bucket not found". After
+-- creating the two buckets (public, done via the Storage API, not
+-- SQL — see the app's own Supabase Storage dashboard), uploads still
+-- failed, now with "new row violates row-level security policy":
+-- `program-posters` and `materials` already had storage.objects
+-- policies from earlier in the project, but these two brand-new
+-- buckets had none, and Supabase enables RLS on storage.objects by
+-- default with zero policies — meaning zero access — until some are
+-- added.
+--
+-- These mirror the materials table's own PHASE 3-era policy: public
+-- read (materials are shown to every visitor, no login required),
+-- admin-only write.
+-- ------------------------------------------------------------
+
+DROP POLICY IF EXISTS material_covers_select_public ON storage.objects;
+CREATE POLICY material_covers_select_public ON storage.objects
+  FOR SELECT USING (bucket_id = 'material-covers');
+DROP POLICY IF EXISTS material_covers_insert_admin ON storage.objects;
+CREATE POLICY material_covers_insert_admin ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'material-covers' AND is_admin());
+DROP POLICY IF EXISTS material_covers_update_admin ON storage.objects;
+CREATE POLICY material_covers_update_admin ON storage.objects
+  FOR UPDATE USING (bucket_id = 'material-covers' AND is_admin())
+  WITH CHECK (bucket_id = 'material-covers' AND is_admin());
+DROP POLICY IF EXISTS material_covers_delete_admin ON storage.objects;
+CREATE POLICY material_covers_delete_admin ON storage.objects
+  FOR DELETE USING (bucket_id = 'material-covers' AND is_admin());
+
+DROP POLICY IF EXISTS material_files_select_public ON storage.objects;
+CREATE POLICY material_files_select_public ON storage.objects
+  FOR SELECT USING (bucket_id = 'material-files');
+DROP POLICY IF EXISTS material_files_insert_admin ON storage.objects;
+CREATE POLICY material_files_insert_admin ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'material-files' AND is_admin());
+DROP POLICY IF EXISTS material_files_update_admin ON storage.objects;
+CREATE POLICY material_files_update_admin ON storage.objects
+  FOR UPDATE USING (bucket_id = 'material-files' AND is_admin())
+  WITH CHECK (bucket_id = 'material-files' AND is_admin());
+DROP POLICY IF EXISTS material_files_delete_admin ON storage.objects;
+CREATE POLICY material_files_delete_admin ON storage.objects
+  FOR DELETE USING (bucket_id = 'material-files' AND is_admin());
