@@ -79,10 +79,24 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
       const scale = Math.min(2, Math.max(0.5, availableWidth / baseViewport.width));
       const viewport = page.getViewport({ scale });
 
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
+      // The canvas's backing pixel buffer was being sized 1:1 with CSS
+      // pixels, then stretched to fit the screen by the browser — fine on
+      // a ~1x display, visibly blurry on the ~2.5-4x pixel density most
+      // Android phones actually have (higher than most iPhones, which is
+      // why this was more noticeable there). Render at devicePixelRatio
+      // resolution instead, then keep the on-page CSS size unchanged —
+      // the standard pdf.js HiDPI pattern. Clamped so a very high-DPR
+      // device doesn't blow up canvas memory on a large page.
+      const outputScale = Math.min(window.devicePixelRatio || 1, 2.5);
 
-      page.render({ canvasContext: context, viewport, canvas }).promise.then(() => {
+      canvas.width = Math.floor(viewport.width * outputScale);
+      canvas.height = Math.floor(viewport.height * outputScale);
+      canvas.style.width = `${Math.floor(viewport.width)}px`;
+      canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+      const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined;
+
+      page.render({ canvasContext: context, viewport, transform, canvas }).promise.then(() => {
         if (!cancelled) setRendering(false);
       });
     });
