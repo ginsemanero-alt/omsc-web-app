@@ -515,6 +515,14 @@ export default function IECMaterials() {
         description: formData.description.trim(),
         image_url: finalImageUrl || null,
         file_url: finalFileUrl || null,
+        // AnalyticsDashboard.tsx counts "IEC Materials" by checking this
+        // field, to tell a general Materials Library item (created here)
+        // apart from a program's own handout attachment (created by
+        // ProgramManager.tsx, which never sets this and shouldn't —
+        // handouts aren't meant to count toward IEC material totals).
+        // This form never set it at all, so every material uploaded
+        // through it was silently invisible to Analytics.
+        material_type: 'iec',
       };
 
       // -------------------------------------------------------
