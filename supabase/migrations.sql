@@ -451,3 +451,17 @@ CREATE POLICY material_files_update_admin ON storage.objects
 DROP POLICY IF EXISTS material_files_delete_admin ON storage.objects;
 CREATE POLICY material_files_delete_admin ON storage.objects
   FOR DELETE USING (bucket_id = 'material-files' AND is_admin());
+
+-- ------------------------------------------------------------
+-- PHASE 7b — materials.image_url was missing entirely
+--
+-- Once the storage side of PHASE 7 was fixed, the upload form's final
+-- step — the insert into `materials` — still failed: "Could not find
+-- the 'image_url' column of 'materials' in the schema cache".
+-- MaterialLibrary.tsx has always sent an `image_url` field (the cover
+-- image uploaded to material-covers), but the column was never added
+-- to the table. Confirmed by inspecting materials' actual columns —
+-- no image_url, no equivalently-named alternative.
+-- ------------------------------------------------------------
+
+ALTER TABLE materials ADD COLUMN IF NOT EXISTS image_url text;
