@@ -465,3 +465,30 @@ CREATE POLICY material_files_delete_admin ON storage.objects
 -- ------------------------------------------------------------
 
 ALTER TABLE materials ADD COLUMN IF NOT EXISTS image_url text;
+
+-- ------------------------------------------------------------
+-- PHASE 8 — materials.downloads was never actually incremented
+--
+-- AnalyticsDashboard.tsx and ReportsCenter.tsx both read and total
+-- materials.downloads (the "IEC Downloads" figure), but nothing in
+-- the app ever wrote to it — every Download/Save button in
+-- IECMaterials.tsx called only the browser-side file-saving helper,
+-- never touched the database. The count was 0 forever regardless of
+-- real usage.
+--
+-- Students don't have UPDATE access to `materials` (PHASE 5: admin-
+-- only write), and a plain read-current-value-then-write from the
+-- client would also lose increments if two students downloaded the
+-- same material around the same time. This function does the
+-- increment atomically in the database instead, and is the one
+-- narrow, safe carve-out from that admin-only write policy: it can
+-- only ever add exactly 1 to one row's download count, nothing else.
+-- ------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION increment_material_downloads(material_id bigint) RETURNS void
+LANGUAGE sql SECURITY DEFINER AS $$
+  UPDATE materials SET downloads = COALESCE(downloads, 0) + 1 WHERE id = material_id;
+$$;
+
+REVOKE ALL ON FUNCTION increment_material_downloads(bigint) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION increment_material_downloads(bigint) TO anon, authenticated;

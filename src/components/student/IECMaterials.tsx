@@ -80,7 +80,20 @@ export default function IECMaterials() {
     }
   };
 
-  const filteredData = materials.filter(m => 
+  // Analytics' "IEC Downloads" figure reads materials.downloads, but
+  // nothing ever wrote to it — every download button called downloadFile()
+  // alone, so the count stayed 0 forever regardless of real usage. The RPC
+  // does the increment atomically in the database (materials RLS only
+  // allows admins to UPDATE directly, and a plain read-then-write from
+  // here would also lose increments if two students downloaded at once).
+  // Fire-and-forget: a failed count bump should never block or interrupt
+  // an actual download.
+  const incrementDownloadCount = (materialId: number) => {
+    supabase.rpc('increment_material_downloads', { material_id: materialId })
+      .then(({ error }) => { if (error) console.warn('Download count update failed:', error.message); });
+  };
+
+  const filteredData = materials.filter(m =>
     m.title?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -197,7 +210,7 @@ export default function IECMaterials() {
                         <Button onClick={() => handlePreview(item)} className="flex-1 min-w-[90px] h-11 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs">
                           <Eye className="w-3 h-3 mr-2 shrink-0" /> Preview
                         </Button>
-                        <Button onClick={() => downloadFile(item.file_url, item.title)} variant="outline" className="flex-1 min-w-[90px] h-11 border-slate-200 dark:border-slate-700 rounded-xl font-black uppercase text-xs">
+                        <Button onClick={() => { downloadFile(item.file_url, item.title); incrementDownloadCount(item.id); }} variant="outline" className="flex-1 min-w-[90px] h-11 border-slate-200 dark:border-slate-700 rounded-xl font-black uppercase text-xs">
                           <Download className="w-3 h-3 mr-2 shrink-0" /> Save
                         </Button>
                       </div>
@@ -227,7 +240,7 @@ export default function IECMaterials() {
                   </div>
                   <div className="p-6">
                     <h3 className="font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-4">{item.title}</h3>
-                    <Button onClick={() => downloadFile(item.file_url, item.title)} className="w-full h-12 bg-slate-900 hover:bg-indigo-600 rounded-2xl font-black uppercase text-xs">
+                    <Button onClick={() => { downloadFile(item.file_url, item.title); incrementDownloadCount(item.id); }} className="w-full h-12 bg-slate-900 hover:bg-indigo-600 rounded-2xl font-black uppercase text-xs">
                       <Download className="w-4 h-4 mr-2" /> Download
                     </Button>
                   </div>
@@ -368,7 +381,7 @@ export default function IECMaterials() {
             
             {/* Hide download button for streaming/external-link types */}
             {previewItem?.type !== 'Video' && previewItem?.type !== 'Link' && !previewItem?.file_url?.includes('youtube') && (
-              <Button onClick={() => downloadFile(previewItem.file_url, previewItem.title)} className="bg-indigo-600 rounded-xl font-black uppercase text-[10px] px-6 text-white">
+              <Button onClick={() => { downloadFile(previewItem.file_url, previewItem.title); incrementDownloadCount(previewItem.id); }} className="bg-indigo-600 rounded-xl font-black uppercase text-[10px] px-6 text-white">
                 Download Resource
               </Button>
             )}
