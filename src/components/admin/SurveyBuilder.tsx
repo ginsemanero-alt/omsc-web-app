@@ -120,6 +120,10 @@ export default function SurveyBuilder() {
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [deleteTargetTitle, setDeleteTargetTitle] = useState("");
 
+  const [deleteResponseTarget, setDeleteResponseTarget] =
+    useState<{ id: string | number; studentName: string } | null>(null);
+  const [deletingResponse, setDeletingResponse] = useState(false);
+
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
 
@@ -455,6 +459,50 @@ export default function SurveyBuilder() {
       });
     } finally {
       setLoadingResponses(false);
+    }
+  }
+
+  async function handleDeleteResponse() {
+    if (!deleteResponseTarget) return;
+
+    try {
+      setDeletingResponse(true);
+
+      const { error } = await supabase
+        .from("survey_responses")
+        .delete()
+        .eq("id", deleteResponseTarget.id);
+
+      if (error) throw error;
+
+      logActivity({
+        actorEmail: user?.email,
+        actorName: userName,
+        action: "delete",
+        entityType: "survey",
+        entityId: viewingResponses?.id,
+        entityLabel: viewingResponses?.title,
+        details: `removed ${deleteResponseTarget.studentName}'s response`,
+      });
+
+      setResponses((previous) =>
+        previous.filter((response) => response.id !== deleteResponseTarget.id)
+      );
+
+      toast({
+        title: "Response Deleted",
+        description: `${deleteResponseTarget.studentName}'s response has been removed.`,
+      });
+
+      setDeleteResponseTarget(null);
+    } catch (err: any) {
+      toast({
+        title: "Delete Error",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingResponse(false);
     }
   }
 
@@ -1410,25 +1458,40 @@ export default function SurveyBuilder() {
             if (!open) setViewingResponses(null);
           }}
         >
-          <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden rounded-3xl p-0 flex flex-col">
+          {/* The default DialogClose (absolute top-4 right-4, dark icon)
+              was landing right on top of this dialog's own dark header
+              and count badge, unstyled for a dark background — hidden
+              here in favor of the header's own close button below. */}
+          <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden rounded-3xl p-0 flex flex-col [&>button:last-child]:hidden">
 
-            <div className="p-6 bg-slate-900 text-white">
-              <div className="flex justify-between gap-4">
+            <div className="p-6 bg-slate-900 text-white shrink-0">
+              <div className="flex justify-between items-start gap-4">
 
-                <div>
+                <div className="min-w-0">
                   <p className="text-[9px] uppercase font-black text-indigo-300 tracking-widest">
                     Survey Responses
                   </p>
 
-                  <h2 className="text-xl md:text-2xl font-black mt-1">
+                  <h2 className="text-xl md:text-2xl font-black mt-1 truncate">
                     {viewingResponses?.title}
                   </h2>
                 </div>
 
-                <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center">
-                  <span className="text-xl font-black">
-                    {responses.length}
-                  </span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center">
+                    <span className="text-xl font-black">
+                      {responses.length}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setViewingResponses(null)}
+                    className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+                    aria-label="Close"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
 
               </div>
@@ -1454,10 +1517,10 @@ export default function SurveyBuilder() {
                     className="rounded-2xl border-none overflow-hidden"
                   >
 
-                    <div className="bg-slate-900 text-white p-4 flex justify-between">
+                    <div className="bg-slate-900 text-white p-4 flex justify-between items-center gap-3">
 
-                      <div>
-                        <h3 className="font-black">
+                      <div className="min-w-0">
+                        <h3 className="font-black truncate">
                           {response.studentName}
                         </h3>
 
@@ -1473,7 +1536,23 @@ export default function SurveyBuilder() {
                         </p>
                       </div>
 
-                      <CheckCircle2 className="text-emerald-400" />
+                      <div className="flex items-center gap-2 shrink-0">
+                        <CheckCircle2 className="text-emerald-400 w-5 h-5" />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDeleteResponseTarget({
+                              id: response.id,
+                              studentName: response.studentName,
+                            })
+                          }
+                          className="w-8 h-8 rounded-lg bg-white/10 hover:bg-rose-500/80 flex items-center justify-center text-white/70 hover:text-white transition-colors"
+                          title="Delete this response"
+                          aria-label="Delete this response"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     <div className="p-5 grid md:grid-cols-2 gap-4">
@@ -1509,6 +1588,58 @@ export default function SurveyBuilder() {
               )}
 
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* DELETE RESPONSE CONFIRMATION */}
+        <Dialog
+          open={!!deleteResponseTarget}
+          onOpenChange={(open) => {
+            if (!open && !deletingResponse) setDeleteResponseTarget(null);
+          }}
+        >
+          <DialogContent className="max-w-md rounded-3xl p-7 text-center">
+
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center">
+              <AlertCircle />
+            </div>
+
+            <DialogHeader className="mt-4">
+              <DialogTitle className="text-xl font-black text-center">
+                Delete This Response?
+              </DialogTitle>
+            </DialogHeader>
+
+            <p className="text-sm text-slate-500 mt-2">
+              This removes <strong>{deleteResponseTarget?.studentName}</strong>'s
+              submitted answers permanently. This can't be undone.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 mt-6">
+
+              <Button
+                variant="ghost"
+                disabled={deletingResponse}
+                onClick={() => setDeleteResponseTarget(null)}
+                className="rounded-xl font-black"
+              >
+                Cancel
+              </Button>
+
+              <Button
+                onClick={handleDeleteResponse}
+                disabled={deletingResponse}
+                className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black"
+              >
+                {deletingResponse ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Delete"
+                )}
+              </Button>
+
+            </div>
+
           </DialogContent>
         </Dialog>
 

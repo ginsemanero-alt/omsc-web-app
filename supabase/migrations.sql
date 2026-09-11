@@ -492,3 +492,18 @@ $$;
 
 REVOKE ALL ON FUNCTION increment_material_downloads(bigint) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION increment_material_downloads(bigint) TO anon, authenticated;
+
+-- ------------------------------------------------------------
+-- PHASE 9 — admin-only DELETE on survey_responses
+--
+-- The Survey Responses view (SurveyBuilder.tsx) had no way to remove
+-- an individual submission — PHASE 5 gave survey_responses a SELECT
+-- and an INSERT policy but never a DELETE one, so an admin trying to
+-- delete a response (e.g. a test/junk submission) from the UI would
+-- have silently done nothing under RLS. Admin-only, matching every
+-- other admin-write policy in this file.
+-- ------------------------------------------------------------
+
+DROP POLICY IF EXISTS survey_responses_delete_admin ON survey_responses;
+CREATE POLICY survey_responses_delete_admin ON survey_responses
+  FOR DELETE USING (is_admin());
