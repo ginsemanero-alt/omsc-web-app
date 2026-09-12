@@ -243,18 +243,28 @@ export default function IECMaterials() {
               {infographics.length > 0 ? infographics.map((item) => (
                 <Card key={item.id} className="overflow-hidden bg-white dark:bg-slate-900 border-none shadow-sm rounded-[2.5rem] group hover:shadow-2xl transition-all duration-500">
                   <div className="relative h-64 bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                    <img src={item.file_url} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                    {/* object-contain, not -cover: these are infographics —
+                        tall, information-dense, and often a different aspect
+                        ratio than this box. Cropping to fill was cutting off
+                        real content (a header, a whole panel of text) rather
+                        than trimming empty margin the way it does on a photo. */}
+                    <img src={item.file_url} alt={item.title} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-700" />
                     {/* Darkened backdrop is a nice-to-have hover effect on
-                        desktop — kept hover-only. The button itself is the
-                        only way to preview, so it can't be hover-gated:
-                        touch devices have no :hover, and it'd otherwise be
-                        unreachable on mobile/tablet. */}
-                    <div className="absolute inset-0 bg-black/40 opacity-0 md:group-hover:opacity-100 transition-opacity" />
-                    <div className="absolute inset-0 flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                      <Button onClick={() => handlePreview(item)} className="rounded-full bg-white dark:bg-slate-900 text-slate-900 dark:text-white h-12 w-12 p-0 shadow-xl">
-                        <Maximize2 className="w-5 h-5" />
-                      </Button>
-                    </div>
+                        desktop only — purely decorative, so it's fine to
+                        skip on touch devices with no :hover. The actual
+                        preview affordance is the corner button below, which
+                        stays visible on every device instead of the old
+                        centered button that had no way to hide itself on
+                        mobile and just floated over the thumbnail at all times. */}
+                    <div className="absolute inset-0 bg-black/30 opacity-0 md:group-hover:opacity-100 transition-opacity pointer-events-none" />
+                    <button
+                      type="button"
+                      onClick={() => handlePreview(item)}
+                      className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/90 dark:bg-slate-900/90 text-slate-900 dark:text-white shadow-lg flex items-center justify-center hover:bg-white dark:hover:bg-slate-900 transition-colors"
+                      aria-label="Preview"
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                    </button>
                   </div>
                   <div className="p-6">
                     <h3 className="font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-4">{item.title}</h3>

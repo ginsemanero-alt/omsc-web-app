@@ -211,10 +211,13 @@ const MaterialsPage: React.FC = () => {
                 >
                   <div className="relative h-48 md:h-52 overflow-hidden bg-slate-50">
                     {image ? (
+                      // object-contain, not -cover: infographics are tall
+                      // and information-dense, so cropping to fill this box
+                      // was cutting off real content instead of just margin.
                       <img
                         src={material.url}
                         alt={material.title}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain"
                         loading="lazy"
                       />
                     ) : (

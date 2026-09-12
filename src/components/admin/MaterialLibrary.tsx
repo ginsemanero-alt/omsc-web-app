@@ -1069,10 +1069,14 @@ export default function IECMaterials() {
                       <div className="relative h-64 bg-slate-100 overflow-hidden">
 
                         {imageUrl ? (
+                          // object-contain, not -cover: infographics are
+                          // tall and information-dense, so cropping to fill
+                          // this box was cutting off real content instead
+                          // of just margin.
                           <img
                             src={imageUrl}
                             alt={item.title}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-700"
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
