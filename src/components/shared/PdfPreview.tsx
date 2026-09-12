@@ -9,6 +9,56 @@ import { Loader2, ChevronLeft, ChevronRight, ExternalLink, FileWarning } from 'l
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
+// Profiled against a throttled CPU (a stand-in for a mid/low-range
+// Android phone): the ~14 second "Loading PDF..." delay wasn't the
+// network at all — it was the browser downloading, parsing, and
+// initializing pdfjs's own ~1.2MB worker script, which only used to
+// start after the user opened a preview. That init is exactly what
+// `PDFWorker.create()` + its `.promise` pays for, with no PDF document
+// involved at all — so it's started as soon as the materials list is
+// known to have a PDF, while someone is still browsing it, and the
+// resulting live worker is then handed directly to the real
+// `getDocument()` call below instead of letting it spin up a second one
+// from scratch.
+let warmWorker: pdfjsLib.PDFWorker | null = null;
+let warmupStarted = false;
+
+// Called from the materials list pages as soon as they know they have a
+// PDF to show, well before anyone opens a preview — see the callers for
+// why this is a named export rather than happening automatically on
+// module load: it should only fire once this chunk is actually needed.
+export function warmPdfWorker(): void {
+  if (warmupStarted) return;
+  warmupStarted = true;
+
+  try {
+    const worker = pdfjsLib.PDFWorker.create({});
+    worker.promise
+      .then(() => {
+        warmWorker = worker;
+      })
+      .catch(() => {
+        // Best-effort only — a failed warm-up just means no head start,
+        // never a broken preview later.
+      });
+  } catch {
+    // Same as above: pdfjs not being ready to construct a worker yet is
+    // not fatal, just a missed head start.
+  }
+}
+
+// One-time claim so two previews opened close together don't fight over
+// the same worker — a second one falls back to pdfjs creating its own,
+// exactly like before this change.
+function claimWarmWorker(): pdfjsLib.PDFWorker | null {
+  if (warmWorker && !warmWorker.destroyed) {
+    const claimed = warmWorker;
+    warmWorker = null;
+    return claimed;
+  }
+  return null;
+}
+
 interface PdfPreviewProps {
   url: string;
 }
@@ -32,13 +82,6 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
   const [rendering, setRendering] = useState(false);
   const [error, setError] = useState(false);
   const [loadProgress, setLoadProgress] = useState<number | null>(null);
-  // On a slow connection, pdfjs-dist itself (a large lazy chunk) plus the
-  // PDF file can genuinely take 15-20+ seconds — measured against a
-  // simulated Slow-3G PH mobile connection, not a guess. A bare spinner
-  // with no time limit reads as broken/frozen well before that, so this
-  // surfaces a working fallback link after a few seconds instead of
-  // leaving someone staring at "Loading PDF..." with no way out.
-  const [showSlowFallback, setShowSlowFallback] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,13 +90,11 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
     setPdfDoc(null);
     setPageNum(1);
     setLoadProgress(null);
-    setShowSlowFallback(false);
 
-    const slowTimer = window.setTimeout(() => {
-      if (!cancelled) setShowSlowFallback(true);
-    }, 6000);
-
-    const loadingTask = pdfjsLib.getDocument({ url });
+    const worker = claimWarmWorker();
+    const loadingTask = worker
+      ? pdfjsLib.getDocument({ url, worker })
+      : pdfjsLib.getDocument({ url });
     // onProgress is a callback property on the loading task itself, not a
     // DocumentInitParameters option.
     loadingTask.onProgress = (data: { loaded: number; total: number }) => {
@@ -76,7 +117,6 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
 
     return () => {
       cancelled = true;
-      window.clearTimeout(slowTimer);
       loadingTask.destroy();
     };
   }, [url]);
@@ -156,21 +196,6 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
             {loadProgress !== null ? `Loading PDF... ${loadProgress}%` : 'Loading PDF...'}
           </p>
-          {showSlowFallback && (
-            <div className="mt-3 flex flex-col items-center gap-2">
-              <p className="text-xs text-slate-400 max-w-xs">
-                Taking longer than usual — this can happen on a slow connection.
-              </p>
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 h-10 px-5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-black uppercase tracking-wider transition-colors"
-              >
-                Open PDF Directly <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            </div>
-          )}
         </div>
       ) : (
         <>

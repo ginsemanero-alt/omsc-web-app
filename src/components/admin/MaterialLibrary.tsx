@@ -142,17 +142,23 @@ export default function IECMaterials() {
     fetchMaterials();
   }, []);
 
-  // Warms the PdfPreview chunk (pdfjs-dist bundled inside it) in the
-  // background before anyone clicks Preview — measured against a
-  // simulated slow mobile connection, pdfjs-dist alone can take 10+
-  // seconds to download on top of the PDF file itself, reading as a
-  // frozen preview with no warning otherwise.
+  // Warms up pdfjs's worker in the background as soon as this list has a
+  // PDF to show, well before anyone opens a preview. Profiled against a
+  // throttled CPU (standing in for a mid/low-range Android phone): the
+  // "Loading PDF..." delay wasn't the network — it was the browser
+  // parsing and initializing pdfjs's ~1.2MB worker script itself, which
+  // only used to start after someone opened a preview.
   useEffect(() => {
+    const hasPdf = materials.some(
+      (m: any) => m.type === 'PDF' || m.type === 'Document' || m.file_url?.toLowerCase?.().split('?')[0].endsWith('.pdf')
+    );
+    if (!hasPdf) return;
+
     const timer = window.setTimeout(() => {
-      import('../shared/PdfPreview');
+      import('../shared/PdfPreview').then((mod) => mod.warmPdfWorker());
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [materials]);
 
   // =========================================================
   // FETCH

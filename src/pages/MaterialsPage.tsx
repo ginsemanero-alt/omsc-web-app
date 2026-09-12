@@ -81,19 +81,26 @@ const MaterialsPage: React.FC = () => {
     fetchMaterials();
   }, []);
 
-  // Warms the PdfPreview chunk (and pdfjs-dist bundled inside it) in the
-  // background well before anyone clicks Preview. Measured against a
-  // simulated slow PH mobile connection: pdfjs-dist alone can take 10+
-  // seconds to download and parse on top of the PDF file itself, which
-  // reads as a broken/frozen preview with no warning. A visitor spends at
-  // least a few seconds browsing this list first, so this head start
-  // often finishes before they ever open one.
+  // Warms up pdfjs's worker in the background as soon as this list has a
+  // PDF to show, well before anyone opens a preview. Profiled against a
+  // throttled CPU (standing in for a mid/low-range Android phone): the
+  // "Loading PDF..." delay wasn't the network — it was the browser
+  // parsing and initializing pdfjs's ~1.2MB worker script itself, which
+  // only used to start after someone opened a preview. A visitor spends
+  // at least a few seconds browsing this list first, so doing that
+  // parsing now instead means the browser already has it compiled by the
+  // time they click Preview.
   useEffect(() => {
+    const hasPdf = materials.some(
+      (m) => m.type?.toLowerCase() === 'pdf' || m.url?.toLowerCase().split('?')[0].endsWith('.pdf')
+    );
+    if (!hasPdf) return;
+
     const timer = window.setTimeout(() => {
-      import("../components/shared/PdfPreview");
+      import("../components/shared/PdfPreview").then((mod) => mod.warmPdfWorker());
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [materials]);
 
   const getTypeIcon = (type: string) => {
     switch (type.toLowerCase()) {
