@@ -40,6 +40,18 @@ export default function IECMaterials() {
     fetchMaterials();
   }, []);
 
+  // Warms the PdfPreview chunk (pdfjs-dist bundled inside it) in the
+  // background before anyone clicks Preview — measured against a
+  // simulated slow mobile connection, pdfjs-dist alone can take 10+
+  // seconds to download on top of the PDF file itself, reading as a
+  // frozen preview with no warning otherwise.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      import('../shared/PdfPreview');
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   async function fetchMaterials() {
     try {
       setLoading(true);

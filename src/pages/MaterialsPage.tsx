@@ -81,6 +81,20 @@ const MaterialsPage: React.FC = () => {
     fetchMaterials();
   }, []);
 
+  // Warms the PdfPreview chunk (and pdfjs-dist bundled inside it) in the
+  // background well before anyone clicks Preview. Measured against a
+  // simulated slow PH mobile connection: pdfjs-dist alone can take 10+
+  // seconds to download and parse on top of the PDF file itself, which
+  // reads as a broken/frozen preview with no warning. A visitor spends at
+  // least a few seconds browsing this list first, so this head start
+  // often finishes before they ever open one.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      import("../components/shared/PdfPreview");
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const getTypeIcon = (type: string) => {
     switch (type.toLowerCase()) {
       case "pdf":

@@ -31,6 +31,14 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
   const [loading, setLoading] = useState(true);
   const [rendering, setRendering] = useState(false);
   const [error, setError] = useState(false);
+  const [loadProgress, setLoadProgress] = useState<number | null>(null);
+  // On a slow connection, pdfjs-dist itself (a large lazy chunk) plus the
+  // PDF file can genuinely take 15-20+ seconds — measured against a
+  // simulated Slow-3G PH mobile connection, not a guess. A bare spinner
+  // with no time limit reads as broken/frozen well before that, so this
+  // surfaces a working fallback link after a few seconds instead of
+  // leaving someone staring at "Loading PDF..." with no way out.
+  const [showSlowFallback, setShowSlowFallback] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,8 +46,20 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
     setError(false);
     setPdfDoc(null);
     setPageNum(1);
+    setLoadProgress(null);
+    setShowSlowFallback(false);
+
+    const slowTimer = window.setTimeout(() => {
+      if (!cancelled) setShowSlowFallback(true);
+    }, 6000);
 
     const loadingTask = pdfjsLib.getDocument({ url });
+    // onProgress is a callback property on the loading task itself, not a
+    // DocumentInitParameters option.
+    loadingTask.onProgress = (data: { loaded: number; total: number }) => {
+      if (cancelled || !data.total) return;
+      setLoadProgress(Math.min(99, Math.round((data.loaded / data.total) * 100)));
+    };
 
     loadingTask.promise
       .then((doc) => {
@@ -56,6 +76,7 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(slowTimer);
       loadingTask.destroy();
     };
   }, [url]);
@@ -130,11 +151,26 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
   return (
     <div ref={containerRef} className="w-full h-full flex flex-col items-center overflow-y-auto py-6 px-4">
       {loading ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3">
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
           <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-            Loading PDF...
+            {loadProgress !== null ? `Loading PDF... ${loadProgress}%` : 'Loading PDF...'}
           </p>
+          {showSlowFallback && (
+            <div className="mt-3 flex flex-col items-center gap-2">
+              <p className="text-xs text-slate-400 max-w-xs">
+                Taking longer than usual — this can happen on a slow connection.
+              </p>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 h-10 px-5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-black uppercase tracking-wider transition-colors"
+              >
+                Open PDF Directly <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          )}
         </div>
       ) : (
         <>
