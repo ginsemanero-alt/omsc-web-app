@@ -82,6 +82,10 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
   const [rendering, setRendering] = useState(false);
   const [error, setError] = useState(false);
   const [loadProgress, setLoadProgress] = useState<number | null>(null);
+  // Bumped to force the load effect below to re-run on demand — "Try
+  // Again" after a failure shouldn't require closing and reopening the
+  // whole preview.
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,9 +96,20 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
     setLoadProgress(null);
 
     const worker = claimWarmWorker();
-    const loadingTask = worker
-      ? pdfjsLib.getDocument({ url, worker })
-      : pdfjsLib.getDocument({ url });
+    const loadingTask = pdfjsLib.getDocument({
+      url,
+      ...(worker ? { worker } : {}),
+      // Mobile-carrier networks (observed on real devices, not just
+      // slow ones) sometimes mishandle the HTTP Range/206 requests
+      // pdfjs uses by default to stream a PDF — a transparent proxy
+      // that doesn't forward range headers correctly turns into a
+      // flat, silent load failure with no console error. These files
+      // are small guidance handouts, not huge multi-hundred-page
+      // documents, so there's no real streaming benefit to lose by
+      // just fetching the whole thing in one plain request instead.
+      disableRange: true,
+      disableStream: true,
+    });
     // onProgress is a callback property on the loading task itself, not a
     // DocumentInitParameters option.
     loadingTask.onProgress = (data: { loaded: number; total: number }) => {
@@ -109,8 +124,11 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
         setNumPages(doc.numPages);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return;
+        // Was swallowed entirely before — logged now so a real failure
+        // (as opposed to a slow one) leaves a trace to diagnose from.
+        console.error('PdfPreview failed to load:', url, err);
         setError(true);
         setLoading(false);
       });
@@ -119,7 +137,7 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
       cancelled = true;
       loadingTask.destroy();
     };
-  }, [url]);
+  }, [url, retryToken]);
 
   useEffect(() => {
     if (!pdfDoc || !canvasRef.current) return;
@@ -174,16 +192,26 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
           <FileWarning className="w-12 h-12 text-rose-400" />
         </div>
         <p className="text-slate-300 text-sm">
-          This PDF couldn't be previewed here. You can still open it directly.
+          This PDF couldn't be previewed here — often a temporary connection
+          issue. You can try again, or open it directly.
         </p>
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 h-12 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-xs"
-        >
-          Open PDF <ExternalLink className="w-4 h-4" />
-        </a>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => setRetryToken((t) => t + 1)}
+            className="inline-flex items-center gap-2 h-12 px-8 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-black uppercase text-xs transition-colors"
+          >
+            Try Again
+          </button>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 h-12 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-xs"
+          >
+            Open PDF <ExternalLink className="w-4 h-4" />
+          </a>
+        </div>
       </div>
     );
   }
