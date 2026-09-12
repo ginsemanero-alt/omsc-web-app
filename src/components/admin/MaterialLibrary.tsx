@@ -359,11 +359,17 @@ export default function IECMaterials() {
   const uploadFile = async (
     bucket: string,
     folder: string,
-    file: File
+    file: File,
+    skipCompression = false
   ): Promise<string> => {
     // No-ops for non-image files (video/audio/PDF) and already-small
     // images — only resizes oversized thumbnails/image materials.
-    const compressed = await compressImageFile(file);
+    // skipCompression exists for the one case where the "cover image" IS
+    // the actual downloadable content (an Image-type material) rather
+    // than a decorative thumbnail — a student downloading an infographic
+    // to read or print needs the file they get to be the file that was
+    // uploaded, not a 1280px/80%-quality JPEG re-encode of it.
+    const compressed = skipCompression ? file : await compressImageFile(file);
 
     const safeFileName = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_');
 
@@ -470,10 +476,14 @@ export default function IECMaterials() {
       // -------------------------------------------------------
 
       if (selectedImage) {
+        // For Image type, this upload IS the material a student downloads
+        // to read — skip the compression that's fine for a purely
+        // decorative cover thumbnail elsewhere.
         finalImageUrl = await uploadFile(
           'material-covers',
           'covers',
-          selectedImage
+          selectedImage,
+          formData.type === 'Image'
         );
 
         // For Image type, the image itself is the main file
