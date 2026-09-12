@@ -184,6 +184,56 @@ export default function SurveyBuilder() {
     });
   }, [surveys, search, categoryFilter]);
 
+  // Flat, most-recent-first was fine at a handful of surveys — once a
+  // guidance service has its own Pre-Test, Post-Test, and Opinion survey
+  // (times six services), that ordering scatters a category's surveys
+  // across the whole list instead of keeping them scannable together.
+  // Grouped by guidance service (in the same order as the CATEGORIES
+  // filter above), and within each group: Knowledge Assessments before
+  // Opinion surveys, Pre-Test before Post-Test, so a matched pair always
+  // sits side by side.
+  const groupedSurveys = useMemo(() => {
+    const stageRank = (title: string | undefined) => {
+      const t = (title || "").toLowerCase();
+      if (t.includes("pre-test")) return 0;
+      if (t.includes("post-test")) return 1;
+      return 2;
+    };
+    const typeRank = (type: string | undefined) =>
+      type === "knowledge" ? 0 : type === "opinion" ? 1 : 2;
+
+    const byCategory = new Map<string, Survey[]>();
+    for (const survey of filteredSurveys) {
+      const key = survey.category || "Other";
+      if (!byCategory.has(key)) byCategory.set(key, []);
+      byCategory.get(key)!.push(survey);
+    }
+
+    for (const group of byCategory.values()) {
+      group.sort((a, b) => {
+        const type = typeRank(a.type) - typeRank(b.type);
+        if (type !== 0) return type;
+        const stage = stageRank(a.title) - stageRank(b.title);
+        if (stage !== 0) return stage;
+        return (a.title || "").localeCompare(b.title || "");
+      });
+    }
+
+    // CATEGORIES order first, then anything unexpected (a legacy or
+    // custom category value) appended alphabetically at the end.
+    const orderedKeys = [
+      ...CATEGORIES.filter((c) => c !== "Other" && byCategory.has(c)),
+      ...[...byCategory.keys()]
+        .filter((k) => !CATEGORIES.includes(k) || k === "Other")
+        .sort(),
+    ];
+
+    return orderedKeys.map((category) => ({
+      category,
+      surveys: byCategory.get(category)!,
+    }));
+  }, [filteredSurveys]);
+
   const activeCount = surveys.filter((s) => s.status === "active").length;
   const draftCount = surveys.filter((s) => s.status === "draft").length;
   const closedCount = surveys.filter((s) => s.status === "closed").length;
@@ -1183,13 +1233,26 @@ export default function SurveyBuilder() {
             </p>
           </Card>
         ) : (
-          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
+          <div className="space-y-10">
+            {groupedSurveys.map(({ category, surveys: categorySurveys }) => (
+              <div key={category}>
+                <div className="flex items-center gap-3 mb-4">
+                  <h2 className="text-xs font-black uppercase tracking-widest text-slate-500 shrink-0">
+                    {category}
+                  </h2>
+                  <span className="text-[10px] font-black text-slate-300 shrink-0">
+                    {categorySurveys.length}
+                  </span>
+                  <div className="flex-1 h-px bg-slate-100" />
+                </div>
 
-            {filteredSurveys.map((survey) => (
-              <Card
-                key={survey.id}
-                className="p-6 rounded-3xl border-none shadow-sm hover:shadow-xl transition-all bg-white"
-              >
+                <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
+
+                  {categorySurveys.map((survey) => (
+                    <Card
+                      key={survey.id}
+                      className="p-6 rounded-3xl border-none shadow-sm hover:shadow-xl transition-all bg-white"
+                    >
 
                 <div className="flex justify-between items-start gap-3">
 
@@ -1325,7 +1388,10 @@ export default function SurveyBuilder() {
 
                 </div>
 
-              </Card>
+                    </Card>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         )}
