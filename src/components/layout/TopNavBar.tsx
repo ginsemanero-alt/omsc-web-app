@@ -205,17 +205,17 @@ export default function TopNavBar({
         isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
         <div className="p-6 flex flex-col h-full">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-2">
-               <Avatar className="w-10 h-10">
+          <div className="flex items-center justify-between gap-2 mb-8">
+            <div className="flex items-center gap-2 min-w-0">
+               <Avatar className="w-10 h-10 shrink-0">
                  <AvatarFallback className="bg-primary text-white font-bold">{initials}</AvatarFallback>
                </Avatar>
-               <div className="flex flex-col">
-                 <span className="font-bold text-sm truncate max-w-[150px] text-slate-900 dark:text-slate-100">{displayName}</span>
-                 <span className="text-[10px] text-slate-400 font-bold uppercase">{campus}</span>
+               <div className="flex flex-col min-w-0">
+                 <span className="font-bold text-sm truncate text-slate-900 dark:text-slate-100">{displayName}</span>
+                 <span className="text-[10px] text-slate-400 font-bold uppercase truncate">{campus}</span>
                </div>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
               {onToggleTheme && (
                 <Button
                   variant="ghost"
