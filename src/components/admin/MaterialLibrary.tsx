@@ -107,6 +107,11 @@ export default function IECMaterials() {
   const [activeTab, setActiveTab] = useState('articles');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
+  // Scoped separately from `loading` (which the materials-list fetch and
+  // delete flow also set) so the Save dialog's own "Uploading..." state
+  // can't ever be triggered by something unrelated happening in the
+  // background while the dialog is open.
+  const [isUploading, setIsUploading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedComponent, setSelectedComponent] = useState('All');
@@ -463,6 +468,7 @@ export default function IECMaterials() {
 
     try {
       setLoading(true);
+      setIsUploading(true);
 
       const existingMaterial = editingId
         ? materials.find((material) => material.id === editingId)
@@ -568,6 +574,22 @@ export default function IECMaterials() {
         }
         logActivity({ actorEmail: user?.email, actorName: userName, action: 'update', entityType: 'material', entityId: editingId, entityLabel: payload.title });
 
+        // Same orphaned-file gap as delete, via a different path: picking
+        // a replacement file here overwrote the URL in the row, but never
+        // removed the old file the previous URL pointed to. Only remove
+        // URLs that actually changed and aren't still in use by the new
+        // payload (an unchanged file, or two fields pointing at the same
+        // file, must survive this).
+        const staleUrls = [existingMaterial?.image_url, existingMaterial?.file_url].filter(
+          (url): url is string => !!url && url !== finalImageUrl && url !== finalFileUrl
+        );
+        for (const url of [...new Set(staleUrls)]) {
+          const parsed = parseStorageUrl(url);
+          if (!parsed) continue;
+          const { error: storageError } = await supabase.storage.from(parsed.bucket).remove([parsed.path]);
+          if (storageError) console.warn('Storage cleanup failed for', url, storageError.message);
+        }
+
         toast({
           title: 'Material Updated',
           description: 'The material has been updated successfully.',
@@ -613,6 +635,7 @@ export default function IECMaterials() {
       });
     } finally {
       setLoading(false);
+      setIsUploading(false);
     }
   };
 
@@ -629,11 +652,26 @@ export default function IECMaterials() {
     setIsDeleteOpen(true);
   };
 
+  // Deleting a material only ever removed its database row — the actual
+  // file in Supabase Storage (material-covers or material-files) was left
+  // behind forever, since nothing ever pointed a .remove() call at it.
+  // Parses the bucket + path back out of the public URL the app itself
+  // generated, so this works for whichever bucket a given material's file
+  // actually lives in.
+  const parseStorageUrl = (url?: string | null): { bucket: string; path: string } | null => {
+    if (!url) return null;
+    const match = url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+    if (!match) return null;
+    return { bucket: match[1], path: decodeURIComponent(match[2]) };
+  };
+
   const handleExecuteDelete = async () => {
     if (deleteTargetId === null) return;
 
     try {
       setLoading(true);
+
+      const targetMaterial = materials.find((m) => m.id === deleteTargetId);
 
       const { error } = await supabase
         .from('materials')
@@ -644,6 +682,19 @@ export default function IECMaterials() {
         throw error;
       }
       logActivity({ actorEmail: user?.email, actorName: userName, action: 'delete', entityType: 'material', entityId: deleteTargetId, entityLabel: deleteTargetTitle });
+
+      // Best-effort — the material record is already gone either way, so
+      // a storage hiccup here just means an orphaned file, not a broken
+      // material shown to anyone. Runs after the row delete succeeds, not
+      // before: deleting the file first and then failing to delete the
+      // row would leave a material pointing at a now-broken URL instead.
+      const storageUrls = [...new Set([targetMaterial?.file_url, targetMaterial?.image_url].filter(Boolean))] as string[];
+      for (const url of storageUrls) {
+        const parsed = parseStorageUrl(url);
+        if (!parsed) continue;
+        const { error: storageError } = await supabase.storage.from(parsed.bucket).remove([parsed.path]);
+        if (storageError) console.warn('Storage cleanup failed for', url, storageError.message);
+      }
 
       toast({
         title: 'Deleted Successfully',
@@ -1642,14 +1693,27 @@ export default function IECMaterials() {
               <Button
                 onClick={handleSave}
                 disabled={loading}
-                className="w-full h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-xs shadow-md"
+                className="w-full h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-xs shadow-md overflow-hidden relative"
               >
-                {loading ? (
-                  <Loader2 className="animate-spin h-5 w-5" />
+                {isUploading ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="animate-spin h-4 w-4" />
+                    Uploading...
+                  </span>
                 ) : editingId ? (
                   'Save & Sync Resource'
                 ) : (
                   'Publish Asset Item'
+                )}
+
+                {/* Indeterminate progress bar — Supabase's upload() has no
+                    real progress callback to report a true percentage
+                    from, so this is honestly a "something is happening,
+                    please wait" indicator rather than a measured one. */}
+                {isUploading && (
+                  <span className="absolute bottom-0 left-0 h-1 w-full bg-white/20 overflow-hidden">
+                    <span className="absolute h-full w-1/3 bg-white/90 rounded-full animate-[upload-progress_1.2s_ease-in-out_infinite]" />
+                  </span>
                 )}
               </Button>
 

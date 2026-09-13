@@ -143,6 +143,16 @@ module.exports = {
         'gradient-secondary': 'linear-gradient(135deg, hsl(222, 65%, 60%), hsl(208, 80%, 55%))',
         'gradient-accent': 'linear-gradient(135deg, hsl(266, 80%, 60%), hsl(290, 80%, 65%))',
       },
+      keyframes: {
+        // Classic indeterminate-progress sweep — used where there's a real
+        // wait (a file upload) but no real percentage to report, so it
+        // reads as "still working" rather than a stalled/frozen button.
+        'upload-progress': {
+          '0%': { left: '-33%' },
+          '50%': { left: '50%' },
+          '100%': { left: '100%' },
+        },
+      },
     },
   },
   // tailwindcss-animate was installed but never registered here, so every

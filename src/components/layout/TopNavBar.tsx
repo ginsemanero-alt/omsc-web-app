@@ -16,6 +16,7 @@ import {
   History,
   Sun,
   Moon,
+  AlertCircle,
   type LucideIcon,
 } from 'lucide-react';
 import { useState, useEffect } from 'react'; // Idinagdag ang useEffect
@@ -31,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '../../components/ui/avatar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 
 interface NavigationItem {
   label: string;
@@ -80,6 +82,10 @@ export default function TopNavBar({
   
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [displayName, setDisplayName] = useState(initialUserName); // State para sa dynamic name
+  // Both sign-out entry points (desktop dropdown, mobile sidebar) used to
+  // call onLogout the instant they were clicked — one accidental tap and
+  // the session was gone with no way back. Routed through this instead.
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // LOGIC PARA SA PAGKUHA NG PANGALAN SA POSTGRESQL
   useEffect(() => {
@@ -191,7 +197,7 @@ export default function TopNavBar({
                   {displayName}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator className="dark:bg-slate-800" />
-                <DropdownMenuItem onClick={onLogout} className="text-red-600 focus:bg-red-50 dark:focus:bg-red-500/10 focus:text-red-700 dark:text-red-400 rounded-xl cursor-pointer p-3">
+                <DropdownMenuItem onClick={() => setShowLogoutConfirm(true)} className="text-red-600 focus:bg-red-50 dark:focus:bg-red-500/10 focus:text-red-700 dark:text-red-400 rounded-xl cursor-pointer p-3">
                   <LogOut className="w-4 h-4 mr-2" /> <span className="font-bold uppercase text-[11px] tracking-widest">Sign Out Account</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -262,7 +268,7 @@ export default function TopNavBar({
             <Button
               variant="ghost"
               className="w-full justify-start text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 font-bold rounded-xl"
-              onClick={onLogout}
+              onClick={() => setShowLogoutConfirm(true)}
             >
               <LogOut className="w-5 h-5 mr-3" />
               SIGN OUT
@@ -272,11 +278,49 @@ export default function TopNavBar({
       </div>
       
       {isSidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/40 z-[60] md:hidden backdrop-blur-sm"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
+
+      <Dialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
+        <DialogContent className="max-w-sm rounded-3xl p-7 text-center">
+          <div className="mx-auto w-14 h-14 rounded-2xl bg-rose-50 dark:bg-rose-500/10 text-rose-500 flex items-center justify-center">
+            <AlertCircle />
+          </div>
+
+          <DialogHeader className="mt-4">
+            <DialogTitle className="text-xl font-black text-center dark:text-slate-100">
+              Sign Out?
+            </DialogTitle>
+          </DialogHeader>
+
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
+            You'll need to log in again to continue.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3 mt-6">
+            <Button
+              variant="ghost"
+              onClick={() => setShowLogoutConfirm(false)}
+              className="rounded-xl font-black"
+            >
+              Cancel
+            </Button>
+
+            <Button
+              onClick={() => {
+                setShowLogoutConfirm(false);
+                onLogout();
+              }}
+              className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black"
+            >
+              Yes, Sign Out
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
