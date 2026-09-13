@@ -216,7 +216,10 @@ export default function IECMaterials() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-1">{item.title}</h3>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">{item.format || 'Document'}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{item.format || 'Document'}</p>
+                      {item.description && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3">{item.description}</p>
+                      )}
                       <div className="flex flex-wrap gap-2">
                         {/* min-w-[90px] + flex-wrap: on a container too
                             narrow for both at a readable size, they wrap to
@@ -267,7 +270,10 @@ export default function IECMaterials() {
                     </button>
                   </div>
                   <div className="p-6">
-                    <h3 className="font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-4">{item.title}</h3>
+                    <h3 className="font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-1">{item.title}</h3>
+                    {item.description && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">{item.description}</p>
+                    )}
                     <Button onClick={() => { downloadFile(item.file_url, item.title); incrementDownloadCount(item.id); }} className="w-full h-12 bg-slate-900 hover:bg-indigo-600 rounded-2xl font-black uppercase text-xs">
                       <Download className="w-4 h-4 mr-2" /> Download
                     </Button>
@@ -285,7 +291,10 @@ export default function IECMaterials() {
                       <Youtube className="w-10 h-10 text-red-600" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 uppercase mb-4">{item.title}</h3>
+                      <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 uppercase mb-1">{item.title}</h3>
+                      {item.description && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">{item.description}</p>
+                      )}
                       <Button onClick={() => handlePreview(item)} className="bg-red-600 hover:bg-red-700 h-12 px-8 rounded-2xl font-black uppercase text-xs shadow-lg shadow-red-100 text-white">
                         Watch Now
                       </Button>
@@ -304,7 +313,10 @@ export default function IECMaterials() {
                       <Music className="w-8 h-8 text-purple-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-3">{item.title}</h3>
+                      <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-1">{item.title}</h3>
+                      {item.description && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3">{item.description}</p>
+                      )}
                       <audio src={item.file_url} controls className="w-full h-10" />
                     </div>
                   </div>
@@ -321,7 +333,10 @@ export default function IECMaterials() {
                       <LinkIcon className="w-8 h-8 text-indigo-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-4">{item.title}</h3>
+                      <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-1">{item.title}</h3>
+                      {item.description && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">{item.description}</p>
+                      )}
                       <a
                         href={item.file_url}
                         target="_blank"
