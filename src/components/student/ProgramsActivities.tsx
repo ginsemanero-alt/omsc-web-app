@@ -5,8 +5,9 @@ import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Dialog, DialogContent } from '../../components/ui/dialog';
 import {
-  Search, Calendar, MapPin, Loader2, Clock, ChevronDown, ChevronUp,
+  Search, Calendar, MapPin, Loader2, Clock, ChevronDown, ChevronUp, ZoomIn,
 } from 'lucide-react';
 import { formatProgramDate } from '../../lib/formatProgramDate';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
@@ -52,6 +53,7 @@ export default function ProgramsActivities() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -150,12 +152,21 @@ export default function ProgramsActivities() {
           return (
           <Card key={program.id} className="rounded-2xl md:rounded-[2.5rem] border-none shadow-sm bg-white dark:bg-slate-900 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex flex-col gap-6 border-b-4 border-b-slate-100 dark:border-b-slate-800">
 
-            <div className="aspect-video w-full bg-slate-900 relative shrink-0">
+            <div
+              className="aspect-video w-full bg-slate-900 relative shrink-0 cursor-pointer group/poster"
+              onClick={() => setPreviewImage({
+                url: program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop',
+                title: program.title,
+              })}
+            >
               <img
                 src={program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop'}
                 className="absolute inset-0 w-full h-full object-cover"
                 alt={program.title}
               />
+              <div className="absolute inset-0 bg-black/0 group-hover/poster:bg-black/30 transition-colors flex items-center justify-center">
+                <ZoomIn className="w-8 h-8 text-white opacity-0 group-hover/poster:opacity-100 transition-opacity" />
+              </div>
               <div className={`absolute top-4 right-4 px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm
                 ${effectiveStatus === 'ongoing' ? 'bg-emerald-500 text-white animate-pulse' : effectiveStatus === 'completed' ? 'bg-slate-700 text-white' : 'bg-indigo-600 text-white'}`}>
                 {effectiveStatus}
@@ -212,6 +223,14 @@ export default function ProgramsActivities() {
           );
         })}
       </div>
+
+      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+        <DialogContent className="max-w-4xl w-[95vw] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl [&>button]:bg-black/50 [&>button]:rounded-full [&>button]:p-1.5 [&>button]:text-white [&>button]:opacity-100">
+          {previewImage && (
+            <img src={previewImage.url} alt={previewImage.title} className="w-full max-h-[85vh] object-contain" />
+          )}
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
