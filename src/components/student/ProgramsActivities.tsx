@@ -7,7 +7,7 @@ import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Dialog, DialogContent } from '../../components/ui/dialog';
 import {
-  Search, Calendar, MapPin, Loader2, Clock, ChevronDown, ChevronUp, ZoomIn,
+  Search, Calendar, MapPin, Loader2, Clock, ChevronDown, ChevronUp, ZoomIn, FileText, Download,
 } from 'lucide-react';
 import { formatProgramDate } from '../../lib/formatProgramDate';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
@@ -43,6 +43,7 @@ interface Program {
   image_url?: string;
   content?: string;
   date_display?: string;
+  materials?: { id: number; title: string; file_url: string }[];
 }
 
 export default function ProgramsActivities() {
@@ -60,7 +61,7 @@ export default function ProgramsActivities() {
     try {
       const { data: programsData, error: programsError } = await supabase
         .from('programs')
-        .select('*')
+        .select('*, materials(id, title, file_url)')
         .order('date', { ascending: true });
 
       if (programsError) throw programsError;
@@ -212,11 +213,39 @@ export default function ProgramsActivities() {
                 {expandedId === program.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </Button>
 
-              {expandedId === program.id && (
-                <div className="mt-4 bg-slate-50/70 dark:bg-slate-800/40 p-4 md:p-6 rounded-2xl text-slate-600 dark:text-slate-300 text-xs md:text-sm leading-relaxed border border-slate-100/30 dark:border-slate-700/30 animate-in slide-in-from-top-2 duration-300 font-medium whitespace-pre-wrap">
-                  {program.content || 'No additional details provided for this activity.'}
-                </div>
-              )}
+              {expandedId === program.id && (() => {
+                const handouts = program.materials?.filter((m) => !m.title?.startsWith('CERTIFICATE_TEMPLATE:')) || [];
+                return (
+                  <div className="mt-4 space-y-3 animate-in slide-in-from-top-2 duration-300">
+                    <div className="bg-slate-50/70 dark:bg-slate-800/40 p-4 md:p-6 rounded-2xl text-slate-600 dark:text-slate-300 text-xs md:text-sm leading-relaxed border border-slate-100/30 dark:border-slate-700/30 font-medium whitespace-pre-wrap">
+                      {program.content || 'No additional details provided for this activity.'}
+                    </div>
+
+                    {handouts.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[9px] font-black uppercase text-indigo-500 tracking-widest ml-1">Downloadable Handouts</p>
+                        {handouts.map((mat) => (
+                          <a
+                            key={mat.id}
+                            href={mat.file_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 hover:border-indigo-500 rounded-xl transition-all shadow-sm group/handout"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <FileText className="w-4 h-4 text-indigo-500 shrink-0" />
+                              <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 truncate uppercase tracking-tight">
+                                {mat.title.replace('HANDOUT: ', '')}
+                              </span>
+                            </div>
+                            <Download className="w-3.5 h-3.5 text-slate-400 group-hover/handout:text-indigo-600 transition-colors shrink-0" />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
           </Card>
