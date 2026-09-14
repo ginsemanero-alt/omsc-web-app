@@ -42,7 +42,6 @@ import {
   Image as ImageIcon,
   Video,
   File,
-  Eye,
   Trophy,
   Target,
 } from "lucide-react";
@@ -1361,20 +1360,6 @@ export default function AnalyticsDashboard() {
   }, [surveys]);
 
   /* =======================================================
-     MONTHLY PROGRAM PARTICIPATION
-
-     Was derived from program_registrations, removed in
-     Phase 1b. Kept as an explicit empty array so the trend
-     chart renders its "no data" state instead of a flat
-     zero line that could be mistaken for real data.
-  ======================================================= */
-
-  const monthlyParticipation: {
-    month: string;
-    participants: number;
-  }[] = [];
-
-  /* =======================================================
      =======================================================
      IEC MATERIAL ANALYTICS
      =======================================================
@@ -1441,6 +1426,27 @@ export default function AnalyticsDashboard() {
     ).length;
 
   /* -------------------------------------------------------
+     IEC MATERIALS CREATED THIS YEAR
+
+     Every other tile in the "IEC Material Summary" card is IEC-scoped
+     (Total IEC, Downloads, This Month) — that card used to show
+     materialsThisYear (ALL materials, IEC or not) for its "This Year"
+     tile, silently pulling in program posters/handouts into what reads
+     as an IEC-only summary. This is the IEC-filtered counterpart.
+  ------------------------------------------------------- */
+
+  const iecMaterialsThisYear =
+    filteredMaterials.filter(
+      (material) =>
+        normalize(
+          material.material_type
+        ) === "iec" &&
+        isSameYear(
+          material.created_at
+        )
+    ).length;
+
+  /* -------------------------------------------------------
      IEC DOWNLOADS
   ------------------------------------------------------- */
 
@@ -1463,6 +1469,12 @@ export default function AnalyticsDashboard() {
 
   /* -------------------------------------------------------
      DOWNLOADS THIS MONTH
+
+     There's no per-download timestamp anywhere — `materials.downloads`
+     is a single running counter with no log of when each download
+     happened, so this can only ever be "lifetime downloads on
+     materials uploaded this month," not "downloads that occurred this
+     month." Named/labeled accordingly wherever it's shown.
   ------------------------------------------------------- */
 
   const downloadsThisMonth =
@@ -1840,7 +1852,7 @@ export default function AnalyticsDashboard() {
       ],
 
       [
-        "Downloads This Month",
+        "Downloads (This Month's Uploads)",
         downloadsThisMonth,
       ],
 
@@ -2437,9 +2449,6 @@ export default function AnalyticsDashboard() {
 
       pre_post_comparison: prePostComparison,
 
-      monthly_participation:
-        monthlyParticipation,
-
       survey_response_data:
         filteredSurveyResponses,
 
@@ -2886,9 +2895,9 @@ export default function AnalyticsDashboard() {
             />
 
             <StatCard
-              title="Downloads This Month"
+              title="Downloads (This Month's Uploads)"
               value={downloadsThisMonth}
-              description="Downloads from monthly records"
+              description="Lifetime downloads of materials uploaded this month"
               icon={TrendingUp}
             />
 
@@ -4048,10 +4057,10 @@ export default function AnalyticsDashboard() {
         </div>
 
         {/* =================================================
-            CAMPUS + PROGRAM TREND
+            CAMPUS DISTRIBUTION
         ================================================= */}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6">
 
           <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
 
@@ -4104,73 +4113,6 @@ export default function AnalyticsDashboard() {
 
                 </PieChart>
               </ResponsiveContainer>
-
-            </div>
-
-          </Card>
-
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-
-            <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-              Awareness Trend
-            </h2>
-
-            <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
-              Monthly knowledge survey awareness scores
-            </p>
-
-            <div className="h-72 mt-4">
-
-              {monthlyParticipation.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-slate-400 text-xs font-bold">
-                  No awareness trend data available yet.
-                </div>
-              ) : (
-                <ResponsiveContainer
-                  width="100%"
-                  height="100%"
-                >
-                  <LineChart
-                    data={
-                      monthlyParticipation
-                    }
-                  >
-
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      vertical={false}
-                    />
-
-                    <XAxis
-                      dataKey="month"
-                      tick={{
-                        fontSize: 9,
-                      }}
-                    />
-
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{
-                        fontSize: 9,
-                      }}
-                    />
-
-                    <Tooltip />
-
-                    <Line
-                      type="monotone"
-                      dataKey="participants"
-                      name="Awareness Score"
-                      stroke="#4f46e5"
-                      strokeWidth={3}
-                      dot={{
-                        r: 4,
-                      }}
-                    />
-
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
 
             </div>
 
@@ -4308,11 +4250,11 @@ export default function AnalyticsDashboard() {
               </p>
 
               <p className="mt-2 text-3xl font-black text-purple-700">
-                {materialsThisYear}
+                {iecMaterialsThisYear}
               </p>
 
               <p className="mt-1 text-[9px] font-bold text-purple-400 uppercase">
-                Materials created
+                New IEC materials
               </p>
             </div>
 
