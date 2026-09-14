@@ -1,16 +1,20 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../hooks/use-toast';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Dialog, DialogContent } from '../../components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import {
-  Search, Calendar, MapPin, Loader2, Clock, ChevronDown, ChevronUp, ZoomIn, FileText, Download,
+  Search, Calendar, MapPin, Loader2, Clock, ChevronDown, ChevronUp, ZoomIn, FileText, Download, Eye, HardDrive,
 } from 'lucide-react';
 import { formatProgramDate } from '../../lib/formatProgramDate';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
+
+// Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
+// this chunk unless someone actually opens a handout PDF preview.
+const PdfPreview = lazy(() => import('../shared/PdfPreview'));
 
 const GUIDANCE_SERVICES = [
   'Information Services',
@@ -55,6 +59,26 @@ export default function ProgramsActivities() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
+  const [previewHandout, setPreviewHandout] = useState<{ url: string; title: string } | null>(null);
+
+  // Handouts open in an in-app preview first — downloading is a separate,
+  // explicit action inside that preview, not the default click behavior.
+  const downloadHandout = async (url: string, filename: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      window.location.href = url;
+    }
+  };
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -225,12 +249,11 @@ export default function ProgramsActivities() {
                       <div className="space-y-2">
                         <p className="text-[9px] font-black uppercase text-indigo-500 tracking-widest ml-1">Downloadable Handouts</p>
                         {handouts.map((mat) => (
-                          <a
+                          <button
                             key={mat.id}
-                            href={mat.file_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 hover:border-indigo-500 rounded-xl transition-all shadow-sm group/handout"
+                            type="button"
+                            onClick={() => setPreviewHandout({ url: mat.file_url, title: mat.title.replace('HANDOUT: ', '') })}
+                            className="w-full flex items-center justify-between p-3.5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 hover:border-indigo-500 rounded-xl transition-all shadow-sm group/handout text-left"
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
                               <FileText className="w-4 h-4 text-indigo-500 shrink-0" />
@@ -238,8 +261,8 @@ export default function ProgramsActivities() {
                                 {mat.title.replace('HANDOUT: ', '')}
                               </span>
                             </div>
-                            <Download className="w-3.5 h-3.5 text-slate-400 group-hover/handout:text-indigo-600 transition-colors shrink-0" />
-                          </a>
+                            <Eye className="w-3.5 h-3.5 text-slate-400 group-hover/handout:text-indigo-600 transition-colors shrink-0" />
+                          </button>
                         ))}
                       </div>
                     )}
@@ -258,6 +281,53 @@ export default function ProgramsActivities() {
           {previewImage && (
             <img src={previewImage.url} alt={previewImage.title} className="w-full max-h-[85vh] object-contain" />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* HANDOUT PREVIEW — opens in-app first; downloading is a separate,
+          explicit action below, not the default click behavior. */}
+      <Dialog open={!!previewHandout} onOpenChange={(open) => !open && setPreviewHandout(null)}>
+        <DialogContent className="max-w-4xl w-[95vw] h-[85vh] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl flex flex-col">
+          <DialogHeader className="p-5 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between shrink-0">
+            <DialogTitle className="font-black uppercase tracking-tighter text-base text-slate-900 dark:text-white truncate pr-8">
+              {previewHandout?.title}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 w-full bg-slate-900/50 flex items-center justify-center overflow-hidden relative">
+            {previewHandout && /\.pdf(\?.*)?$/i.test(previewHandout.url) ? (
+              <Suspense
+                fallback={
+                  <div className="flex flex-col items-center justify-center gap-3">
+                    <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Loading PDF...</p>
+                  </div>
+                }
+              >
+                <PdfPreview url={previewHandout.url} />
+              </Suspense>
+            ) : previewHandout && /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(previewHandout.url) ? (
+              <div className="p-4 w-full h-full flex items-center justify-center">
+                <img src={previewHandout.url} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" alt={previewHandout.title} />
+              </div>
+            ) : (
+              <div className="text-center px-6">
+                <HardDrive className="w-16 h-16 text-slate-700 dark:text-slate-200 mx-auto" />
+                <p className="font-bold text-slate-500 dark:text-slate-400 mt-4 uppercase text-xs">Preview not available for this file type</p>
+                <p className="text-slate-500 dark:text-slate-400 text-[10px] mt-1">Download it below to open it.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 shrink-0">
+            <Button variant="ghost" onClick={() => setPreviewHandout(null)} className="rounded-xl font-bold uppercase text-[10px]">Close</Button>
+            <Button
+              onClick={() => previewHandout && downloadHandout(previewHandout.url, previewHandout.title)}
+              className="bg-indigo-600 hover:bg-indigo-700 rounded-xl font-black uppercase text-[10px] px-6 text-white"
+            >
+              <Download className="w-3.5 h-3.5 mr-2" /> Download
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
