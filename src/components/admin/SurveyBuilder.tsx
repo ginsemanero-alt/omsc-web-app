@@ -12,6 +12,8 @@ import {
   Save,
   Loader2,
   ChevronLeft,
+  ChevronDown,
+  ChevronUp,
   ClipboardList,
   X,
   Copy,
@@ -115,6 +117,7 @@ export default function SurveyBuilder() {
     useState<Survey | null>(null);
   const [responses, setResponses] = useState<any[]>([]);
   const [loadingResponses, setLoadingResponses] = useState(false);
+  const [expandedResponseId, setExpandedResponseId] = useState<string | number | null>(null);
 
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
@@ -469,6 +472,7 @@ export default function SurveyBuilder() {
     try {
       setLoadingResponses(true);
       setViewingResponses(survey);
+      setExpandedResponseId(null);
 
       const { data: responseData, error: responseError } = await supabase
         .from("survey_responses")
@@ -1577,13 +1581,20 @@ export default function SurveyBuilder() {
                   </p>
                 </div>
               ) : (
-                responses.map((response: any) => (
+                responses.map((response: any) => {
+                  const isExpanded = expandedResponseId === response.id;
+                  return (
                   <Card
                     key={response.id}
                     className="rounded-2xl border-none overflow-hidden"
                   >
 
-                    <div className="bg-slate-900 text-white p-4 flex justify-between items-center gap-3">
+                    <div
+                      className="bg-slate-900 text-white p-4 flex justify-between items-center gap-3 cursor-pointer"
+                      onClick={() =>
+                        setExpandedResponseId(isExpanded ? null : response.id)
+                      }
+                    >
 
                       <div className="min-w-0">
                         <h3 className="font-black truncate">
@@ -1606,51 +1617,60 @@ export default function SurveyBuilder() {
                         <CheckCircle2 className="text-emerald-400 w-5 h-5" />
                         <button
                           type="button"
-                          onClick={() =>
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setDeleteResponseTarget({
                               id: response.id,
                               studentName: response.studentName,
-                            })
-                          }
+                            });
+                          }}
                           className="w-8 h-8 rounded-lg bg-white/10 hover:bg-rose-500/80 flex items-center justify-center text-white/70 hover:text-white transition-colors"
                           title="Delete this response"
                           aria-label="Delete this response"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-white/60" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-white/60" />
+                        )}
                       </div>
                     </div>
 
-                    <div className="p-5 grid md:grid-cols-2 gap-4">
+                    {isExpanded && (
+                      <div className="p-5 grid md:grid-cols-2 gap-4">
 
-                      {viewingResponses?.questions_data?.map(
-                        (question) => (
-                          <div
-                            key={question.id}
-                            className="bg-slate-50 rounded-xl p-4"
-                          >
-                            <p className="text-[9px] font-black uppercase text-slate-400">
-                              {question.text}
-                            </p>
+                        {viewingResponses?.questions_data?.map(
+                          (question) => (
+                            <div
+                              key={question.id}
+                              className="bg-slate-50 rounded-xl p-4"
+                            >
+                              <p className="text-[9px] font-black uppercase text-slate-400">
+                                {question.text}
+                              </p>
 
-                            <p className="mt-2 font-bold text-slate-800 text-sm">
-                              {response.answers?.[
-                                question.id
-                              ] !== undefined
-                                ? String(
-                                    response.answers[
-                                      question.id
-                                    ]
-                                  )
-                                : "No response"}
-                            </p>
-                          </div>
-                        )
-                      )}
+                              <p className="mt-2 font-bold text-slate-800 text-sm">
+                                {response.answers?.[
+                                  question.id
+                                ] !== undefined
+                                  ? String(
+                                      response.answers[
+                                        question.id
+                                      ]
+                                    )
+                                  : "No response"}
+                              </p>
+                            </div>
+                          )
+                        )}
 
-                    </div>
+                      </div>
+                    )}
                   </Card>
-                ))
+                  );
+                })
               )}
 
             </div>
