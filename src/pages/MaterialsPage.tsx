@@ -139,6 +139,8 @@ const MaterialsPage: React.FC = () => {
 
   const isVideo = (m: Material) =>
     m.type?.toLowerCase() === 'video' || m.url?.includes('youtube') || m.url?.includes('youtu.be');
+  const isYouTube = (m: Material) =>
+    !!m.url?.includes('youtube') || !!m.url?.includes('youtu.be');
   const isImage = (m: Material) =>
     m.type?.toLowerCase() === 'image' || /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(m.url || '');
   const isAudio = (m: Material) =>
@@ -284,12 +286,22 @@ const MaterialsPage: React.FC = () => {
           </DialogHeader>
 
           <div className="flex-1 w-full bg-slate-900/50 flex items-center justify-center overflow-hidden relative">
-            {previewItem && isVideo(previewItem) ? (
+            {previewItem && isVideo(previewItem) && isYouTube(previewItem) ? (
               <iframe
                 src={getYouTubeEmbedUrl(previewItem.url)}
                 className="w-full aspect-video max-w-4xl rounded-2xl shadow-2xl border-none"
                 allowFullScreen
                 title="Video Preview"
+              />
+            ) : previewItem && isVideo(previewItem) ? (
+              // Self-hosted upload, not YouTube — native <video> controls
+              // already include a fullscreen button on every browser.
+              <video
+                src={previewItem.url}
+                controls
+                autoPlay
+                playsInline
+                className="w-full max-h-full max-w-4xl rounded-2xl shadow-2xl"
               />
             ) : previewItem && isPdf(previewItem) ? (
               <Suspense

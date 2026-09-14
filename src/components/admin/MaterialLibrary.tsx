@@ -36,6 +36,7 @@ import {
   Calendar,
   Maximize2,
   Youtube,
+  Video,
   Music,
   Link as LinkIcon,
   Plus,
@@ -135,11 +136,17 @@ export default function IECMaterials() {
   const documentInputRef = useRef<HTMLInputElement>(null);
 
   const audioInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState('');
   const [attachedDocument, setAttachedDocument] = useState<File | null>(null);
   const [attachedAudio, setAttachedAudio] = useState<File | null>(null);
+  const [attachedVideo, setAttachedVideo] = useState<File | null>(null);
+  // A YouTube link and a self-hosted upload need different form fields —
+  // this just tracks which one is currently showing. Defaults to 'link'
+  // since every existing Video material is a YouTube URL.
+  const [videoSourceMode, setVideoSourceMode] = useState<'link' | 'upload'>('link');
 
   const [formData, setFormData] = useState<FormData>(DEFAULT_FORM);
 
@@ -227,6 +234,12 @@ export default function IECMaterials() {
     setSelectedImage(null);
     setAttachedDocument(null);
     setAttachedAudio(null);
+    setAttachedVideo(null);
+    setVideoSourceMode(
+      material?.file_url && !material.file_url.includes('youtube') && !material.file_url.includes('youtu.be') && material.type === 'Video'
+        ? 'upload'
+        : 'link'
+    );
 
     if (imageInputRef.current) {
       imageInputRef.current.value = '';
@@ -238,6 +251,10 @@ export default function IECMaterials() {
 
     if (audioInputRef.current) {
       audioInputRef.current.value = '';
+    }
+
+    if (videoInputRef.current) {
+      videoInputRef.current.value = '';
     }
 
     setIsDialogOpen(true);
@@ -285,6 +302,20 @@ export default function IECMaterials() {
         variant: 'destructive',
         title: 'Invalid Audio File',
         description: 'Please select a valid audio file.',
+      });
+
+      return false;
+    }
+
+    return true;
+  };
+
+  const validateVideo = (file: File) => {
+    if (!file.type.startsWith('video/')) {
+      toast({
+        variant: 'destructive',
+        title: 'Invalid Video File',
+        description: 'Please select a valid video file.',
       });
 
       return false;
@@ -357,6 +388,21 @@ export default function IECMaterials() {
     setAttachedAudio(file);
   };
 
+  const handleVideoSelect = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    if (!validateVideo(file)) {
+      event.target.value = '';
+      return;
+    }
+
+    setAttachedVideo(file);
+  };
+
   // =========================================================
   // UPLOAD STORAGE FILE
   // =========================================================
@@ -416,11 +462,21 @@ export default function IECMaterials() {
       return;
     }
 
-    if (formData.type === 'Video' && !formData.file_url.trim()) {
+    if (formData.type === 'Video' && videoSourceMode === 'link' && !formData.file_url.trim()) {
       toast({
         variant: 'destructive',
         title: 'Missing Video URL',
         description: 'Please enter a YouTube URL.',
+      });
+
+      return;
+    }
+
+    if (formData.type === 'Video' && videoSourceMode === 'upload' && !editingId && !attachedVideo) {
+      toast({
+        variant: 'destructive',
+        title: 'Missing Video File',
+        description: 'Please attach a video file.',
       });
 
       return;
@@ -523,10 +579,24 @@ export default function IECMaterials() {
       }
 
       // -------------------------------------------------------
-      // VIDEO / LINK URL
+      // VIDEO UPLOAD
       // -------------------------------------------------------
 
-      if (formData.type === 'Video' || formData.type === 'Link') {
+      if (formData.type === 'Video' && videoSourceMode === 'upload' && attachedVideo) {
+        finalFileUrl = await uploadFile(
+          'material-files',
+          'video',
+          attachedVideo
+        );
+      } else if (formData.type === 'Video' && videoSourceMode === 'link') {
+        finalFileUrl = formData.file_url.trim();
+      }
+
+      // -------------------------------------------------------
+      // LINK URL
+      // -------------------------------------------------------
+
+      if (formData.type === 'Link') {
         finalFileUrl = formData.file_url.trim();
       }
 
@@ -1331,6 +1401,8 @@ export default function IECMaterials() {
                       setSelectedImage(null);
                       setAttachedDocument(null);
                       setAttachedAudio(null);
+                      setAttachedVideo(null);
+                      setVideoSourceMode('link');
                     }}
                     className="select-field"
                   >
@@ -1343,7 +1415,7 @@ export default function IECMaterials() {
                     </option>
 
                     <option value="Video">
-                      Video Streaming Link
+                      Video (Link or Upload)
                     </option>
 
                     <option value="Audio">
@@ -1548,24 +1620,91 @@ export default function IECMaterials() {
               {/* VIDEO */}
 
               {formData.type === 'Video' && (
-                <div className="space-y-1.5">
+                <div className="space-y-3">
 
-                  <Label className="field-label text-red-500">
-                    YouTube Streaming URL
-                  </Label>
+                  {/* A YouTube link and an uploaded file need completely
+                      different fields below — this just picks which one
+                      shows, it isn't saved as part of the material itself. */}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setVideoSourceMode('link')}
+                      className={`flex-1 h-10 rounded-xl font-black uppercase text-[10px] tracking-wider transition-colors ${
+                        videoSourceMode === 'link'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                      }`}
+                    >
+                      YouTube Link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVideoSourceMode('upload')}
+                      className={`flex-1 h-10 rounded-xl font-black uppercase text-[10px] tracking-wider transition-colors ${
+                        videoSourceMode === 'upload'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                      }`}
+                    >
+                      Upload Video File
+                    </button>
+                  </div>
 
-                  <Input
-                    value={formData.file_url}
-                    onChange={(event) =>
-                      setFormData({
-                        ...formData,
-                        file_url:
-                          event.target.value,
-                      })
-                    }
-                    className="rounded-xl bg-slate-50 border-none h-12 font-bold px-4 text-slate-700"
-                    placeholder="https://www.youtube.com/watch?v=..."
-                  />
+                  {videoSourceMode === 'link' ? (
+                    <div className="space-y-1.5">
+                      <Label className="field-label text-red-500">
+                        YouTube Streaming URL
+                      </Label>
+
+                      <Input
+                        value={formData.file_url}
+                        onChange={(event) =>
+                          setFormData({
+                            ...formData,
+                            file_url:
+                              event.target.value,
+                          })
+                        }
+                        className="rounded-xl bg-slate-50 border-none h-12 font-bold px-4 text-slate-700"
+                        placeholder="https://www.youtube.com/watch?v=..."
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <Label className="field-label">
+                        Video File Attachment
+                      </Label>
+
+                      <div
+                        onClick={() =>
+                          videoInputRef.current?.click()
+                        }
+                        className="h-12 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center px-4 cursor-pointer text-slate-600 text-xs"
+                      >
+                        <Video className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
+
+                        <span className="truncate flex-1 font-bold">
+                          {attachedVideo
+                            ? attachedVideo.name
+                            : editingId
+                            ? 'Replace Video File...'
+                            : 'Choose Video File...'}
+                        </span>
+
+                        <input
+                          type="file"
+                          ref={videoInputRef}
+                          className="hidden"
+                          accept="video/*"
+                          onChange={handleVideoSelect}
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-400 px-1">
+                        Self-hosted — no YouTube branding or ads, but uses
+                        this app's own storage instead of YouTube's.
+                      </p>
+                    </div>
+                  )}
 
                 </div>
               )}
@@ -1750,7 +1889,8 @@ export default function IECMaterials() {
             {/* VIDEO */}
 
             {previewItem &&
-            previewItem.type === 'Video' ? (
+            previewItem.type === 'Video' &&
+            (previewItem.file_url?.includes('youtube') || previewItem.file_url?.includes('youtu.be')) ? (
               <iframe
                 src={getYouTubeEmbedUrl(
                   previewItem.file_url || ''
@@ -1759,6 +1899,18 @@ export default function IECMaterials() {
                 allowFullScreen
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 title={previewItem.title}
+              />
+            ) : previewItem &&
+              previewItem.type === 'Video' &&
+              previewItem.file_url ? (
+              // Self-hosted upload, not YouTube — native controls already
+              // include a fullscreen button, no iframe/embed needed.
+              <video
+                src={previewItem.file_url}
+                controls
+                autoPlay
+                playsInline
+                className="w-full max-h-full max-w-4xl rounded-2xl shadow-2xl"
               />
             ) : previewItem &&
               previewItem.type === 'PDF' &&

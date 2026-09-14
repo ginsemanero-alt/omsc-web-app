@@ -365,12 +365,22 @@ export default function IECMaterials() {
           </DialogHeader>
           
           <div className="flex-1 w-full bg-slate-900/50 flex items-center justify-center overflow-hidden relative">
-            {previewItem?.type === 'Video' || previewItem?.file_url?.includes('youtube') || previewItem?.file_url?.includes('youtu.be') ? (
+            {previewItem?.file_url?.includes('youtube') || previewItem?.file_url?.includes('youtu.be') ? (
                <iframe
                 src={getYouTubeEmbedUrl(previewItem.file_url)}
                 className="w-full aspect-video max-w-4xl rounded-2xl shadow-2xl border-none"
                 allowFullScreen
                 title="YouTube Video"
+              />
+            ) : previewItem?.type === 'Video' && previewItem?.file_url ? (
+              // Self-hosted upload, not YouTube — native <video> controls
+              // already include a fullscreen button on every browser.
+              <video
+                src={previewItem.file_url}
+                controls
+                autoPlay
+                playsInline
+                className="w-full max-h-full max-w-4xl rounded-2xl shadow-2xl"
               />
             ) : previewItem?.file_url?.toLowerCase().endsWith('.pdf') ? (
               <Suspense
@@ -422,8 +432,12 @@ export default function IECMaterials() {
           <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 shrink-0">
             <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="rounded-xl font-bold uppercase text-[10px]">Close</Button>
             
-            {/* Hide download button for streaming/external-link types */}
-            {previewItem?.type !== 'Video' && previewItem?.type !== 'Link' && !previewItem?.file_url?.includes('youtube') && (
+            {/* Hide download for streaming/external-link types — a YouTube
+                embed and a plain external Link have nothing to actually
+                download, but a self-hosted Video upload does. */}
+            {previewItem?.type !== 'Link' &&
+              !previewItem?.file_url?.includes('youtube') &&
+              !previewItem?.file_url?.includes('youtu.be') && (
               <Button onClick={() => { downloadFile(previewItem.file_url, previewItem.title); incrementDownloadCount(previewItem.id); }} className="bg-indigo-600 rounded-xl font-black uppercase text-[10px] px-6 text-white">
                 Download Resource
               </Button>
