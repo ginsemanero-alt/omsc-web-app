@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
@@ -20,6 +20,8 @@ export default function UserManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [inclusionFilter, setInclusionFilter] = useState('all');
+  const [campusFilter, setCampusFilter] = useState('all');
+  const [programFilter, setProgramFilter] = useState('all');
   
   // Edit States
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -49,31 +51,45 @@ export default function UserManagement() {
 
       if (error) throw error;
 
-      // PWD/IP status lives in `profiles` (student-only demographics),
-      // not `users` — bridge the two via student_id. This is the one
-      // place in the app that shows PWD/IP tied to a specific student:
-      // it's an account-management view where the admin already sees
-      // the student's name, unlike Analytics, which the registration
-      // privacy notice promises will only ever show PWD/IP in aggregate.
+      // PWD/IP status, program, year level, age, and gender all live in
+      // `profiles` (student-only demographics), not `users` — bridge the
+      // two via student_id. This is the one place in the app that shows
+      // PWD/IP tied to a specific student: it's an account-management
+      // view where the admin already sees the student's name, unlike
+      // Analytics, which the registration privacy notice promises will
+      // only ever show PWD/IP in aggregate. Program/campus filters were
+      // previously built as a click-through in Analytics and moved here
+      // for the same reason — this is the account-directory view, not
+      // the aggregate-reporting one.
       const studentIds = (data || [])
         .map((u) => u.student_id)
         .filter(Boolean);
 
-      let profilesByStudentId: Record<string, { is_pwd: boolean; is_ip: boolean }> = {};
+      type ProfileBridge = { is_pwd: boolean; is_ip: boolean; program: string | null; year_level: string | number | null; age: number | null; gender: string | null };
+      let profilesByStudentId: Record<string, ProfileBridge> = {};
 
       if (studentIds.length > 0) {
         const { data: profiles, error: profilesError } = await supabase
           .from('profiles')
-          .select('student_id, is_pwd, is_ip')
+          .select('student_id, is_pwd, is_ip, program, year_level, age, gender')
           .in('student_id', studentIds);
 
         if (profilesError) {
-          console.warn('Unable to load PWD/IP status:', profilesError);
+          console.warn('Unable to load student demographics:', profilesError);
         } else {
           profilesByStudentId = (profiles || []).reduce((acc, p) => {
-            if (p.student_id) acc[p.student_id] = { is_pwd: !!p.is_pwd, is_ip: !!p.is_ip };
+            if (p.student_id) {
+              acc[p.student_id] = {
+                is_pwd: !!p.is_pwd,
+                is_ip: !!p.is_ip,
+                program: p.program ?? null,
+                year_level: p.year_level ?? null,
+                age: p.age ?? null,
+                gender: p.gender ?? null,
+              };
+            }
             return acc;
-          }, {} as Record<string, { is_pwd: boolean; is_ip: boolean }>);
+          }, {} as Record<string, ProfileBridge>);
         }
       }
 
@@ -81,6 +97,10 @@ export default function UserManagement() {
         ...user,
         is_pwd: profilesByStudentId[user.student_id]?.is_pwd ?? false,
         is_ip: profilesByStudentId[user.student_id]?.is_ip ?? false,
+        program: profilesByStudentId[user.student_id]?.program ?? null,
+        year_level: profilesByStudentId[user.student_id]?.year_level ?? null,
+        age: profilesByStudentId[user.student_id]?.age ?? null,
+        gender: profilesByStudentId[user.student_id]?.gender ?? null,
       }));
 
       setUsers(merged);
@@ -242,6 +262,17 @@ export default function UserManagement() {
     }
   };
 
+  // Dynamic, derived from whatever campuses/programs actually appear in
+  // the data — matches the pattern Analytics uses for its own filters,
+  // instead of a hardcoded list that could drift out of sync.
+  const campusOptions = useMemo(() => {
+    return Array.from(new Set(users.map((u) => u.campus).filter(Boolean))).sort();
+  }, [users]);
+
+  const programOptions = useMemo(() => {
+    return Array.from(new Set(users.map((u) => u.program).filter(Boolean))).sort();
+  }, [users]);
+
   const filteredUsers = users.filter((user) => {
     const query = searchQuery.toLowerCase();
     const matchesSearch = user.name?.toLowerCase().includes(query) || user.email?.toLowerCase().includes(query);
@@ -250,7 +281,9 @@ export default function UserManagement() {
       inclusionFilter === 'all' ||
       (inclusionFilter === 'pwd' && user.is_pwd) ||
       (inclusionFilter === 'ip' && user.is_ip);
-    return matchesSearch && matchesRole && matchesInclusion;
+    const matchesCampus = campusFilter === 'all' || user.campus === campusFilter;
+    const matchesProgram = programFilter === 'all' || user.program === programFilter;
+    return matchesSearch && matchesRole && matchesInclusion && matchesCampus && matchesProgram;
   });
 
   // Exports whatever the admin is currently looking at (respects the
@@ -478,36 +511,60 @@ export default function UserManagement() {
       )}
 
       {/* SEARCH & FILTER */}
-      <div className="flex flex-col md:flex-row gap-4 bg-white p-4 rounded-[2rem] shadow-sm border border-slate-100">
-        <div className="flex-1 relative">
+      <div className="flex flex-col gap-4 bg-white p-4 rounded-[2rem] shadow-sm border border-slate-100">
+        <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-          <Input 
-            placeholder="Search name or email..." 
-            value={searchQuery} 
-            onChange={(e) => setSearchQuery(e.target.value)} 
-            className="pl-12 h-12 bg-slate-50 border-none rounded-2xl font-bold" 
+          <Input
+            placeholder="Search name or email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-12 h-12 bg-slate-50 border-none rounded-2xl font-bold"
           />
         </div>
-        <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="w-full md:w-48 h-12 bg-slate-50 border-none rounded-2xl font-black uppercase text-[10px]">
-            <SelectValue placeholder="All Roles" />
-          </SelectTrigger>
-          <SelectContent className="rounded-2xl border-none shadow-xl">
-            <SelectItem value="all">All Roles</SelectItem>
-            <SelectItem value="admin">Admins</SelectItem>
-            <SelectItem value="student">Students</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={inclusionFilter} onValueChange={setInclusionFilter}>
-          <SelectTrigger className="w-full md:w-48 h-12 bg-slate-50 border-none rounded-2xl font-black uppercase text-[10px]">
-            <SelectValue placeholder="All Students" />
-          </SelectTrigger>
-          <SelectContent className="rounded-2xl border-none shadow-xl">
-            <SelectItem value="all">PWD / IP: All</SelectItem>
-            <SelectItem value="pwd">PWD Only</SelectItem>
-            <SelectItem value="ip">IP Only</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex flex-wrap gap-3">
+          <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <SelectTrigger className="flex-1 min-w-[160px] h-12 bg-slate-50 border-none rounded-2xl font-black uppercase text-[10px]">
+              <SelectValue placeholder="All Roles" />
+            </SelectTrigger>
+            <SelectContent className="rounded-2xl border-none shadow-xl">
+              <SelectItem value="all">All Roles</SelectItem>
+              <SelectItem value="admin">Admins</SelectItem>
+              <SelectItem value="student">Students</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={inclusionFilter} onValueChange={setInclusionFilter}>
+            <SelectTrigger className="flex-1 min-w-[160px] h-12 bg-slate-50 border-none rounded-2xl font-black uppercase text-[10px]">
+              <SelectValue placeholder="All Students" />
+            </SelectTrigger>
+            <SelectContent className="rounded-2xl border-none shadow-xl">
+              <SelectItem value="all">PWD / IP: All</SelectItem>
+              <SelectItem value="pwd">PWD Only</SelectItem>
+              <SelectItem value="ip">IP Only</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={campusFilter} onValueChange={setCampusFilter}>
+            <SelectTrigger className="flex-1 min-w-[160px] h-12 bg-slate-50 border-none rounded-2xl font-black uppercase text-[10px]">
+              <SelectValue placeholder="All Campuses" />
+            </SelectTrigger>
+            <SelectContent className="rounded-2xl border-none shadow-xl">
+              <SelectItem value="all">All Campuses</SelectItem>
+              {campusOptions.map((campus) => (
+                <SelectItem key={campus} value={campus}>{campus}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={programFilter} onValueChange={setProgramFilter}>
+            <SelectTrigger className="flex-1 min-w-[160px] h-12 bg-slate-50 border-none rounded-2xl font-black uppercase text-[10px]">
+              <SelectValue placeholder="All Courses" />
+            </SelectTrigger>
+            <SelectContent className="rounded-2xl border-none shadow-xl max-h-72">
+              <SelectItem value="all">All Courses</SelectItem>
+              {programOptions.map((program) => (
+                <SelectItem key={program} value={program}>{program}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* USER LIST */}
@@ -539,6 +596,16 @@ export default function UserManagement() {
                     <p className="text-[9px] font-black text-slate-500 uppercase tracking-tighter bg-slate-100 px-2 rounded-md flex items-center gap-1">
                       <MapPin size={10} /> {user.campus || 'Unassigned'}
                     </p>
+                    {user.program && (
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-tighter bg-slate-100 px-2 rounded-md max-w-[220px] truncate" title={user.program}>
+                        {user.program}
+                      </p>
+                    )}
+                    {user.gender && (
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-tighter bg-slate-100 px-2 rounded-md">
+                        {user.gender}
+                      </p>
+                    )}
                     {user.is_pwd && (
                       <p className="text-[9px] font-black text-blue-600 uppercase tracking-tighter bg-blue-50 px-2 rounded-md">PWD</p>
                     )}
