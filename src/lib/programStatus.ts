@@ -49,11 +49,18 @@ export function getEffectiveProgramStatus(program: ProgramStatusFields): string 
   return program.status;
 }
 
-// Not-completed first (soonest date first), completed pushed to the end —
-// each group still ordered chronologically by date.
+// Ongoing first (happening right now is the most relevant to a student),
+// then upcoming, then completed pushed to the very end — each group still
+// ordered chronologically by date.
+function statusRank(status: string): number {
+  if (status === 'ongoing') return 0;
+  if (status === 'completed') return 2;
+  return 1; // upcoming (or any other/unset value)
+}
+
 export function compareProgramsForDisplay(a: ProgramStatusFields, b: ProgramStatusFields): number {
-  const aCompleted = getEffectiveProgramStatus(a) === 'completed';
-  const bCompleted = getEffectiveProgramStatus(b) === 'completed';
-  if (aCompleted !== bCompleted) return aCompleted ? 1 : -1;
+  const rankA = statusRank(getEffectiveProgramStatus(a));
+  const rankB = statusRank(getEffectiveProgramStatus(b));
+  if (rankA !== rankB) return rankA - rankB;
   return (a.date || '').localeCompare(b.date || '');
 }
