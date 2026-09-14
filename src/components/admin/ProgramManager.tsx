@@ -203,10 +203,16 @@ export default function ProgramManagement() {
         if (storageError) throw storageError;
         const { data: matUrl } = supabase.storage.from('materials').getPublicUrl(matPath);
         
+        // Explicitly NOT 'iec' — a program handout lives in the same
+        // `materials` table as the real IEC Library, but it's scoped to
+        // this one program (via program_id) and should only ever surface
+        // in that program's own details panel, never in the general IEC
+        // Library / Infographics / Articles tabs alongside it.
         await supabase.from('materials').insert([{
           program_id: currentProgramId,
           title: `HANDOUT: ${materialFile.name}`,
-          file_url: matUrl.publicUrl
+          file_url: matUrl.publicUrl,
+          material_type: 'program_handout'
         }]);
       }
 

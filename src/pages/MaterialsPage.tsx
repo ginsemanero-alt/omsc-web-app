@@ -50,9 +50,15 @@ const MaterialsPage: React.FC = () => {
       try {
         setIsLoading(true);
 
+        // Program handouts live in this same table (materials.program_id
+        // set) but belong only to that program's own details panel, not
+        // this general public library — excluding them here keeps them
+        // from leaking in miscategorized (e.g. an image handout showing
+        // up as an infographic).
         const { data: sbMaterials, error } = await supabase
           .from('materials')
           .select('*')
+          .is('program_id', null)
           .order('id', { ascending: false });
 
         if (!error && sbMaterials) {

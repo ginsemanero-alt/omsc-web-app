@@ -62,9 +62,15 @@ export default function IECMaterials() {
     try {
       setLoading(true);
       setLoadFailed(false);
+      // Program handouts live in this same table (materials.program_id
+      // set, uploaded via Program Manager) but belong only to that one
+      // program's own details panel — excluding them here is what keeps
+      // them from leaking into Articles/Infographics/etc. alongside the
+      // real IEC Library.
       const { data, error } = await supabase
         .from('materials')
         .select('*')
+        .is('program_id', null)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
