@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 
 import { Card } from "../../components/ui/card";
@@ -366,6 +367,7 @@ function isSameYear(dateValue?: string | null): boolean {
 ========================================================= */
 
 export default function AnalyticsDashboard() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
 
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -3676,7 +3678,7 @@ export default function AnalyticsDashboard() {
             </h2>
 
             <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1 mb-5">
-              Demographic distribution by academic program
+              Demographic distribution by academic program &middot; click a bar to view students in Users
             </p>
 
             <ResponsiveContainer
@@ -3724,6 +3726,8 @@ export default function AnalyticsDashboard() {
                     0,
                     0,
                   ]}
+                  cursor="pointer"
+                  onClick={(data: any) => data?.course && navigate(`/admin/users?program=${encodeURIComponent(data.course)}`)}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -3936,7 +3940,12 @@ export default function AnalyticsDashboard() {
 
             <div className="grid grid-cols-2 gap-3 mt-6">
 
-              <div className="bg-blue-50 rounded-2xl p-4">
+              <button
+                type="button"
+                onClick={() => inclusionAnalytics.pwd > 0 && navigate('/admin/users?inclusion=pwd')}
+                disabled={inclusionAnalytics.pwd === 0}
+                className={`bg-blue-50 rounded-2xl p-4 text-left transition-colors ${inclusionAnalytics.pwd > 0 ? 'hover:bg-blue-100 cursor-pointer' : 'cursor-default'}`}
+              >
                 <p className="text-[9px] uppercase font-black text-blue-500">
                   PWD
                 </p>
@@ -3946,7 +3955,10 @@ export default function AnalyticsDashboard() {
                     inclusionAnalytics.pwd
                   }
                 </p>
-              </div>
+                {inclusionAnalytics.pwd > 0 && (
+                  <p className="text-[8px] uppercase font-black text-blue-400 mt-1 tracking-wider">View in Users &rarr;</p>
+                )}
+              </button>
 
               <div className="bg-slate-50 rounded-2xl p-4">
                 <p className="text-[9px] uppercase font-black text-slate-400">
@@ -4006,7 +4018,12 @@ export default function AnalyticsDashboard() {
 
             <div className="grid grid-cols-2 gap-3 mt-6">
 
-              <div className="bg-emerald-50 rounded-2xl p-4">
+              <button
+                type="button"
+                onClick={() => inclusionAnalytics.ip > 0 && navigate('/admin/users?inclusion=ip')}
+                disabled={inclusionAnalytics.ip === 0}
+                className={`bg-emerald-50 rounded-2xl p-4 text-left transition-colors ${inclusionAnalytics.ip > 0 ? 'hover:bg-emerald-100 cursor-pointer' : 'cursor-default'}`}
+              >
                 <p className="text-[9px] uppercase font-black text-emerald-500">
                   IP
                 </p>
@@ -4016,7 +4033,10 @@ export default function AnalyticsDashboard() {
                     inclusionAnalytics.ip
                   }
                 </p>
-              </div>
+                {inclusionAnalytics.ip > 0 && (
+                  <p className="text-[8px] uppercase font-black text-emerald-500/70 mt-1 tracking-wider">View in Users &rarr;</p>
+                )}
+              </button>
 
               <div className="bg-slate-50 rounded-2xl p-4">
                 <p className="text-[9px] uppercase font-black text-slate-400">
@@ -4069,7 +4089,7 @@ export default function AnalyticsDashboard() {
             </h2>
 
             <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
-              Student distribution by campus
+              Student distribution by campus &middot; click a slice to view students in Users
             </p>
 
             <div className="h-72 mt-4">
@@ -4093,7 +4113,7 @@ export default function AnalyticsDashboard() {
                     paddingAngle={3}
                   >
                     {campusAnalytics.map(
-                      (_, index) => (
+                      (entry, index) => (
                         <Cell
                           key={index}
                           fill={
@@ -4102,6 +4122,8 @@ export default function AnalyticsDashboard() {
                                 COLORS.length
                             ]
                           }
+                          cursor="pointer"
+                          onClick={() => navigate(`/admin/users?campus=${encodeURIComponent(entry.name)}`)}
                         />
                       )
                     )}

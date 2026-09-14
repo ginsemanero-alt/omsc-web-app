@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
@@ -19,9 +20,17 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [inclusionFilter, setInclusionFilter] = useState('all');
-  const [campusFilter, setCampusFilter] = useState('all');
-  const [programFilter, setProgramFilter] = useState('all');
+
+  // A click-through from Analytics (PWD/IP tiles, Campus Distribution,
+  // Students by Course) lands here with the matching filter pre-applied
+  // via the URL — e.g. /admin/users?campus=San+Jose+Campus. Read once on
+  // mount as the initial filter value; the URL isn't kept in sync with
+  // further changes here, so it stays a one-time deep-link, not a
+  // two-way-bound filter state.
+  const [searchParams] = useSearchParams();
+  const [inclusionFilter, setInclusionFilter] = useState(() => searchParams.get('inclusion') || 'all');
+  const [campusFilter, setCampusFilter] = useState(() => searchParams.get('campus') || 'all');
+  const [programFilter, setProgramFilter] = useState(() => searchParams.get('program') || 'all');
   
   // Edit States
   const [editingId, setEditingId] = useState<string | null>(null);
