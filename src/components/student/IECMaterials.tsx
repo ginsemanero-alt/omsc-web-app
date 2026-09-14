@@ -245,24 +245,29 @@ export default function IECMaterials() {
             <TabsContent value="infographics" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 outline-none">
               {infographics.length > 0 ? infographics.map((item) => (
                 <Card key={item.id} className="overflow-hidden bg-white dark:bg-slate-900 border-none shadow-sm rounded-[2.5rem] group hover:shadow-2xl transition-all duration-500">
-                  <div className="relative h-64 bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                  <div
+                    className="relative h-64 bg-slate-100 dark:bg-slate-800 overflow-hidden cursor-pointer"
+                    onClick={() => handlePreview(item)}
+                  >
                     {/* object-contain, not -cover: these are infographics —
                         tall, information-dense, and often a different aspect
                         ratio than this box. Cropping to fill was cutting off
                         real content (a header, a whole panel of text) rather
                         than trimming empty margin the way it does on a photo. */}
                     <img src={item.file_url} alt={item.title} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-700" />
-                    {/* Darkened backdrop is a nice-to-have hover effect on
-                        desktop only — purely decorative, so it's fine to
-                        skip on touch devices with no :hover. The actual
-                        preview affordance is the corner button below, which
-                        stays visible on every device instead of the old
-                        centered button that had no way to hide itself on
-                        mobile and just floated over the thumbnail at all times. */}
-                    <div className="absolute inset-0 bg-black/30 opacity-0 md:group-hover:opacity-100 transition-opacity pointer-events-none" />
+                    {/* Darkened backdrop + centered zoom icon is a nice-to-
+                        have hover effect on desktop only — purely
+                        decorative, so it's fine to skip on touch devices
+                        with no :hover. The whole thumbnail is clickable on
+                        every device regardless (see onClick above); the
+                        corner button below stays as a visible affordance on
+                        touch devices where hover never shows. */}
+                    <div className="absolute inset-0 bg-black/30 opacity-0 md:group-hover:opacity-100 transition-opacity pointer-events-none flex items-center justify-center">
+                      <Maximize2 className="w-8 h-8 text-white opacity-0 md:group-hover:opacity-100 transition-opacity" />
+                    </div>
                     <button
                       type="button"
-                      onClick={() => handlePreview(item)}
+                      onClick={(e) => { e.stopPropagation(); handlePreview(item); }}
                       className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/90 dark:bg-slate-900/90 text-slate-900 dark:text-white shadow-lg flex items-center justify-center hover:bg-white dark:hover:bg-slate-900 transition-colors"
                       aria-label="Preview"
                     >
