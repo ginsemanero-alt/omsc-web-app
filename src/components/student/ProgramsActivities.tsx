@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../hooks/use-toast';
 import { Card } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import {
-  Search, Calendar, MapPin, Loader2, Clock,
+  Search, Calendar, MapPin, Loader2, Clock, ChevronDown, ChevronUp,
 } from 'lucide-react';
 
 const GUIDANCE_SERVICES = [
@@ -36,6 +37,8 @@ interface Program {
   capacity: number;
   registered: number;
   status: string;
+  image_url?: string;
+  content?: string;
 }
 
 export default function ProgramsActivities() {
@@ -45,6 +48,7 @@ export default function ProgramsActivities() {
   const [programComponentFilter, setProgramComponentFilter] = useState('all');
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -137,14 +141,21 @@ export default function ProgramsActivities() {
       {/* RENDER CARDS GRID LOOP */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
         {filteredPrograms.map((program) => (
-          <Card key={program.id} className="p-6 md:p-8 rounded-2xl md:rounded-[2.5rem] border-none shadow-sm bg-white dark:bg-slate-900 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex flex-col gap-6 border-b-4 border-b-slate-100 dark:border-b-slate-800">
+          <Card key={program.id} className="rounded-2xl md:rounded-[2.5rem] border-none shadow-sm bg-white dark:bg-slate-900 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex flex-col gap-6 border-b-4 border-b-slate-100 dark:border-b-slate-800">
 
-            <div className={`absolute top-0 right-0 px-5 py-1.5 rounded-bl-xl text-[8px] font-black uppercase tracking-widest shadow-sm
-              ${program.status === 'ongoing' ? 'bg-emerald-500 text-white animate-pulse' : program.status === 'completed' ? 'bg-slate-700 text-white' : 'bg-indigo-600 text-white'}`}>
-              {program.status}
+            <div className="aspect-video w-full bg-slate-900 relative shrink-0">
+              <img
+                src={program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop'}
+                className="absolute inset-0 w-full h-full object-cover"
+                alt={program.title}
+              />
+              <div className={`absolute top-4 right-4 px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm
+                ${program.status === 'ongoing' ? 'bg-emerald-500 text-white animate-pulse' : program.status === 'completed' ? 'bg-slate-700 text-white' : 'bg-indigo-600 text-white'}`}>
+                {program.status}
+              </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="px-6 md:px-8 space-y-3 -mt-2">
               <div className="flex flex-wrap gap-2">
                 <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase tracking-widest rounded-md inline-block">
                   {program.guidance_service || 'General Guidance'}
@@ -158,7 +169,7 @@ export default function ProgramsActivities() {
               </h3>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="px-6 md:px-8 grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-50/70 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100/30 dark:border-slate-700/30">
                 <Calendar className="w-4 h-4 text-indigo-500 shrink-0" />
                 <span>{program.date}</span>
@@ -171,6 +182,23 @@ export default function ProgramsActivities() {
                 <MapPin className="w-4 h-4 text-indigo-500 shrink-0" />
                 <span className="truncate">{program.location}</span>
               </div>
+            </div>
+
+            <div className="px-6 md:px-8 pb-6 md:pb-8">
+              <Button
+                variant="ghost"
+                className="w-full border-t border-dashed rounded-none pt-4 justify-between text-indigo-600 hover:text-indigo-700 hover:bg-transparent px-0 font-black text-[9px] md:text-[10px] uppercase tracking-widest transition-colors"
+                onClick={() => setExpandedId(expandedId === program.id ? null : program.id)}
+              >
+                {expandedId === program.id ? 'Hide Details' : 'View Details'}
+                {expandedId === program.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </Button>
+
+              {expandedId === program.id && (
+                <div className="mt-4 bg-slate-50/70 dark:bg-slate-800/40 p-4 md:p-6 rounded-2xl text-slate-600 dark:text-slate-300 text-xs md:text-sm leading-relaxed border border-slate-100/30 dark:border-slate-700/30 animate-in slide-in-from-top-2 duration-300 font-medium whitespace-pre-wrap">
+                  {program.content || 'No additional details provided for this activity.'}
+                </div>
+              )}
             </div>
 
           </Card>

@@ -38,6 +38,7 @@ interface Program {
   status: string;
   guidance_service?: string;
   program_component?: string;
+  image_url?: string;
 }
 
 const ProgramsPage: React.FC = () => {
@@ -61,13 +62,17 @@ const ProgramsPage: React.FC = () => {
           const mappedPrograms = sbPrograms.map((p: any) => ({
             id: p.id,
             title: p.title || "Untitled Seminar Event",
-            description: p.description || "No description provided.",
+            // Admin's form actually saves the long-form text to `content`,
+            // not `description` — this used to always fall through to the
+            // placeholder because that column doesn't exist.
+            description: p.content || p.description || "No description provided.",
             location: p.location || "OMSU Main Venue",
             date: p.date || p.scheduled_date || new Date().toISOString(),
             participants: p.participants || p.max_slots || 0,
             status: p.status || "upcoming",
             guidance_service: p.guidance_service || "",
             program_component: p.program_component || "",
+            image_url: p.image_url || "",
           }));
 
           setPrograms(mappedPrograms);
@@ -164,11 +169,19 @@ const ProgramsPage: React.FC = () => {
             {filteredPrograms.map((program) => (
               <Card
                 key={program.id}
-                className="group p-6 md:p-8 bg-white rounded-[2rem] md:rounded-[2.5rem] border-none shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-2 cursor-pointer relative overflow-hidden border border-slate-100/60"
+                className="group bg-white rounded-[2rem] md:rounded-[2.5rem] border-none shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-2 cursor-pointer relative overflow-hidden border border-slate-100/60"
               >
-                <div className="absolute top-0 left-0 w-1.5 md:w-2 h-full bg-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="absolute top-0 left-0 w-1.5 md:w-2 h-full bg-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity z-10" />
 
-                <div className="space-y-5">
+                <div className="aspect-video w-full bg-slate-900 relative overflow-hidden">
+                  <img
+                    src={program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop'}
+                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    alt={program.title}
+                  />
+                </div>
+
+                <div className="p-6 md:p-8 space-y-5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex flex-wrap gap-1.5">
                       {program.guidance_service && (
