@@ -4,15 +4,18 @@ import { supabase } from './supabase';
 // which record, and when. Originally admin actions only (create/update/
 // delete on Programs, Materials, Surveys, and User Management); PHASE 11
 // (supabase/migrations.sql) extended it to also let a student log their
-// OWN login/logout, via a narrower RLS check than the admin-only one
-// create/update/delete still require.
+// OWN login/logout, and PHASE 12 further added 'view' (used once per
+// session when a student opens Programs & Activities — see
+// ProgramsActivities.tsx), via a narrower RLS check than the admin-only
+// one create/update/delete still require.
 //
 // Requires the `activity_logs` table + RLS from supabase/migrations.sql
-// (PHASE 6, extended by PHASE 11). Call sites pass actorEmail/actorName
-// from useAuth() — this module isn't a hook itself, so it can be called
-// from plain event handlers after a mutation, login, or logout succeeds.
+// (PHASE 6, extended by PHASE 11 and PHASE 12). Call sites pass
+// actorEmail/actorName from useAuth() — this module isn't a hook itself,
+// so it can be called from plain event handlers after a mutation, login,
+// logout, or page view.
 
-export type ActivityAction = 'create' | 'update' | 'delete' | 'login' | 'logout';
+export type ActivityAction = 'create' | 'update' | 'delete' | 'login' | 'logout' | 'view';
 export type ActivityEntityType = 'program' | 'material' | 'survey' | 'user';
 
 interface LogActivityParams {

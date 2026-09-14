@@ -209,6 +209,27 @@ app.post('/api/register', registerLimiter, async (req, res) => {
             throw profileError;
         }
 
+        // Fire-and-forget, same as the client-side logActivity() helper —
+        // a logging failure must never fail a successful registration.
+        // Uses the service-role client already in scope here, so unlike
+        // logActivity() (called from the browser under RLS) this doesn't
+        // need the student to have an active session yet, which they
+        // don't at this point — /api/register returns no auth tokens,
+        // only /api/login does.
+        try {
+            await supabase.from('activity_logs').insert([{
+                actor_email: cleanEmail,
+                actor_name: cleanName,
+                action: 'create',
+                entity_type: 'user',
+                entity_id: String(data[0].id),
+                entity_label: cleanName,
+                details: 'Student self-registration',
+            }]);
+        } catch (logErr) {
+            console.warn('Activity log write failed (register):', logErr.message);
+        }
+
         res.status(201).json({ message: "Account created!", userId: data[0].id });
     } catch (error) {
         console.error("Registration Error:", error.message);

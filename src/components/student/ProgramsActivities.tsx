@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { formatProgramDate } from '../../lib/formatProgramDate';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
+import { logActivity } from '../../lib/activityLog';
+import { useAuth } from '../../hooks/useAuth';
 
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a handout PDF preview.
@@ -52,6 +54,7 @@ interface Program {
 
 export default function ProgramsActivities() {
   const { toast } = useToast();
+  const { user, userName: authUserName } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [guidanceServiceFilter, setGuidanceServiceFilter] = useState('all');
   const [programComponentFilter, setProgramComponentFilter] = useState('all');
@@ -79,6 +82,22 @@ export default function ProgramsActivities() {
       window.location.href = url;
     }
   };
+
+  // Logged at most once per browser session — see PHASE 12
+  // (supabase/migrations.sql) for why this isn't one row per page load.
+  useEffect(() => {
+    if (!user?.email) return;
+    const flagKey = 'logged_programs_view';
+    if (sessionStorage.getItem(flagKey)) return;
+    sessionStorage.setItem(flagKey, '1');
+    logActivity({
+      actorEmail: user.email,
+      actorName: authUserName,
+      action: 'view',
+      entityType: 'program',
+      entityLabel: 'Programs & Activities',
+    });
+  }, [user, authUserName]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);

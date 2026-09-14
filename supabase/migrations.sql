@@ -547,3 +547,31 @@ CREATE POLICY activity_logs_insert ON activity_logs
     is_admin()
     OR (action IN ('login', 'logout') AND actor_email = (auth.jwt() ->> 'email'))
   );
+
+-- ------------------------------------------------------------
+-- PHASE 12 — Track which students browse Programs & Activities
+--
+-- Deliberately NOT one row per page load — a student re-opening the
+-- Programs tab a dozen times in one sitting would flood this table
+-- and bury every other entry in the Activity Log. ProgramsActivities.tsx
+-- logs at most once per browser session (a sessionStorage flag guards
+-- it), giving a meaningful "this student browsed Programs this
+-- session" signal without the noise. Same self-service shape as
+-- PHASE 11's login/logout: a student can only log their own view.
+--
+-- Account creation (self-registration) reuses the existing 'create'
+-- action and needs no migration — it's written server-side in
+-- /api/register with the service-role client, which bypasses RLS
+-- entirely.
+-- ------------------------------------------------------------
+
+ALTER TABLE activity_logs DROP CONSTRAINT IF EXISTS activity_logs_action_check;
+ALTER TABLE activity_logs ADD CONSTRAINT activity_logs_action_check
+  CHECK (action IN ('create', 'update', 'delete', 'login', 'logout', 'view'));
+
+DROP POLICY IF EXISTS activity_logs_insert ON activity_logs;
+CREATE POLICY activity_logs_insert ON activity_logs
+  FOR INSERT WITH CHECK (
+    is_admin()
+    OR (action IN ('login', 'logout', 'view') AND actor_email = (auth.jwt() ->> 'email'))
+  );

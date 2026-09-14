@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { Card } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Search, Loader2, History, PlusCircle, Pencil, Trash2, ShieldAlert, LogIn, LogOut } from 'lucide-react';
+import { Search, Loader2, History, PlusCircle, Pencil, Trash2, ShieldAlert, LogIn, LogOut, Eye } from 'lucide-react';
 import type { ActivityAction, ActivityEntityType } from '../../lib/activityLog';
 
 interface LogRow {
@@ -24,6 +24,7 @@ const ACTION_STYLE: Record<ActivityAction, { label: string; className: string; I
   delete: { label: 'Deleted', className: 'bg-rose-50 text-rose-600', Icon: Trash2 },
   login: { label: 'Logged In', className: 'bg-sky-50 text-sky-600', Icon: LogIn },
   logout: { label: 'Logged Out', className: 'bg-slate-100 text-slate-500', Icon: LogOut },
+  view: { label: 'Viewed', className: 'bg-amber-50 text-amber-600', Icon: Eye },
 };
 
 const ENTITY_LABEL: Record<ActivityEntityType, string> = {
@@ -91,7 +92,7 @@ export default function ActivityLog() {
           Activity <span className="text-indigo-600">Log</span>
         </h1>
         <p className="text-slate-400 font-bold uppercase text-[9px] tracking-widest">
-          Admin actions across Programs, Materials, Surveys, and Users &middot; student login/logout
+          Admin actions across Programs, Materials, Surveys, and Users &middot; student login/logout/registration/browsing
         </p>
       </div>
 
@@ -128,6 +129,7 @@ export default function ActivityLog() {
                 <SelectItem value="delete">Deleted</SelectItem>
                 <SelectItem value="login">Logged In</SelectItem>
                 <SelectItem value="logout">Logged Out</SelectItem>
+                <SelectItem value="view">Viewed</SelectItem>
               </SelectContent>
             </Select>
             <Select value={entityFilter} onValueChange={setEntityFilter}>
