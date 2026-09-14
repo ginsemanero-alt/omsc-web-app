@@ -1,16 +1,18 @@
 import { supabase } from './supabase';
 
 // Shared helper for the admin activity log — records who did what, to
-// which record, and when. Scope is admin actions only (create/update/
-// delete on Programs, Materials, Surveys, and User Management); nothing
-// here tracks student activity.
+// which record, and when. Originally admin actions only (create/update/
+// delete on Programs, Materials, Surveys, and User Management); PHASE 11
+// (supabase/migrations.sql) extended it to also let a student log their
+// OWN login/logout, via a narrower RLS check than the admin-only one
+// create/update/delete still require.
 //
 // Requires the `activity_logs` table + RLS from supabase/migrations.sql
-// (PHASE 6). Call sites pass actorEmail/actorName from useAuth() — this
-// module isn't a hook itself, so it can be called from plain event
-// handlers after a mutation succeeds.
+// (PHASE 6, extended by PHASE 11). Call sites pass actorEmail/actorName
+// from useAuth() — this module isn't a hook itself, so it can be called
+// from plain event handlers after a mutation, login, or logout succeeds.
 
-export type ActivityAction = 'create' | 'update' | 'delete';
+export type ActivityAction = 'create' | 'update' | 'delete' | 'login' | 'logout';
 export type ActivityEntityType = 'program' | 'material' | 'survey' | 'user';
 
 interface LogActivityParams {

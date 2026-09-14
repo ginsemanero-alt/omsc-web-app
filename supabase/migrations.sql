@@ -519,3 +519,31 @@ CREATE POLICY survey_responses_delete_admin ON survey_responses
 -- ------------------------------------------------------------
 
 ALTER TABLE programs ADD COLUMN IF NOT EXISTS date_display text;
+
+-- ------------------------------------------------------------
+-- PHASE 11 — Track student login/logout in the Activity Log
+--
+-- activity_logs was admin-actions-only (create/update/delete on
+-- Programs/Materials/Surveys/Users), written via the client-side
+-- logActivity() helper under an admin-only INSERT policy — a student
+-- session could never write here at all. Extends both the action
+-- CHECK constraint and the INSERT policy so a student can log their
+-- OWN login/logout (and only that: action must be login/logout, and
+-- actor_email must match their own JWT — they still can't insert a
+-- create/update/delete row for anything, nor log an event as anyone
+-- else).
+-- ------------------------------------------------------------
+
+ALTER TABLE activity_logs DROP CONSTRAINT IF EXISTS activity_logs_action_check;
+ALTER TABLE activity_logs ADD CONSTRAINT activity_logs_action_check
+  CHECK (action IN ('create', 'update', 'delete', 'login', 'logout'));
+
+-- Renamed from activity_logs_insert_admin, since it's no longer
+-- admin-only.
+DROP POLICY IF EXISTS activity_logs_insert_admin ON activity_logs;
+DROP POLICY IF EXISTS activity_logs_insert ON activity_logs;
+CREATE POLICY activity_logs_insert ON activity_logs
+  FOR INSERT WITH CHECK (
+    is_admin()
+    OR (action IN ('login', 'logout') AND actor_email = (auth.jwt() ->> 'email'))
+  );

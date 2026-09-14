@@ -40,6 +40,7 @@ import {
 
 import { useToast } from '../hooks/use-toast';
 import { supabase } from '../lib/supabase';
+import { logActivity } from '../lib/activityLog';
 
 type UserRole = 'student' | 'admin';
 
@@ -380,6 +381,20 @@ export default function LoginPage({
               console.log(
                 'Supabase Auth session set successfully.'
               );
+
+              // Admin logins already show up in the Activity Log via
+              // every admin action's actorEmail — this is specifically
+              // for tracking student sign-ins, which nothing else logs.
+              if (data.role === 'student') {
+                logActivity({
+                  actorEmail: data.email,
+                  actorName: data.name,
+                  action: 'login',
+                  entityType: 'user',
+                  entityId: data.id,
+                  entityLabel: data.name,
+                });
+              }
             }
           } else {
             console.warn(

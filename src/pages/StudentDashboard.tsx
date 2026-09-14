@@ -7,6 +7,8 @@ import QuizzesSurveys from '../components/student/QuizzesSurveys';
 import StudentProfile from '../components/student/StudentProfile';
 import { useToast } from '../hooks/use-toast';
 import { useTheme } from '../hooks/useTheme';
+import { useAuth } from '../hooks/useAuth';
+import { logActivity } from '../lib/activityLog';
 
 interface StudentDashboardProps {
   onLogout: () => void;
@@ -16,6 +18,7 @@ export default function StudentDashboard({ onLogout }: StudentDashboardProps) {
   const location = useLocation();
   const { toast } = useToast();
   const { isDark, toggleTheme } = useTheme();
+  const { user, userName: authUserName, dbUserId } = useAuth();
 
   const userName = localStorage.getItem("userName") || "Student User";
   const userCampus = localStorage.getItem("userCampus") || "San Jose Campus";
@@ -29,6 +32,18 @@ export default function StudentDashboard({ onLogout }: StudentDashboardProps) {
   ];
 
   const handleLogoutWithToast = async () => {
+    // Logged before signOut() actually runs (below, after the toast
+    // delay) — the session (and its JWT, which the activity_logs RLS
+    // policy checks against) is still live at this point.
+    logActivity({
+      actorEmail: user?.email,
+      actorName: authUserName || userName,
+      action: 'logout',
+      entityType: 'user',
+      entityId: dbUserId,
+      entityLabel: authUserName || userName,
+    });
+
     toast({
       title: "LOGOUT SUCCESSFULLY",
       description: "You have been signed out. Come back soon!",

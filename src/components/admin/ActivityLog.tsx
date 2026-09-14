@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { Card } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Search, Loader2, History, PlusCircle, Pencil, Trash2, ShieldAlert } from 'lucide-react';
+import { Search, Loader2, History, PlusCircle, Pencil, Trash2, ShieldAlert, LogIn, LogOut } from 'lucide-react';
 import type { ActivityAction, ActivityEntityType } from '../../lib/activityLog';
 
 interface LogRow {
@@ -22,6 +22,8 @@ const ACTION_STYLE: Record<ActivityAction, { label: string; className: string; I
   create: { label: 'Created', className: 'bg-emerald-50 text-emerald-600', Icon: PlusCircle },
   update: { label: 'Updated', className: 'bg-indigo-50 text-indigo-600', Icon: Pencil },
   delete: { label: 'Deleted', className: 'bg-rose-50 text-rose-600', Icon: Trash2 },
+  login: { label: 'Logged In', className: 'bg-sky-50 text-sky-600', Icon: LogIn },
+  logout: { label: 'Logged Out', className: 'bg-slate-100 text-slate-500', Icon: LogOut },
 };
 
 const ENTITY_LABEL: Record<ActivityEntityType, string> = {
@@ -89,7 +91,7 @@ export default function ActivityLog() {
           Activity <span className="text-indigo-600">Log</span>
         </h1>
         <p className="text-slate-400 font-bold uppercase text-[9px] tracking-widest">
-          Admin actions across Programs, Materials, Surveys, and Users
+          Admin actions across Programs, Materials, Surveys, and Users &middot; student login/logout
         </p>
       </div>
 
@@ -124,6 +126,8 @@ export default function ActivityLog() {
                 <SelectItem value="create">Created</SelectItem>
                 <SelectItem value="update">Updated</SelectItem>
                 <SelectItem value="delete">Deleted</SelectItem>
+                <SelectItem value="login">Logged In</SelectItem>
+                <SelectItem value="logout">Logged Out</SelectItem>
               </SelectContent>
             </Select>
             <Select value={entityFilter} onValueChange={setEntityFilter}>
@@ -158,6 +162,11 @@ export default function ActivityLog() {
               filteredLogs.map((log) => {
                 const style = ACTION_STYLE[log.action];
                 const Icon = style.Icon;
+                // Login/logout describe the actor's own session, not an
+                // edit to some other record — "logged in User Account"
+                // would be a redundant, odd read, so these skip the
+                // entity clause entirely.
+                const isSessionEvent = log.action === 'login' || log.action === 'logout';
                 return (
                   <Card key={log.id} className="p-5 rounded-[1.75rem] border-none shadow-sm bg-white">
                     <div className="flex items-start gap-4">
@@ -168,9 +177,11 @@ export default function ActivityLog() {
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                           <span className="font-black text-slate-800 text-sm">{log.actor_name || log.actor_email}</span>
                           <span className="text-slate-400 font-medium text-sm">
-                            {style.label.toLowerCase()} {ENTITY_LABEL[log.entity_type].toLowerCase()}
+                            {isSessionEvent
+                              ? style.label.toLowerCase()
+                              : `${style.label.toLowerCase()} ${ENTITY_LABEL[log.entity_type].toLowerCase()}`}
                           </span>
-                          {log.entity_label && (
+                          {!isSessionEvent && log.entity_label && (
                             <span className="font-bold text-slate-700 text-sm truncate">"{log.entity_label}"</span>
                           )}
                         </div>
