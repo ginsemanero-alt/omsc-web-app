@@ -403,6 +403,14 @@ export default function AnalyticsDashboard() {
   // exposed to students or on any public-facing page.
   const [inclusionDetailView, setInclusionDetailView] = useState<'pwd' | 'ip' | null>(null);
 
+  // Which campus/course roster is open, if any — a click-through from the
+  // Campus Distribution and Students by Course charts. Ordinary academic
+  // info (not the PWD/IP category, which is sensitive personal
+  // information), and already visible together elsewhere in the admin
+  // panel (User Management lists every student's name + campus), so this
+  // isn't new exposure — just a filtered view of the same data.
+  const [demographicDetailView, setDemographicDetailView] = useState<{ type: 'campus' | 'course'; value: string } | null>(null);
+
   /* =======================================================
      FETCH DATA
   ======================================================= */
@@ -1075,6 +1083,32 @@ export default function AnalyticsDashboard() {
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [filteredProfiles, inclusionDetailView]);
+
+  /* =======================================================
+     CAMPUS / COURSE ROSTER
+
+     Admin-only drill-down from the Campus Distribution and Students by
+     Course charts — see the demographicDetailView state declaration.
+  ======================================================= */
+
+  const demographicRoster = useMemo(() => {
+    if (!demographicDetailView) return [];
+
+    const filterFn = demographicDetailView.type === 'campus'
+      ? (p: Profile) => (safeString(p.campus) || "Not Specified") === demographicDetailView.value
+      : (p: Profile) => (safeString(p.program) || "Not Specified") === demographicDetailView.value;
+
+    return filteredProfiles
+      .filter(filterFn)
+      .map((profile) => ({
+        id: profile.id,
+        name: safeString(profile.full_name) || "Unnamed Student",
+        campus: safeString(profile.campus) || "Not Specified",
+        program: safeString(profile.program) || "Not Specified",
+        gender: safeString(profile.gender) || "Not Specified",
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [filteredProfiles, demographicDetailView]);
 
   /* =======================================================
      KNOWLEDGE AWARENESS
@@ -3716,7 +3750,7 @@ export default function AnalyticsDashboard() {
             </h2>
 
             <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1 mb-5">
-              Demographic distribution by academic program
+              Demographic distribution by academic program &middot; click a bar to view students
             </p>
 
             <ResponsiveContainer
@@ -3764,6 +3798,8 @@ export default function AnalyticsDashboard() {
                     0,
                     0,
                   ]}
+                  cursor="pointer"
+                  onClick={(data: any) => data?.course && setDemographicDetailView({ type: 'course', value: data.course })}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -4125,7 +4161,7 @@ export default function AnalyticsDashboard() {
             </h2>
 
             <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
-              Student distribution by campus
+              Student distribution by campus &middot; click a slice to view students
             </p>
 
             <div className="h-72 mt-4">
@@ -4149,7 +4185,7 @@ export default function AnalyticsDashboard() {
                     paddingAngle={3}
                   >
                     {campusAnalytics.map(
-                      (_, index) => (
+                      (entry, index) => (
                         <Cell
                           key={index}
                           fill={
@@ -4158,6 +4194,8 @@ export default function AnalyticsDashboard() {
                                 COLORS.length
                             ]
                           }
+                          cursor="pointer"
+                          onClick={() => setDemographicDetailView({ type: 'campus', value: entry.name })}
                         />
                       )
                     )}
@@ -4440,6 +4478,44 @@ export default function AnalyticsDashboard() {
                     <td className="py-2.5 pr-3 text-xs font-bold text-slate-800">{row.name}</td>
                     <td className="py-2.5 pr-3 text-xs text-slate-500">{row.campus}</td>
                     <td className="py-2.5 pr-3 text-xs text-slate-500">{row.program}</td>
+                    <td className="py-2.5 text-xs text-slate-500">{row.gender}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* CAMPUS / COURSE ROSTER — admin-only drill-down, see the
+          demographicDetailView state declaration. */}
+      <Dialog open={!!demographicDetailView} onOpenChange={(open) => !open && setDemographicDetailView(null)}>
+        <DialogContent className="max-w-2xl w-[95vw] max-h-[85vh] overflow-hidden flex flex-col rounded-[2rem] border-none shadow-2xl p-0">
+          <DialogHeader className="p-6 pb-4 border-b border-slate-100 shrink-0">
+            <DialogTitle className="font-black uppercase tracking-tight text-lg text-slate-900">
+              {demographicDetailView?.value}
+            </DialogTitle>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">
+              Admin-only &middot; {demographicRoster.length} student{demographicRoster.length === 1 ? '' : 's'}
+            </p>
+          </DialogHeader>
+
+          <div className="overflow-y-auto flex-1 p-6 pt-4">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                  <th className="pb-2 pr-3">Name</th>
+                  {demographicDetailView?.type === 'course' && <th className="pb-2 pr-3">Campus</th>}
+                  {demographicDetailView?.type === 'campus' && <th className="pb-2 pr-3">Course / Program</th>}
+                  <th className="pb-2">Gender</th>
+                </tr>
+              </thead>
+              <tbody>
+                {demographicRoster.map((row) => (
+                  <tr key={row.id} className="border-b border-slate-50 last:border-0">
+                    <td className="py-2.5 pr-3 text-xs font-bold text-slate-800">{row.name}</td>
+                    {demographicDetailView?.type === 'course' && <td className="py-2.5 pr-3 text-xs text-slate-500">{row.campus}</td>}
+                    {demographicDetailView?.type === 'campus' && <td className="py-2.5 pr-3 text-xs text-slate-500">{row.program}</td>}
                     <td className="py-2.5 text-xs text-slate-500">{row.gender}</td>
                   </tr>
                 ))}
