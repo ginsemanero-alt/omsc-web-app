@@ -664,9 +664,12 @@ export default function LoginPage({
                   </p>
                   <p className="text-sm leading-relaxed text-slate-500 font-medium">
                     Demographic information such as program, year
-                    level, age, gender, PWD status, and IP status
-                    may be used to generate aggregated awareness
-                    analytics.
+                    level, age, and gender is used to generate
+                    aggregated awareness analytics. PWD and IP
+                    status may also be viewed at the individual
+                    student level by authorized Guidance Office
+                    administrators, for case management and
+                    support purposes.
                   </p>
                 </div>
 
@@ -676,9 +679,11 @@ export default function LoginPage({
                   </p>
                   <p className="text-sm leading-relaxed text-slate-500 font-medium">
                     Individual student information and survey
-                    responses should be handled confidentially and
-                    should not be unnecessarily exposed in public
-                    reports.
+                    responses are treated as confidential. Access to
+                    individually identifiable data, including PWD/IP
+                    status, is restricted to authorized Guidance
+                    Office administrators and is never shown to
+                    other students or included in public reports.
                   </p>
                 </div>
 
