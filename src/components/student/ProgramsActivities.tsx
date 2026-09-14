@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import {
   Search, Calendar, MapPin, Loader2, Clock, ChevronDown, ChevronUp,
 } from 'lucide-react';
+import { formatProgramDate } from '../../lib/formatProgramDate';
+import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
 
 const GUIDANCE_SERVICES = [
   'Information Services',
@@ -39,6 +41,7 @@ interface Program {
   status: string;
   image_url?: string;
   content?: string;
+  date_display?: string;
 }
 
 export default function ProgramsActivities() {
@@ -76,14 +79,16 @@ export default function ProgramsActivities() {
     fetchData();
   }, [fetchData]);
 
-  const filteredPrograms = programs.filter((p) => {
-    const matchesSearch = p.title?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesGuidanceService =
-      guidanceServiceFilter === 'all' || p.guidance_service === guidanceServiceFilter;
-    const matchesProgramComponent =
-      programComponentFilter === 'all' || p.program_component === programComponentFilter;
-    return matchesSearch && matchesGuidanceService && matchesProgramComponent;
-  });
+  const filteredPrograms = programs
+    .filter((p) => {
+      const matchesSearch = p.title?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesGuidanceService =
+        guidanceServiceFilter === 'all' || p.guidance_service === guidanceServiceFilter;
+      const matchesProgramComponent =
+        programComponentFilter === 'all' || p.program_component === programComponentFilter;
+      return matchesSearch && matchesGuidanceService && matchesProgramComponent;
+    })
+    .sort(compareProgramsForDisplay);
 
   if (loading) {
     return (
@@ -140,7 +145,9 @@ export default function ProgramsActivities() {
 
       {/* RENDER CARDS GRID LOOP */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-        {filteredPrograms.map((program) => (
+        {filteredPrograms.map((program) => {
+          const effectiveStatus = getEffectiveProgramStatus(program);
+          return (
           <Card key={program.id} className="rounded-2xl md:rounded-[2.5rem] border-none shadow-sm bg-white dark:bg-slate-900 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex flex-col gap-6 border-b-4 border-b-slate-100 dark:border-b-slate-800">
 
             <div className="aspect-video w-full bg-slate-900 relative shrink-0">
@@ -150,8 +157,8 @@ export default function ProgramsActivities() {
                 alt={program.title}
               />
               <div className={`absolute top-4 right-4 px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm
-                ${program.status === 'ongoing' ? 'bg-emerald-500 text-white animate-pulse' : program.status === 'completed' ? 'bg-slate-700 text-white' : 'bg-indigo-600 text-white'}`}>
-                {program.status}
+                ${effectiveStatus === 'ongoing' ? 'bg-emerald-500 text-white animate-pulse' : effectiveStatus === 'completed' ? 'bg-slate-700 text-white' : 'bg-indigo-600 text-white'}`}>
+                {effectiveStatus}
               </div>
             </div>
 
@@ -172,7 +179,7 @@ export default function ProgramsActivities() {
             <div className="px-6 md:px-8 grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-50/70 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100/30 dark:border-slate-700/30">
                 <Calendar className="w-4 h-4 text-indigo-500 shrink-0" />
-                <span>{program.date}</span>
+                <span>{formatProgramDate(program)}</span>
               </div>
               <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-50/70 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100/30 dark:border-slate-700/30">
                 <Clock className="w-4 h-4 text-indigo-500 shrink-0" />
@@ -202,7 +209,8 @@ export default function ProgramsActivities() {
             </div>
 
           </Card>
-        ))}
+          );
+        })}
       </div>
 
     </div>

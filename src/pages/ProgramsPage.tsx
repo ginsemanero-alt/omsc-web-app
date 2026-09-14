@@ -11,6 +11,8 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import { supabase } from "../lib/supabase"; // 🌟 Ligtas na backend fallback core pipeline
+import { formatProgramDate } from "../lib/formatProgramDate";
+import { getEffectiveProgramStatus, compareProgramsForDisplay } from "../lib/programStatus";
 
 const GUIDANCE_SERVICES = [
   'Information Services',
@@ -39,6 +41,8 @@ interface Program {
   guidance_service?: string;
   program_component?: string;
   image_url?: string;
+  time_range?: string;
+  date_display?: string;
 }
 
 const ProgramsPage: React.FC = () => {
@@ -73,6 +77,8 @@ const ProgramsPage: React.FC = () => {
             guidance_service: p.guidance_service || "",
             program_component: p.program_component || "",
             image_url: p.image_url || "",
+            time_range: p.time_range || "",
+            date_display: p.date_display || "",
           }));
 
           setPrograms(mappedPrograms);
@@ -89,7 +95,8 @@ const ProgramsPage: React.FC = () => {
     fetchPrograms();
   }, []);
 
-  const filteredPrograms = programs.filter((p) => {
+  const filteredPrograms = programs
+    .filter((p) => {
     const matchesSearch =
       p.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.location?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -98,7 +105,8 @@ const ProgramsPage: React.FC = () => {
     const matchesProgramComponent =
       programComponentFilter === "all" || p.program_component === programComponentFilter;
     return matchesSearch && matchesGuidanceService && matchesProgramComponent;
-  });
+    })
+    .sort(compareProgramsForDisplay);
 
   return (
     <div className="w-full py-8 md:py-20 bg-slate-50 min-h-screen font-sans">
@@ -166,7 +174,9 @@ const ProgramsPage: React.FC = () => {
           </div>
         ) : filteredPrograms.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-            {filteredPrograms.map((program) => (
+            {filteredPrograms.map((program) => {
+              const isCompleted = getEffectiveProgramStatus(program) === 'completed';
+              return (
               <Card
                 key={program.id}
                 className="group bg-white rounded-[2rem] md:rounded-[2.5rem] border-none shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-2 cursor-pointer relative overflow-hidden border border-slate-100/60"
@@ -198,12 +208,12 @@ const ProgramsPage: React.FC = () => {
 
                     <Badge
                       className={`shrink-0 rounded-lg px-3 py-1 font-black uppercase text-[8px] md:text-[9px] tracking-wider border-none ${
-                        new Date(program.date) > new Date()
-                          ? "bg-emerald-100 text-emerald-600"
-                          : "bg-slate-100 text-slate-400"
+                        isCompleted
+                          ? "bg-slate-100 text-slate-400"
+                          : "bg-emerald-100 text-emerald-600"
                       }`}
                     >
-                      {new Date(program.date) > new Date() ? "● Upcoming" : "Completed"}
+                      {isCompleted ? "Completed" : "● Upcoming"}
                     </Badge>
                   </div>
 
@@ -231,11 +241,13 @@ const ProgramsPage: React.FC = () => {
                         <Calendar className="h-3.5 w-3.5 md:h-4 md:w-4 text-indigo-600" />
                       </div>
                       <span>
-                        {new Date(program.date).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
+                        {formatProgramDate(program, (date) =>
+                          new Date(date).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })
+                        )}
                       </span>
                     </div>
 
@@ -253,7 +265,8 @@ const ProgramsPage: React.FC = () => {
                   </div>
                 </div>
               </Card>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="text-center py-16 md:py-24 bg-white rounded-[2rem] md:rounded-[3rem] shadow-sm border-2 border-dashed border-slate-200 px-6">

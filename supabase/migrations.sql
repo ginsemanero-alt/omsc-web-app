@@ -507,3 +507,15 @@ GRANT EXECUTE ON FUNCTION increment_material_downloads(bigint) TO anon, authenti
 DROP POLICY IF EXISTS survey_responses_delete_admin ON survey_responses;
 CREATE POLICY survey_responses_delete_admin ON survey_responses
   FOR DELETE USING (is_admin());
+
+-- ------------------------------------------------------------
+-- PHASE 10 — Free-text display date for Programs & Activities
+--
+-- `programs.date` stays a real date (used for the upcoming/completed
+-- comparison and sort order) — this just adds an optional override
+-- for how it's PRINTED, so a multi-day event ("February 18-19, 2026")
+-- doesn't have to be squeezed into a single-date picker. Additive
+-- only; `date` itself is untouched.
+-- ------------------------------------------------------------
+
+ALTER TABLE programs ADD COLUMN IF NOT EXISTS date_display text;

@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { compressImageFile } from '../../lib/imageCompress';
 import { logActivity } from '../../lib/activityLog';
+import { formatProgramDate } from '../../lib/formatProgramDate';
+import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
 import { useAuth } from '../../hooks/useAuth';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -46,22 +48,23 @@ export default function ProgramManagement() {
   const [endTime, setEndTime] = useState('17:00');
 
   const [formData, setFormData] = useState({
-    title: '', 
-    date: '', 
-    location: '', 
+    title: '',
+    date: '',
+    date_display: '',
+    location: '',
     program_component: 'Group Guidance',
     guidance_service: 'Career Orientation',
-    capacity: 0, 
-    status: 'upcoming', 
+    capacity: 0,
+    status: 'upcoming',
     image_url: '',
-    content: '' 
+    content: ''
   });
 
-  const isSystemLocked = programs.some(p => p.status === 'ongoing');
+  const isSystemLocked = programs.some(p => getEffectiveProgramStatus(p) === 'ongoing');
 
-  const isDateOccupied = programs.some(p => 
-    p.date === formData.date && 
-    p.status !== 'completed' && 
+  const isDateOccupied = programs.some(p =>
+    p.date === formData.date &&
+    getEffectiveProgramStatus(p) !== 'completed' &&
     p.id !== editingId
   );
 
@@ -104,14 +107,15 @@ export default function ProgramManagement() {
     if (program) {
       setEditingId(program.id);
       setFormData({
-        title: program.title || '', 
+        title: program.title || '',
         date: program.date || '',
-        location: program.location || '', 
+        date_display: program.date_display || '',
+        location: program.location || '',
         program_component: program.program_component || 'Group Guidance',
         guidance_service: program.guidance_service || 'Career Orientation',
-        capacity: program.capacity || 0, 
+        capacity: program.capacity || 0,
         status: program.status || 'upcoming',
-        image_url: program.image_url || '', 
+        image_url: program.image_url || '',
         content: program.content || ''
       });
       setPreviewUrl(program.image_url || '');
@@ -123,8 +127,8 @@ export default function ProgramManagement() {
       }
     } else {
       setEditingId(null);
-      setFormData({ 
-        title: '', date: '', location: '', 
+      setFormData({
+        title: '', date: '', date_display: '', location: '',
         program_component: 'Group Guidance', guidance_service: 'Career Orientation',
         capacity: 0, status: 'upcoming', image_url: '', content: ''
       });
@@ -164,9 +168,10 @@ export default function ProgramManagement() {
 
       const combinedTime = `${formatTo12h(startTime)} - ${formatTo12h(endTime)}`;
       
-      const payload = { 
+      const payload = {
         title: formData.title,
         date: formData.date,
+        date_display: formData.date_display.trim() || null,
         location: formData.location,
         program_component: formData.program_component,
         guidance_service: formData.guidance_service,
@@ -278,7 +283,12 @@ export default function ProgramManagement() {
 
       {/* GRID */}
       <div className="grid grid-cols-1 gap-4 md:gap-6">
-        {programs.filter(p => p.title?.toLowerCase().includes(searchQuery.toLowerCase())).map((program) => {
+        {programs
+          .filter(p => p.title?.toLowerCase().includes(searchQuery.toLowerCase()))
+          .slice()
+          .sort(compareProgramsForDisplay)
+          .map((program) => {
+          const effectiveStatus = getEffectiveProgramStatus(program);
           const normalHandouts = program.materials?.filter((m: any) => !m.title?.startsWith('CERTIFICATE_TEMPLATE:')) || [];
 
           return (
@@ -287,9 +297,9 @@ export default function ProgramManagement() {
                 <img src={program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop'} className="absolute inset-0 w-full h-full object-cover" alt="" />
                 <div className="absolute top-4 left-4">
                   <span className={`text-white text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-md ${
-                    program.status === 'ongoing' ? 'bg-emerald-500 animate-pulse' : program.status === 'completed' ? 'bg-slate-700' : 'bg-indigo-600'
+                    effectiveStatus === 'ongoing' ? 'bg-emerald-500 animate-pulse' : effectiveStatus === 'completed' ? 'bg-slate-700' : 'bg-indigo-600'
                   }`}>
-                    {program.status}
+                    {effectiveStatus}
                   </span>
                 </div>
               </div>
@@ -310,7 +320,7 @@ export default function ProgramManagement() {
                         {program.title}
                       </h3>
                       <div className="flex flex-wrap gap-x-4 gap-y-2 text-slate-400 text-[9px] md:text-[10px] font-bold uppercase tracking-wider">
-                        <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {program.date}</span>
+                        <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {formatProgramDate(program)}</span>
                         <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {program.time_range || 'N/A'}</span>
                         <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {program.location}</span>
                       </div>
@@ -422,6 +432,8 @@ export default function ProgramManagement() {
                 <Label className={`text-[9px] md:text-[10px] font-black uppercase tracking-wider ml-1 ${isDateOccupied ? 'text-rose-500' : 'text-slate-400'}`}>Target Calendar Date</Label>
                 <Input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} className={`rounded-xl bg-slate-50 border-none h-12 font-bold px-3 text-xs text-slate-700 transition-all focus-visible:ring-2 focus-visible:ring-indigo-100 ${isDateOccupied ? 'ring-2 ring-rose-500 bg-rose-50/60' : ''}`} />
                 {isDateOccupied && <p className="text-[8px] text-rose-500 font-black uppercase flex items-center gap-1 ml-1 tracking-wider animate-bounce"><AlertCircle className="w-3 h-3 shrink-0" /> Date occupied</p>}
+                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider block pt-1">Display Date (Optional)</Label>
+                <Input value={formData.date_display} onChange={(e) => setFormData({...formData, date_display: e.target.value})} placeholder="e.g. February 18-19, 2026" className="rounded-xl bg-slate-50 border-none h-12 font-bold px-3 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-100" />
               </div>
 
               <div className="space-y-1.5">
@@ -476,7 +488,7 @@ export default function ProgramManagement() {
               <div onClick={() => materialRef.current?.click()} className="h-12 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center px-4 cursor-pointer border-none text-slate-600 text-xs">
                 <FileText className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
                 <span className="truncate flex-1 font-bold">{materialFile ? materialFile.name : 'Choose Handouts...'}</span>
-                <input type="file" ref={materialRef} className="hidden" accept=".pdf,.doc,.docx" onChange={(e) => setMaterialFile(e.target.files?.[0] || null)} />
+                <input type="file" ref={materialRef} className="hidden" accept=".pdf,.doc,.docx,image/*" onChange={(e) => setMaterialFile(e.target.files?.[0] || null)} />
               </div>
             </div>
 

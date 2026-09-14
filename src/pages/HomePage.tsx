@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { formatProgramDate } from "../lib/formatProgramDate";
 import { Button } from "../../src/components/ui/button";
 import { Card } from "../../src/components/ui/card";
 import {
@@ -35,6 +36,7 @@ interface Program {
   location: string;
   date: string;
   image_url?: string;
+  date_display?: string;
 }
 
 const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
@@ -262,7 +264,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                   <div className="p-6 flex-1 flex flex-col">
                     <h3 className="text-md font-black uppercase leading-tight line-clamp-2 mb-4">{program.title}</h3>
                     <div className="mt-auto space-y-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      <div className="flex items-center gap-2"><Calendar size={12} className="text-blue-500" /> {new Date(program.date).toLocaleDateString()}</div>
+                      <div className="flex items-center gap-2"><Calendar size={12} className="text-blue-500" /> {formatProgramDate(program, (date) => new Date(date).toLocaleDateString())}</div>
                       <div className="flex items-center gap-2"><MapPin size={12} className="text-blue-500" /> {program.location}</div>
                     </div>
                   </div>
