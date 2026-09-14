@@ -28,6 +28,7 @@ import {
 
 import {
   Download,
+  Search,
   Users,
   GraduationCap,
   BarChart3,
@@ -410,6 +411,11 @@ export default function AnalyticsDashboard() {
   // panel (User Management lists every student's name + campus), so this
   // isn't new exposure — just a filtered view of the same data.
   const [demographicDetailView, setDemographicDetailView] = useState<{ type: 'campus' | 'course'; value: string } | null>(null);
+
+  // Shared by both roster dialogs above — only one is ever open at a time.
+  // Cleared whenever a roster is opened/closed so a stale query from a
+  // previous roster never silently hides rows in the next one.
+  const [rosterSearchQuery, setRosterSearchQuery] = useState("");
 
   /* =======================================================
      FETCH DATA
@@ -1109,6 +1115,29 @@ export default function AnalyticsDashboard() {
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [filteredProfiles, demographicDetailView]);
+
+  // Search within whichever roster dialog is currently open — matches
+  // name or any of the visible detail columns (campus/program/gender).
+  const rosterMatchesSearch = (row: { name: string; campus: string; program: string; gender: string }) => {
+    const query = rosterSearchQuery.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      row.name.toLowerCase().includes(query) ||
+      row.campus.toLowerCase().includes(query) ||
+      row.program.toLowerCase().includes(query) ||
+      row.gender.toLowerCase().includes(query)
+    );
+  };
+
+  const filteredInclusionRoster = useMemo(
+    () => inclusionRoster.filter(rosterMatchesSearch),
+    [inclusionRoster, rosterSearchQuery]
+  );
+
+  const filteredDemographicRoster = useMemo(
+    () => demographicRoster.filter(rosterMatchesSearch),
+    [demographicRoster, rosterSearchQuery]
+  );
 
   /* =======================================================
      KNOWLEDGE AWARENESS
@@ -3799,7 +3828,7 @@ export default function AnalyticsDashboard() {
                     0,
                   ]}
                   cursor="pointer"
-                  onClick={(data: any) => data?.course && setDemographicDetailView({ type: 'course', value: data.course })}
+                  onClick={(data: any) => { if (data?.course) { setRosterSearchQuery(""); setDemographicDetailView({ type: 'course', value: data.course }); } }}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -4014,7 +4043,7 @@ export default function AnalyticsDashboard() {
 
               <button
                 type="button"
-                onClick={() => inclusionAnalytics.pwd > 0 && setInclusionDetailView('pwd')}
+                onClick={() => { if (inclusionAnalytics.pwd > 0) { setRosterSearchQuery(""); setInclusionDetailView('pwd'); } }}
                 disabled={inclusionAnalytics.pwd === 0}
                 className={`bg-blue-50 rounded-2xl p-4 text-left transition-colors ${inclusionAnalytics.pwd > 0 ? 'hover:bg-blue-100 cursor-pointer' : 'cursor-default'}`}
               >
@@ -4092,7 +4121,7 @@ export default function AnalyticsDashboard() {
 
               <button
                 type="button"
-                onClick={() => inclusionAnalytics.ip > 0 && setInclusionDetailView('ip')}
+                onClick={() => { if (inclusionAnalytics.ip > 0) { setRosterSearchQuery(""); setInclusionDetailView('ip'); } }}
                 disabled={inclusionAnalytics.ip === 0}
                 className={`bg-emerald-50 rounded-2xl p-4 text-left transition-colors ${inclusionAnalytics.ip > 0 ? 'hover:bg-emerald-100 cursor-pointer' : 'cursor-default'}`}
               >
@@ -4195,7 +4224,7 @@ export default function AnalyticsDashboard() {
                             ]
                           }
                           cursor="pointer"
-                          onClick={() => setDemographicDetailView({ type: 'campus', value: entry.name })}
+                          onClick={() => { setRosterSearchQuery(""); setDemographicDetailView({ type: 'campus', value: entry.name }); }}
                         />
                       )
                     )}
@@ -4458,31 +4487,48 @@ export default function AnalyticsDashboard() {
               {inclusionDetailView === 'pwd' ? 'PWD Student Roster' : 'IP Student Roster'}
             </DialogTitle>
             <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">
-              Admin-only &middot; {inclusionRoster.length} student{inclusionRoster.length === 1 ? '' : 's'}
+              Admin-only &middot; {filteredInclusionRoster.length} of {inclusionRoster.length} student{inclusionRoster.length === 1 ? '' : 's'}
             </p>
           </DialogHeader>
 
+          <div className="px-6 pt-4 shrink-0">
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={rosterSearchQuery}
+                onChange={(e) => setRosterSearchQuery(e.target.value)}
+                placeholder="Search by name, campus, course, or gender..."
+                className="w-full h-10 pl-10 pr-3 rounded-xl bg-slate-50 border-none text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              />
+            </div>
+          </div>
+
           <div className="overflow-y-auto flex-1 p-6 pt-4">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
-                  <th className="pb-2 pr-3">Name</th>
-                  <th className="pb-2 pr-3">Campus</th>
-                  <th className="pb-2 pr-3">Course / Program</th>
-                  <th className="pb-2">Gender</th>
-                </tr>
-              </thead>
-              <tbody>
-                {inclusionRoster.map((row) => (
-                  <tr key={row.id} className="border-b border-slate-50 last:border-0">
-                    <td className="py-2.5 pr-3 text-xs font-bold text-slate-800">{row.name}</td>
-                    <td className="py-2.5 pr-3 text-xs text-slate-500">{row.campus}</td>
-                    <td className="py-2.5 pr-3 text-xs text-slate-500">{row.program}</td>
-                    <td className="py-2.5 text-xs text-slate-500">{row.gender}</td>
+            {filteredInclusionRoster.length === 0 ? (
+              <p className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest py-10">No matching students found.</p>
+            ) : (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                    <th className="pb-2 pr-3">Name</th>
+                    <th className="pb-2 pr-3">Campus</th>
+                    <th className="pb-2 pr-3">Course / Program</th>
+                    <th className="pb-2">Gender</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredInclusionRoster.map((row) => (
+                    <tr key={row.id} className="border-b border-slate-50 last:border-0">
+                      <td className="py-2.5 pr-3 text-xs font-bold text-slate-800">{row.name}</td>
+                      <td className="py-2.5 pr-3 text-xs text-slate-500">{row.campus}</td>
+                      <td className="py-2.5 pr-3 text-xs text-slate-500">{row.program}</td>
+                      <td className="py-2.5 text-xs text-slate-500">{row.gender}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -4496,31 +4542,48 @@ export default function AnalyticsDashboard() {
               {demographicDetailView?.value}
             </DialogTitle>
             <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">
-              Admin-only &middot; {demographicRoster.length} student{demographicRoster.length === 1 ? '' : 's'}
+              Admin-only &middot; {filteredDemographicRoster.length} of {demographicRoster.length} student{demographicRoster.length === 1 ? '' : 's'}
             </p>
           </DialogHeader>
 
+          <div className="px-6 pt-4 shrink-0">
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={rosterSearchQuery}
+                onChange={(e) => setRosterSearchQuery(e.target.value)}
+                placeholder="Search by name, campus, course, or gender..."
+                className="w-full h-10 pl-10 pr-3 rounded-xl bg-slate-50 border-none text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              />
+            </div>
+          </div>
+
           <div className="overflow-y-auto flex-1 p-6 pt-4">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
-                  <th className="pb-2 pr-3">Name</th>
-                  {demographicDetailView?.type === 'course' && <th className="pb-2 pr-3">Campus</th>}
-                  {demographicDetailView?.type === 'campus' && <th className="pb-2 pr-3">Course / Program</th>}
-                  <th className="pb-2">Gender</th>
-                </tr>
-              </thead>
-              <tbody>
-                {demographicRoster.map((row) => (
-                  <tr key={row.id} className="border-b border-slate-50 last:border-0">
-                    <td className="py-2.5 pr-3 text-xs font-bold text-slate-800">{row.name}</td>
-                    {demographicDetailView?.type === 'course' && <td className="py-2.5 pr-3 text-xs text-slate-500">{row.campus}</td>}
-                    {demographicDetailView?.type === 'campus' && <td className="py-2.5 pr-3 text-xs text-slate-500">{row.program}</td>}
-                    <td className="py-2.5 text-xs text-slate-500">{row.gender}</td>
+            {filteredDemographicRoster.length === 0 ? (
+              <p className="text-center text-xs font-bold text-slate-400 uppercase tracking-widest py-10">No matching students found.</p>
+            ) : (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                    <th className="pb-2 pr-3">Name</th>
+                    {demographicDetailView?.type === 'course' && <th className="pb-2 pr-3">Campus</th>}
+                    {demographicDetailView?.type === 'campus' && <th className="pb-2 pr-3">Course / Program</th>}
+                    <th className="pb-2">Gender</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredDemographicRoster.map((row) => (
+                    <tr key={row.id} className="border-b border-slate-50 last:border-0">
+                      <td className="py-2.5 pr-3 text-xs font-bold text-slate-800">{row.name}</td>
+                      {demographicDetailView?.type === 'course' && <td className="py-2.5 pr-3 text-xs text-slate-500">{row.campus}</td>}
+                      {demographicDetailView?.type === 'campus' && <td className="py-2.5 pr-3 text-xs text-slate-500">{row.program}</td>}
+                      <td className="py-2.5 text-xs text-slate-500">{row.gender}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </DialogContent>
       </Dialog>
