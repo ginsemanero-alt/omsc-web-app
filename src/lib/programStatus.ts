@@ -7,6 +7,7 @@ export interface ProgramStatusFields {
   date: string;
   time_range?: string | null;
   status: string;
+  date_display?: string | null;
 }
 
 function getProgramEndDateTime(program: ProgramStatusFields): Date | null {
@@ -34,6 +35,15 @@ function getProgramEndDateTime(program: ProgramStatusFields): Date | null {
 
 export function getEffectiveProgramStatus(program: ProgramStatusFields): string {
   if (program.status === 'completed') return 'completed';
+
+  // `date` is a single day, but date_display exists specifically for events
+  // that don't fit one — a multi-day range typed as free text ("09/01/2026
+  // – 09/30/2026"). When it's set, `date` is only the start day, so timing
+  // the cutoff off it would mark the whole event "completed" the moment day
+  // one ends. There's no reliable way to parse an end date back out of
+  // arbitrary display text, so defer to the admin's manual status instead.
+  if (program.date_display?.trim()) return program.status;
+
   const endDateTime = getProgramEndDateTime(program);
   if (endDateTime && endDateTime.getTime() < Date.now()) return 'completed';
   return program.status;
