@@ -1,12 +1,61 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
-import { 
-  ShieldCheck, Users, Target, BookOpen, Heart, 
-  Layers, Mail, Facebook, Phone, Award, ClipboardCheck 
+import {
+  ShieldCheck, Users, Target, BookOpen, Heart,
+  Layers, Mail, Facebook, Phone, Award, ClipboardCheck
 } from "lucide-react";
 
+interface AboutContent {
+  heading_title: string;
+  hero_intro: string;
+  director_name: string;
+  director_title: string;
+  collaborative_approach_text: string;
+  contact_email: string;
+  contact_facebook: string;
+  contact_phone: string;
+}
+
+// Shown until the DB row loads (and if it's ever missing) so the page
+// never renders blank — same wording the hardcoded version used to
+// carry before this became admin-editable (see AboutContentManager.tsx
+// and the PHASE 16 migration).
+const FALLBACK_CONTENT: AboutContent = {
+  heading_title: "The Guidance and Testing Center",
+  hero_intro: "The Guidance and Testing Center is an essential and integral part of the overall educational process. School counselors, working within the framework of the program, make major contributions to the primary educational mission and vision of the institution by providing students with Guidance and Counseling activities and services that facilitate and enhance their academic, career, and personal and social development.",
+  director_name: "Dr. Angelina C. Paquibot",
+  director_title: "Guidance and Testing Center Director",
+  collaborative_approach_text: "While school Counselors are available to respond to the unique needs of each student, the Guidance and Counseling approach is collaborative among teachers, parents and administrators. As a developmental program, it addresses the needs of all students in OMSU by facilitating their growth as well as helping to create positive and safe learning environments.",
+  contact_email: "guidanceofficeomsc@gmail.com",
+  contact_facebook: "OMSU Guidance and Testing Center",
+  contact_phone: "043-491-0925 / 09632086253",
+};
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return (parts[0][0] + (parts[parts.length - 1][0] || "")).toUpperCase();
+}
+
 const AboutPage: React.FC = () => {
+  const [content, setContent] = useState<AboutContent>(FALLBACK_CONTENT);
+
+  useEffect(() => {
+    const fetchContent = async () => {
+      const { data, error } = await supabase
+        .from("about_content")
+        .select("heading_title, hero_intro, director_name, director_title, collaborative_approach_text, contact_email, contact_facebook, contact_phone")
+        .eq("id", 1)
+        .maybeSingle();
+
+      if (!error && data) setContent(data as AboutContent);
+    };
+
+    fetchContent();
+  }, []);
+
   const components = [
     {
       title: "Group Guidance",
@@ -49,23 +98,22 @@ const AboutPage: React.FC = () => {
                 About the Center
               </Badge>
               <h1 className="text-3xl md:text-6xl font-black uppercase text-slate-900 tracking-tighter leading-tight">
-                The Guidance and <br />
-                <span className="text-indigo-600">Testing Center</span>
+                {content.heading_title}
               </h1>
-              
+
               {/* Director Profile Display */}
               <div className="bg-slate-50 p-4 md:p-6 rounded-2xl border border-slate-100/80 flex items-center gap-4 max-w-md mx-auto lg:mx-0">
                 <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center font-black text-white shrink-0 shadow-md">
-                  AP
+                  {getInitials(content.director_name)}
                 </div>
                 <div className="text-left">
-                  <h3 className="font-black text-slate-900 uppercase tracking-tight text-sm md:text-base leading-none">Dr. Angelina C. Paquibot</h3>
-                  <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mt-1.5">Guidance and Testing Center Director</p>
+                  <h3 className="font-black text-slate-900 uppercase tracking-tight text-sm md:text-base leading-none">{content.director_name}</h3>
+                  <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mt-1.5">{content.director_title}</p>
                 </div>
               </div>
 
               <p className="text-xs md:text-sm font-medium text-slate-500 leading-relaxed">
-                The Guidance and Testing Center is an essential and integral part of the overall educational process. School counselors, working within the framework of the program, make major contributions to the primary educational mission and vision of the institution by providing students with Guidance and Counseling activities and services that facilitate and enhance their academic, career, and personal and social development.
+                {content.hero_intro}
               </p>
             </div>
             
@@ -90,7 +138,7 @@ const AboutPage: React.FC = () => {
           <div className="lg:col-span-1 space-y-4 sticky top-24 bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
             <h3 className="text-xl font-black uppercase tracking-tight text-slate-900">A Collaborative Approach</h3>
             <p className="text-xs md:text-sm text-slate-500 leading-relaxed">
-              While school Counselors are available to respond to the unique needs of each student, the Guidance and Counseling approach is collaborative among teachers, parents and administrators. As a developmental program, it addresses the needs of all students in OMSU by facilitating their growth as well as helping to create positive and safe learning environments.
+              {content.collaborative_approach_text}
             </p>
           </div>
 
@@ -166,15 +214,15 @@ const AboutPage: React.FC = () => {
             <div className="space-y-3.5 shrink-0 min-w-[280px] bg-white/5 p-5 rounded-2xl border border-white/10">
               <div className="flex items-center gap-3 text-xs font-mono font-bold text-slate-200 lowercase">
                 <Mail className="w-4 h-4 text-indigo-400 shrink-0" />
-                <span>guidanceofficeomsc@gmail.com</span>
+                <span>{content.contact_email}</span>
               </div>
               <div className="flex items-center gap-3 text-xs font-bold text-slate-200 uppercase tracking-tight">
                 <Facebook className="w-4 h-4 text-indigo-400 shrink-0" />
-                <span className="text-[11px]">OMSU Guidance and Testing Center</span>
+                <span className="text-[11px]">{content.contact_facebook}</span>
               </div>
               <div className="flex items-center gap-3 text-xs font-mono font-bold text-slate-200">
                 <Phone className="w-4 h-4 text-indigo-400 shrink-0" />
-                <span className="text-[10px]">043-491-0925 / 09632086253</span>
+                <span className="text-[10px]">{content.contact_phone}</span>
               </div>
             </div>
           </div>

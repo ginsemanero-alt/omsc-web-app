@@ -5,6 +5,7 @@ import ProgramsActivities from '../components/student/ProgramsActivities';
 import IECMaterials from '../components/student/IECMaterials';
 import QuizzesSurveys from '../components/student/QuizzesSurveys';
 import StudentProfile from '../components/student/StudentProfile';
+import AboutPage from './AboutPage';
 import { useToast } from '../hooks/use-toast';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth } from '../hooks/useAuth';
@@ -29,6 +30,7 @@ export default function StudentDashboard({ onLogout }: StudentDashboardProps) {
     { label: 'IEC Library', path: '/student/materials', icon: 'BookOpen' },
     { label: 'Survey', path: '/student/survey', icon: 'ClipboardList' },
     { label: 'Profile', path: '/student/profile', icon: 'MessageSquare' },
+    { label: 'About', path: '/student/about', icon: 'Info' },
   ];
 
   const handleLogoutWithToast = async () => {
@@ -79,6 +81,7 @@ export default function StudentDashboard({ onLogout }: StudentDashboardProps) {
             <Route path="/materials" element={<IECMaterials />} />
             <Route path="/survey" element={<QuizzesSurveys />} />
             <Route path="/profile" element={<StudentProfile />} />
+            <Route path="/about" element={<AboutPage />} />
             <Route path="*" element={<Navigate to="/student" replace />} />
           </Routes>
         </main>
