@@ -654,3 +654,80 @@ CREATE POLICY program_entries_update_admin ON program_entries
 DROP POLICY IF EXISTS program_entries_delete_admin ON program_entries;
 CREATE POLICY program_entries_delete_admin ON program_entries
   FOR DELETE USING (is_admin());
+
+-- ------------------------------------------------------------
+-- PHASE 15 — Archive instead of permanent delete
+--
+-- Every Delete button (Programs, Materials, Surveys, Users) used to
+-- run a real DELETE immediately. Now it only sets archived_at — the
+-- row still exists, just excluded from every list/query/count the app
+-- runs against these four tables (added directly to each query, not
+-- via RLS: the new Archive screen still needs admins to SELECT
+-- archived rows, so a SELECT-level policy can't distinguish "list
+-- view" from "archive view").
+--
+-- No new RLS policies needed — every table here already has admin
+-- UPDATE (for archiving/restoring) and admin DELETE (for the Archive
+-- screen's permanent delete) from PHASE 5.
+-- ------------------------------------------------------------
+
+ALTER TABLE programs  ADD COLUMN IF NOT EXISTS archived_at timestamptz;
+ALTER TABLE materials ADD COLUMN IF NOT EXISTS archived_at timestamptz;
+ALTER TABLE surveys   ADD COLUMN IF NOT EXISTS archived_at timestamptz;
+ALTER TABLE users     ADD COLUMN IF NOT EXISTS archived_at timestamptz;
+
+-- ------------------------------------------------------------
+-- PHASE 16 — About page content, editable instead of hardcoded
+--
+-- AboutPage.tsx's prose (heading, director, intro paragraphs, contact
+-- details) was hardcoded JSX — no admin could reword it without a
+-- code change and redeploy, which is exactly the problem now that the
+-- institution has been renamed OMSC -> OMSU. Singleton table (one
+-- row, id = 1) rather than per-field settings rows: this content is
+-- always read and written as one whole record, never queried by
+-- individual field.
+--
+-- The "Core Service Components" and "Quality Policy Objectives" lists
+-- stay hardcoded in AboutPage.tsx for now — turning those into
+-- admin-editable repeatable lists is a larger, separate feature.
+-- ------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS about_content (
+  id                          integer primary key default 1,
+  heading_title               text not null default 'The Guidance and Testing Center',
+  hero_intro                  text,
+  director_name               text,
+  director_title              text,
+  collaborative_approach_text text,
+  contact_email                text,
+  contact_facebook             text,
+  contact_phone                text,
+  updated_at                  timestamptz not null default now(),
+  constraint about_content_singleton check (id = 1)
+);
+
+INSERT INTO about_content (
+  id, heading_title, hero_intro, director_name, director_title,
+  collaborative_approach_text, contact_email, contact_facebook, contact_phone
+) VALUES (
+  1,
+  'The Guidance and Testing Center',
+  'The Guidance and Testing Center is an essential and integral part of the overall educational process. School counselors, working within the framework of the program, make major contributions to the primary educational mission and vision of the institution by providing students with Guidance and Counseling activities and services that facilitate and enhance their academic, career, and personal and social development.',
+  'Dr. Angelina C. Paquibot',
+  'Guidance and Testing Center Director',
+  'While school Counselors are available to respond to the unique needs of each student, the Guidance and Counseling approach is collaborative among teachers, parents and administrators. As a developmental program, it addresses the needs of all students in OMSU by facilitating their growth as well as helping to create positive and safe learning environments.',
+  'guidanceofficeomsc@gmail.com',
+  'OMSU Guidance and Testing Center',
+  '043-491-0925 / 09632086253'
+)
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE about_content ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS about_content_select_public ON about_content;
+CREATE POLICY about_content_select_public ON about_content
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS about_content_update_admin ON about_content;
+CREATE POLICY about_content_update_admin ON about_content
+  FOR UPDATE USING (is_admin()) WITH CHECK (is_admin());

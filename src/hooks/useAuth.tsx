@@ -26,10 +26,14 @@ async function fetchUserRecord(email: string): Promise<{ role: Role; dbUserId: n
   // users.id is this app's own bigint auto-increment id, not the Supabase
   // Auth user's uuid, so the two can't be joined on id. email is the only
   // column both share.
+  // Archived rows excluded — an archived account should behave as
+  // fully logged-out (no role, no access) even if its Auth session is
+  // still technically valid.
   const { data, error } = await supabase
     .from('users')
     .select('id, role, name')
     .eq('email', email)
+    .is('archived_at', null)
     .maybeSingle();
 
   if (error || !data) return { role: null, dbUserId: null, userName: null };

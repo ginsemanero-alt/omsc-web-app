@@ -17,6 +17,8 @@ import {
   Sun,
   Moon,
   AlertCircle,
+  Archive,
+  Info,
   type LucideIcon,
 } from 'lucide-react';
 import { useState, useEffect } from 'react'; // Idinagdag ang useEffect
@@ -54,6 +56,8 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   FileStack,
   Users,
   History,
+  Archive,
+  Info,
 };
 
 interface TopNavBarProps {

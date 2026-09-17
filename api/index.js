@@ -481,10 +481,14 @@ app.post('/api/login', loginLimiter, async (req, res) => {
     const cleanEmail = email?.trim().toLowerCase();
 
     try {
+        // Archived accounts are treated as if they don't exist — same
+        // as useAuth.tsx's own session check, so an archived user can't
+        // log in through either path.
         const { data: user, error } = await supabase
             .from('users')
             .select('*')
             .eq('email', cleanEmail)
+            .is('archived_at', null)
             .maybeSingle();
 
         if (!user) return res.status(404).json({ message: "User not found" });

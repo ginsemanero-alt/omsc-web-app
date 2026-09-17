@@ -9,6 +9,8 @@ import AnalyticsDashboard from '../components/admin/AnalyticsDashboard';
 import ReportsCenter from '../components/admin/ReportsCenter';
 import UserManagement from '../components/admin/UserManagement';
 import ActivityLog from '../components/admin/ActivityLog';
+import ArchiveScreen from '../components/admin/ArchiveScreen';
+import AboutContentManager from '../components/admin/AboutContentManager';
 import { useToast } from '../hooks/use-toast';
 
 interface AdminDashboardProps {
@@ -64,6 +66,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     { label: 'Reports', path: '/admin/reports', icon: 'FileStack' },
     { label: 'Users', path: '/admin/users', icon: 'Users' },
     { label: 'Activity Log', path: '/admin/activity-log', icon: 'History' },
+    { label: 'Archive', path: '/admin/archive', icon: 'Archive' },
+    { label: 'About Page', path: '/admin/about', icon: 'Info' },
   ];
 
   const handleLogoutWithToast = () => {
@@ -96,6 +100,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           <Route path="/reports" element={<ReportsCenter />} />
           <Route path="/users" element={<UserManagement />} />
           <Route path="/activity-log" element={<ActivityLog />} />
+          <Route path="/archive" element={<ArchiveScreen />} />
+          <Route path="/about" element={<AboutContentManager />} />
           <Route path="*" element={<Navigate to="/admin" replace />} />
         </Routes>
       </main>

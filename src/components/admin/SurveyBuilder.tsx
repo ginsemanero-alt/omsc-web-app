@@ -160,8 +160,8 @@ export default function SurveyBuilder() {
 
   async function fetchLinkOptions() {
     const [programsRes, materialsRes] = await Promise.all([
-      supabase.from("programs").select("id, title").order("title"),
-      supabase.from("materials").select("id, title").order("title"),
+      supabase.from("programs").select("id, title").is("archived_at", null).order("title"),
+      supabase.from("materials").select("id, title").is("archived_at", null).order("title"),
     ]);
 
     if (programsRes.data) setProgramOptions(programsRes.data as ProgramOption[]);
@@ -175,6 +175,7 @@ export default function SurveyBuilder() {
       const { data, error } = await supabase
         .from("surveys")
         .select("*")
+        .is("archived_at", null)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -480,17 +481,19 @@ export default function SurveyBuilder() {
     if (!deleteTargetId) return;
 
     try {
+      // Archive, not delete — only the Archive screen can permanently
+      // remove a survey now.
       const { error } = await supabase
         .from("surveys")
-        .delete()
+        .update({ archived_at: new Date().toISOString() })
         .eq("id", deleteTargetId);
 
       if (error) throw error;
-      logActivity({ actorEmail: user?.email, actorName: userName, action: "delete", entityType: "survey", entityId: deleteTargetId, entityLabel: deleteTargetTitle });
+      logActivity({ actorEmail: user?.email, actorName: userName, action: "delete", entityType: "survey", entityId: deleteTargetId, entityLabel: deleteTargetTitle, details: "Archived" });
 
       toast({
-        title: "Survey Deleted",
-        description: "The survey has been removed.",
+        title: "Archived",
+        description: "Moved to Archive. Restore or permanently delete it from there.",
       });
 
       setIsDeleteOpen(false);
@@ -1953,13 +1956,13 @@ export default function SurveyBuilder() {
 
             <DialogHeader className="mt-4">
               <DialogTitle className="text-xl font-black text-center">
-                Delete Survey?
+                Move to Archive?
               </DialogTitle>
             </DialogHeader>
 
             <p className="text-sm text-slate-500 mt-2">
-              Are you sure you want to delete{" "}
-              <strong>{deleteTargetTitle}</strong>?
+              <strong>{deleteTargetTitle}</strong> will disappear from this list, but
+              you can restore it or delete it permanently from the Archive screen.
             </p>
 
             <div className="grid grid-cols-2 gap-3 mt-6">
@@ -1978,7 +1981,7 @@ export default function SurveyBuilder() {
                 onClick={handleExecuteDelete}
                 className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black"
               >
-                Delete
+                Move to Archive
               </Button>
 
             </div>

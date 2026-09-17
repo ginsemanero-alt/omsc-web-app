@@ -112,6 +112,7 @@ export default function ProgramManagement() {
             sort_order
           )
         `)
+        .is('archived_at', null)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -384,11 +385,13 @@ export default function ProgramManagement() {
     if (!deleteTargetId) return;
     try {
       setLoading(true);
-      const { error } = await supabase.from('programs').delete().eq('id', deleteTargetId);
+      // Archive, not delete — only the Archive screen can permanently
+      // remove a program now.
+      const { error } = await supabase.from('programs').update({ archived_at: new Date().toISOString() }).eq('id', deleteTargetId);
       if (error) throw error;
-      logActivity({ actorEmail: user?.email, actorName: userName, action: 'delete', entityType: 'program', entityId: deleteTargetId, entityLabel: deleteTargetTitle });
+      logActivity({ actorEmail: user?.email, actorName: userName, action: 'delete', entityType: 'program', entityId: deleteTargetId, entityLabel: deleteTargetTitle, details: 'Archived' });
 
-      toast({ title: "Purged Successfully", description: "The guidance folder element was unlinked." });
+      toast({ title: "Archived", description: "Moved to Archive. Restore or permanently delete it from there." });
       setIsDeleteOpen(false);
       fetchPrograms();
     } catch (err: any) {
@@ -770,11 +773,11 @@ export default function ProgramManagement() {
           <div className="mx-auto w-14 h-14 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-4">
             <AlertCircle className="w-8 h-8" />
           </div>
-          <DialogHeader><DialogTitle className="text-xl font-black text-slate-900 uppercase tracking-tight text-center">Purge Guidance Element?</DialogTitle></DialogHeader>
-          <div className="mt-3 text-slate-500 text-xs font-medium leading-relaxed px-2">You are about to unregister <span className="font-bold text-slate-800 uppercase">"{deleteTargetTitle}"</span>. This action cannot be undone.</div>
+          <DialogHeader><DialogTitle className="text-xl font-black text-slate-900 uppercase tracking-tight text-center">Move to Archive?</DialogTitle></DialogHeader>
+          <div className="mt-3 text-slate-500 text-xs font-medium leading-relaxed px-2">You are about to archive <span className="font-bold text-slate-800 uppercase">"{deleteTargetTitle}"</span>. It will disappear from this list, but you can restore it or delete it permanently from the Archive screen.</div>
           <div className="grid grid-cols-2 gap-3 mt-6">
             <Button variant="ghost" onClick={() => setIsDeleteOpen(false)} className="h-12 rounded-xl font-black uppercase text-[10px] tracking-wider text-slate-500 bg-slate-50 hover:bg-slate-100">Cancel</Button>
-            <Button onClick={handleExecuteDelete} className="h-12 rounded-xl font-black uppercase text-[10px] tracking-wider bg-rose-600 text-white shadow-md">Confirm Deletion</Button>
+            <Button onClick={handleExecuteDelete} className="h-12 rounded-xl font-black uppercase text-[10px] tracking-wider bg-rose-600 text-white shadow-md">Move to Archive</Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -173,11 +173,11 @@ export default function ReportsCenter() {
       const [profilesRes, programsRes, surveysRes, responsesRes, materialsRes, usersRes] =
         await Promise.all([
           supabase.from("profiles").select("*"),
-          supabase.from("programs").select("*"),
-          supabase.from("surveys").select("*"),
+          supabase.from("programs").select("*").is("archived_at", null),
+          supabase.from("surveys").select("*").is("archived_at", null),
           supabase.from("survey_responses").select("*"),
-          supabase.from("materials").select("*"),
-          supabase.from("users").select("id, student_id"),
+          supabase.from("materials").select("*").is("archived_at", null),
+          supabase.from("users").select("id, student_id").is("archived_at", null),
         ]);
 
       if (profilesRes.data) setProfiles(profilesRes.data as Profile[]);

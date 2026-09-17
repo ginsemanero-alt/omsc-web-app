@@ -80,6 +80,7 @@ export default function IECMaterials() {
         .from('materials')
         .select('*')
         .is('program_id', null)
+        .is('archived_at', null)
         .order('created_at', { ascending: false });
 
       if (error) throw error;

@@ -64,6 +64,7 @@ const ProgramsPage: React.FC = () => {
         const { data: sbPrograms, error } = await supabase
           .from('programs')
           .select('*')
+          .is('archived_at', null)
           .order('id', { ascending: false });
 
         if (!error && sbPrograms) {

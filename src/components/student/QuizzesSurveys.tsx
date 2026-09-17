@@ -166,8 +166,8 @@ export default function QuizzesSurveys() {
 
   async function fetchLinkTitles() {
     const [programsRes, materialsRes] = await Promise.all([
-      supabase.from('programs').select('id, title'),
-      supabase.from('materials').select('id, title'),
+      supabase.from('programs').select('id, title').is('archived_at', null),
+      supabase.from('materials').select('id, title').is('archived_at', null),
     ]);
 
     if (programsRes.data) {
@@ -265,6 +265,7 @@ export default function QuizzesSurveys() {
         .from('surveys')
         .select('*')
         .eq('status', 'active')
+        .is('archived_at', null)
         .order('created_at', { ascending: false });
 
       if (surveyError) throw surveyError;

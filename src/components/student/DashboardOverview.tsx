@@ -56,13 +56,14 @@ export default function DashboardOverview() {
 
       // 2. Fetch Real Stats & Data from Database
       const [progRes, surveyRes, matRes, latestMatRes] = await Promise.all([
-        supabase.from('programs').select('*', { count: 'exact' }).order('created_at', { ascending: false }).limit(3),
-        supabase.from('surveys').select('*', { count: 'exact' }).eq('status', 'active').limit(3),
-        supabase.from('materials').select('*', { count: 'exact', head: true }),
+        supabase.from('programs').select('*', { count: 'exact' }).is('archived_at', null).order('created_at', { ascending: false }).limit(3),
+        supabase.from('surveys').select('*', { count: 'exact' }).eq('status', 'active').is('archived_at', null).limit(3),
+        supabase.from('materials').select('*', { count: 'exact', head: true }).is('archived_at', null),
         supabase
           .from('materials')
           .select('id, title, file_url, created_at')
           .not('title', 'ilike', 'CERTIFICATE_TEMPLATE:%')
+          .is('archived_at', null)
           .order('created_at', { ascending: false })
           .limit(3),
       ]);

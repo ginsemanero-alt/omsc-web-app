@@ -118,6 +118,7 @@ export default function ProgramsActivities() {
       const { data: programsData, error: programsError } = await supabase
         .from('programs')
         .select('*, materials(id, title, file_url), program_entries(id, label, description, caption, image_urls, sort_order)')
+        .is('archived_at', null)
         .order('date', { ascending: true });
 
       if (programsError) throw programsError;

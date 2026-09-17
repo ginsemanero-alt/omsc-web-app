@@ -184,6 +184,7 @@ export default function IECMaterials() {
         .from('materials')
         .select('*')
         .is('program_id', null)
+        .is('archived_at', null)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -742,34 +743,24 @@ export default function IECMaterials() {
     try {
       setLoading(true);
 
-      const targetMaterial = materials.find((m) => m.id === deleteTargetId);
-
+      // Archive, not delete — the row (and its storage file) stays put,
+      // just hidden from every list until an admin restores it or
+      // permanently deletes it from the Archive screen. No storage
+      // cleanup here for the same reason: the file is still referenced
+      // by this row.
       const { error } = await supabase
         .from('materials')
-        .delete()
+        .update({ archived_at: new Date().toISOString() })
         .eq('id', deleteTargetId);
 
       if (error) {
         throw error;
       }
-      logActivity({ actorEmail: user?.email, actorName: userName, action: 'delete', entityType: 'material', entityId: deleteTargetId, entityLabel: deleteTargetTitle });
-
-      // Best-effort — the material record is already gone either way, so
-      // a storage hiccup here just means an orphaned file, not a broken
-      // material shown to anyone. Runs after the row delete succeeds, not
-      // before: deleting the file first and then failing to delete the
-      // row would leave a material pointing at a now-broken URL instead.
-      const storageUrls = [...new Set([targetMaterial?.file_url, targetMaterial?.image_url].filter(Boolean))] as string[];
-      for (const url of storageUrls) {
-        const parsed = parseStorageUrl(url);
-        if (!parsed) continue;
-        const { error: storageError } = await supabase.storage.from(parsed.bucket).remove([parsed.path]);
-        if (storageError) console.warn('Storage cleanup failed for', url, storageError.message);
-      }
+      logActivity({ actorEmail: user?.email, actorName: userName, action: 'delete', entityType: 'material', entityId: deleteTargetId, entityLabel: deleteTargetTitle, details: 'Archived' });
 
       toast({
-        title: 'Deleted Successfully',
-        description: 'The material was removed successfully.',
+        title: 'Archived',
+        description: 'Moved to Archive. Restore or permanently delete it from there.',
       });
 
       setIsDeleteOpen(false);
@@ -782,7 +773,7 @@ export default function IECMaterials() {
         variant: 'destructive',
         title: 'Delete Error',
         description:
-          error?.message || 'Unable to delete material.',
+          error?.message || 'Unable to archive material.',
       });
     } finally {
       setLoading(false);
@@ -2099,20 +2090,20 @@ export default function IECMaterials() {
           <DialogHeader>
 
             <DialogTitle className="text-xl font-black text-slate-900 uppercase tracking-tight text-center">
-              Delete Resource?
+              Move to Archive?
             </DialogTitle>
 
           </DialogHeader>
 
           <div className="mt-3 text-slate-500 text-xs font-medium leading-relaxed px-2">
 
-            You are about to permanently delete{' '}
+            You are about to archive{' '}
 
             <span className="font-bold text-slate-800 uppercase">
               "{deleteTargetTitle}"
             </span>
 
-            . This action cannot be undone.
+            . It will disappear from this list, but you can restore it or delete it permanently from the Archive screen.
 
           </div>
 
@@ -2136,7 +2127,7 @@ export default function IECMaterials() {
               {loading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                'Confirm Deletion'
+                'Move to Archive'
               )}
             </Button>
 

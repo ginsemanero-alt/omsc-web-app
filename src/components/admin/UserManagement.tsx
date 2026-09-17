@@ -60,6 +60,7 @@ export default function UserManagement() {
       const { data, error } = await supabase
         .from('users')
         .select('*')
+        .is('archived_at', null)
         .order('name', { ascending: true });
 
       if (error) throw error;
@@ -186,29 +187,22 @@ export default function UserManagement() {
     try {
       const targetUser = users.find((u) => String(u.id) === String(pendingAction.id));
 
-      // Deleting straight from `users` via this browser client used to
-      // leave the account's `profiles` row and Auth identity behind (the
-      // browser has no service-role key to touch either) — a "deleted"
-      // student kept showing up in demographics charts and could still
-      // log in. /api/admin/delete-user cleans up all three.
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error("No active session — please log in again.");
+      // Archive, not delete — the account's `profiles` row and Auth
+      // identity are left untouched (this only sets archived_at on
+      // `users`), so restoring it later is just clearing that column.
+      // Permanent removal (which does need to clean up all three) only
+      // happens from the Archive screen now, via /api/admin/delete-user.
+      const { error } = await supabase
+        .from('users')
+        .update({ archived_at: new Date().toISOString() })
+        .eq('id', pendingAction.id);
+      if (error) throw error;
 
-      const response = await fetch('/api/admin/delete-user', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ userId: pendingAction.id }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data?.message || 'Failed to delete user.');
+      logActivity({ actorEmail: authUser?.email, actorName: authUserName, action: 'delete', entityType: 'user', entityId: pendingAction.id, entityLabel: targetUser?.name || targetUser?.email, details: 'Archived' });
 
       toast({
-        title: "DELETED",
-        description: "User removed successfully.",
+        title: "ARCHIVED",
+        description: "Moved to Archive. Restore or permanently delete it from there.",
         className: "bg-slate-900 text-white font-black rounded-2xl"
       });
       closeModals();
@@ -402,12 +396,12 @@ export default function UserManagement() {
             </div>
             
             <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-2">
-              {modalType === 'delete' ? 'Confirm Delete?' : 'Confirm Update?'}
+              {modalType === 'delete' ? 'Move to Archive?' : 'Confirm Update?'}
             </h2>
-            
+
             <p className="text-slate-500 text-sm font-medium mb-8 leading-relaxed">
-              {modalType === 'delete' 
-                ? "Sigurado ka bang gusto mong burahin ang user na ito?" 
+              {modalType === 'delete'
+                ? "Mawawala ang user na ito sa listahan, pero pwede mo pa itong ibalik o burahin nang permanente mula sa Archive."
                 : "I-apply na ba ang mga pagbabagong ginawa mo?"}
             </p>
 
@@ -420,7 +414,7 @@ export default function UserManagement() {
                   ${modalType === 'delete' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'}`}
                 onClick={() => modalType === 'delete' ? executeDelete() : executeUserUpdate()}
               >
-                Yes, {modalType === 'delete' ? 'Delete' : 'Save Changes'}
+                {modalType === 'delete' ? 'Move to Archive' : 'Yes, Save Changes'}
               </Button>
             </div>
           </Card>

@@ -73,6 +73,7 @@ const MaterialsPage: React.FC = () => {
           .from('materials')
           .select('*')
           .is('program_id', null)
+          .is('archived_at', null)
           .order('id', { ascending: false });
 
         if (!error && sbMaterials) {

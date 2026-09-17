@@ -416,11 +416,13 @@ export default function AnalyticsDashboard() {
         supabase
           .from("programs")
           .select("*")
+          .is("archived_at", null)
           .order("created_at", { ascending: false }),
 
         supabase
           .from("surveys")
           .select("*")
+          .is("archived_at", null)
           .order("created_at", { ascending: false }),
 
         supabase
@@ -435,11 +437,15 @@ export default function AnalyticsDashboard() {
         supabase
           .from("materials")
           .select("*")
+          .is("archived_at", null)
           .order("created_at", { ascending: false }),
 
         // Only the columns needed to bridge survey_responses.user_id to
-        // profiles via student_id (see UserBridge above).
-        supabase.from("users").select("id, student_id"),
+        // profiles via student_id (see UserBridge above). Archived users
+        // are excluded — their historical responses still count (that
+        // table isn't touched by archiving), but they shouldn't resolve
+        // to a live student identity here.
+        supabase.from("users").select("id, student_id").is("archived_at", null),
       ]);
 
       if (profilesResult.error) {

@@ -76,6 +76,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         const { data, error } = await supabase
           .from("programs")
           .select("*")
+          .is("archived_at", null)
           .order("id", { ascending: false })
           .limit(4);
         if (error) throw error;
