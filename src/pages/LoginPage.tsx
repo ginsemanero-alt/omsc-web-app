@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -122,7 +123,12 @@ export default function LoginPage({
   onLogin,
   onBackToHome,
 }: LoginPageProps) {
-  const [isRegister, setIsRegister] = useState(false);
+  // A "Get Started" link elsewhere (the public homepage) can deep-link
+  // straight into the registration form via /login?mode=register, instead
+  // of landing on Login and making the student find "Register Here"
+  // themselves.
+  const [searchParams] = useSearchParams();
+  const [isRegister, setIsRegister] = useState(() => searchParams.get('mode') === 'register');
   const [showTerms, setShowTerms] = useState(false);
   const [agreed, setAgreed] = useState(false);
 

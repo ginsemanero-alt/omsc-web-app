@@ -126,6 +126,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           </nav>
 
           <div className="flex items-center gap-2">
+            <Button onClick={() => (window.location.href = "/login?mode=register")} variant="outline" className="hidden sm:flex bg-transparent border-white text-white hover:bg-white/10 hover:text-white text-[10px] px-6 rounded-xl">Get Started</Button>
             <Button onClick={() => (window.location.href = "/login")} className="hidden sm:flex bg-white text-[#0066cc] text-[10px] px-6 rounded-xl">Login</Button>
             {/* Mobile Menu Toggle */}
             <button
@@ -157,9 +158,17 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               );
             })}
             <Button
+              onClick={() => (window.location.href = "/login?mode=register")}
+              variant="outline"
+              style={{ animationDelay: "175ms" }}
+              className="w-full bg-transparent border-white text-white hover:bg-white/10 hover:text-white font-black h-12 rounded-xl mt-4 animate-in fade-in slide-in-from-left-4 duration-300 fill-mode-both"
+            >
+              Get Started
+            </Button>
+            <Button
               onClick={() => (window.location.href = "/login")}
               style={{ animationDelay: "200ms" }}
-              className="w-full bg-white text-[#0066cc] font-black h-12 rounded-xl mt-4 animate-in fade-in slide-in-from-left-4 duration-300 fill-mode-both"
+              className="w-full bg-white text-[#0066cc] font-black h-12 rounded-xl animate-in fade-in slide-in-from-left-4 duration-300 fill-mode-both"
             >
               Login
             </Button>
