@@ -60,10 +60,13 @@ const CAMPUSES = [
 
 // Official program offerings per campus. Majors are flattened into their
 // own entry (e.g. "... — Major in X") since `profiles.program` is a single
-// text field, not a separate program+major pair.
+// text field, not a separate program+major pair. Undergraduate only —
+// this guidance system's services (career orientation, testing, PWD/IP
+// tracking, mental health support) are built around the undergrad
+// population, so graduate programs (Master's/Doctorate) were removed
+// from registration entirely rather than left as a selectable option.
 const PROGRAMS_BY_CAMPUS: Record<string, string[]> = {
   'Labangan Campus': [
-    'Master in Public Administration (MPA)',
     'Bachelor of Science in Social Work (BSSW)',
     'Bachelor of Science in Development Communication (BSDevCom)',
     'Bachelor of Arts in History (BAHist)',
@@ -86,11 +89,6 @@ const PROGRAMS_BY_CAMPUS: Record<string, string[]> = {
     'Other',
   ],
   'San Jose Campus': [
-    'Doctor of Education in Educational Management (EdD)',
-    'Master of Arts in Education major in Educational Management (MAEd)',
-    'Master of Arts in Teaching (MAT) — Major in English',
-    'Master of Arts in Teaching (MAT) — Major in Filipino',
-    'Master in Information Technology (MIT)',
     'Bachelor of Elementary Education (BEEd)',
     'Bachelor of Secondary Education (BSEd) — Major in English',
     'Bachelor of Secondary Education (BSEd) — Major in Filipino',
@@ -110,7 +108,6 @@ const PROGRAMS_BY_CAMPUS: Record<string, string[]> = {
     'Other',
   ],
   'Murtha Campus': [
-    'Master of Science in Agriculture (MSAgri)',
     'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Animal Production',
     'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Horticulture',
     'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Agricultural Crops Production',
