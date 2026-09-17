@@ -13,6 +13,7 @@ import { IEC_CATEGORIES } from '../../lib/iecCategories';
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a PDF preview.
 const PdfPreview = lazy(() => import('../shared/PdfPreview'));
+import ZoomableImage from '../shared/ZoomableImage';
 
 const MATERIALS_PAGE_SIZE = 12;
 import {
@@ -492,9 +493,7 @@ export default function IECMaterials() {
                 <PdfPreview url={previewItem.file_url} />
               </Suspense>
             ) : /\.(jpg|jpeg|png|webp|gif)$/i.test(previewItem?.file_url || '') ? (
-              <div className="p-4 w-full h-full flex items-center justify-center">
-                <img src={previewItem.file_url} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" alt="Preview" />
-              </div>
+              <ZoomableImage src={previewItem.file_url} alt={previewItem.title} className="p-4" />
             ) : previewItem?.type === 'Audio' ? (
               <div className="p-8 w-full max-w-xl flex flex-col items-center gap-6">
                 <div className="w-24 h-24 rounded-3xl bg-purple-500/10 flex items-center justify-center">

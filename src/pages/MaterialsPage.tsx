@@ -13,6 +13,7 @@ import {
 // statically would ship that weight on every homepage visit even when no
 // one ever opens a PDF preview.
 const PdfPreview = lazy(() => import("../components/shared/PdfPreview"));
+import ZoomableImage from "../components/shared/ZoomableImage";
 import {
   FileText,
   Video,
@@ -379,9 +380,7 @@ const MaterialsPage: React.FC = () => {
                 <PdfPreview url={previewItem.url} />
               </Suspense>
             ) : previewItem && isImage(previewItem) ? (
-              <div className="p-4 w-full h-full flex items-center justify-center">
-                <img src={previewItem.url} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" alt="Preview" />
-              </div>
+              <ZoomableImage src={previewItem.url} alt={previewItem.title} className="p-4" />
             ) : previewItem && isAudio(previewItem) ? (
               <div className="p-8 w-full max-w-xl flex flex-col items-center gap-6">
                 <div className="w-24 h-24 rounded-3xl bg-purple-500/10 flex items-center justify-center">

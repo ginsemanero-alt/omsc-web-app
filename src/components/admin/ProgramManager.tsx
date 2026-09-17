@@ -5,6 +5,7 @@ import { logActivity } from '../../lib/activityLog';
 import { notifyStudents } from '../../lib/notifyStudents';
 import { formatProgramDate } from '../../lib/formatProgramDate';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
+import ZoomableImage from '../shared/ZoomableImage';
 import { useAuth } from '../../hooks/useAuth';
 import { usePagination } from '../../hooks/usePagination';
 import { Card } from '../../components/ui/card';
@@ -814,9 +815,7 @@ export default function ProgramManagement() {
                 <PdfPreview url={previewHandout.url} />
               </Suspense>
             ) : previewHandout && /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(previewHandout.url) ? (
-              <div className="p-4 w-full h-full flex items-center justify-center">
-                <img src={previewHandout.url} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" alt={previewHandout.title} />
-              </div>
+              <ZoomableImage src={previewHandout.url} alt={previewHandout.title} className="p-4" />
             ) : (
               <div className="text-center px-6">
                 <HardDrive className="w-16 h-16 text-slate-700 mx-auto" />
