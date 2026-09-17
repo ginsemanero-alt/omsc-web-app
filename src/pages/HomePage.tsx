@@ -99,10 +99,12 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   return (
     <div className="w-full min-h-screen bg-white">
       {/* ================= NAVBAR (RESPONSIVE) ================= */}
-      <header className="fixed top-0 left-0 right-0 h-[70px] md:h-[80px] bg-[#0066cc] z-[100] shadow-lg">
+      <header className="fixed top-0 left-0 right-0 h-[70px] md:h-[80px] bg-gradient-to-r from-[#003d8f] via-[#0059b8] to-[#0066cc] backdrop-blur-md z-[100] shadow-lg shadow-blue-900/10 border-b border-white/10">
         <div className="max-w-[1440px] mx-auto px-4 md:px-6 h-full flex items-center justify-between">
-          <div className="flex items-center gap-2 md:gap-3 cursor-pointer" onClick={() => handleNavigation("home")}>
-            <GraduationCap className="w-7 h-7 md:w-9 md:h-9 text-white" />
+          <div className="flex items-center gap-2 md:gap-3 cursor-pointer group" onClick={() => handleNavigation("home")}>
+            <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center shrink-0 group-hover:bg-white/20 transition-colors">
+              <GraduationCap className="w-5 h-5 md:w-7 md:h-7 text-white" />
+            </div>
             <div>
               <h1 className="font-black text-sm md:text-xl uppercase tracking-tight text-white leading-tight">OMSU Web-Based</h1>
               <p className="text-[8px] md:text-[10px] uppercase tracking-[0.2em] text-blue-100 font-bold">Guidance System</p>
@@ -115,19 +117,19 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               const key = item.toLowerCase();
               const label = item === "Materials" ? "IEC Materials" : item;
               return (
-                <button key={item} onClick={() => handleNavigation(item)} className="relative px-4 py-2 text-white">
+                <button key={item} onClick={() => handleNavigation(item)} className="relative px-4 py-2 text-white transition-transform hover:-translate-y-0.5">
                   <span className={activePage === key ? "opacity-100" : "opacity-70 hover:opacity-100"}>
                     {label}
                   </span>
-                  {activePage === key && <div className="absolute bottom-0 left-0 right-0 h-1 bg-white rounded-full" />}
+                  {activePage === key && <div className="absolute bottom-0 left-0 right-0 h-1 bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,0.8)]" />}
                 </button>
               );
             })}
           </nav>
 
           <div className="flex items-center gap-2">
-            <Button onClick={() => (window.location.href = "/login?mode=register")} variant="outline" className="hidden sm:flex bg-transparent border-white text-white hover:bg-white/10 hover:text-white text-[10px] px-6 rounded-xl">Get Started</Button>
-            <Button onClick={() => (window.location.href = "/login")} className="hidden sm:flex bg-white text-[#0066cc] text-[10px] px-6 rounded-xl">Login</Button>
+            <Button onClick={() => (window.location.href = "/login?mode=register")} variant="outline" className="hidden sm:flex bg-transparent border-white/70 text-white hover:bg-white/10 hover:text-white text-[10px] px-6 rounded-xl transition-all hover:-translate-y-0.5">Get Started</Button>
+            <Button onClick={() => (window.location.href = "/login")} className="hidden sm:flex bg-white text-[#0066cc] text-[10px] px-6 rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5">Login</Button>
             {/* Mobile Menu Toggle */}
             <button
               className="lg:hidden text-white p-2"
@@ -142,7 +144,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
         {/* Mobile Dropdown Menu */}
         {isMenuOpen && (
-          <div className="lg:hidden absolute top-[70px] md:top-[80px] left-0 right-0 bg-[#0055aa] border-t border-white/10 p-6 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-top duration-300">
+          <div className="lg:hidden absolute top-[70px] md:top-[80px] left-0 right-0 bg-gradient-to-b from-[#0059b8] to-[#003d8f] border-t border-white/10 p-6 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-top duration-300">
             {["Home", "Programs", "Materials", "About"].map((item, index) => {
               const ItemIcon = MOBILE_NAV_ICONS[item];
               return (
@@ -194,19 +196,23 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             />
           )}
         </div>
-        <div className="absolute inset-0 bg-gradient-to-b md:bg-gradient-to-r from-[#003366]/95 via-[#003366]/70 to-transparent z-10" />
+        <div className="absolute inset-0 bg-gradient-to-b md:bg-gradient-to-r from-[#001f4d]/95 via-[#003366]/80 to-transparent z-10" />
+        <div className="absolute -top-24 -right-24 w-96 h-96 bg-indigo-500/20 rounded-full blur-[100px] z-10 pointer-events-none" />
+        <div className="absolute bottom-0 left-1/4 w-64 h-64 bg-blue-400/10 rounded-full blur-[80px] z-10 pointer-events-none" />
 
         <div className="relative max-w-[1200px] mx-auto px-6 h-full flex items-center z-20">
           <div className="max-w-3xl space-y-6 md:space-y-8">
-            <p className="uppercase tracking-[0.2em] text-blue-200 text-[10px] md:text-xs font-black">Occidental Mindoro State University</p>
-            <h1 className="text-3xl md:text-7xl font-black uppercase text-white leading-[1.1] tracking-tighter">
+            <p className="uppercase tracking-[0.2em] text-blue-200 text-[10px] md:text-xs font-black inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/10 px-4 py-2 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-pulse" /> Occidental Mindoro State University
+            </p>
+            <h1 className="text-3xl md:text-7xl font-black uppercase text-white leading-[1.1] tracking-tighter drop-shadow-sm">
               Web-Based <br className="hidden md:block" /> Guidance Program
-              <span className="block text-blue-400 text-xl md:text-5xl mt-2 md:mt-4">Information System</span>
+              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-indigo-300 text-xl md:text-5xl mt-2 md:mt-4">Information System</span>
             </h1>
             <p className="text-sm md:text-xl text-white/90 font-medium max-w-xl">Supporting students through accessible counseling, career orientation, and mental wellness resources.</p>
             <div className="flex flex-col sm:flex-row gap-4 pt-4">
-              <Button onClick={() => handleNavigation("programs")} className="w-full sm:w-auto bg-white text-blue-700 font-black h-14 px-10 rounded-2xl">Explore Programs</Button>
-              <Button onClick={() => handleNavigation("about")} className="w-full sm:w-auto bg-transparent text-white border-2 border-white font-black h-14 px-10 rounded-2xl">Learn More</Button>
+              <Button onClick={() => handleNavigation("programs")} className="w-full sm:w-auto bg-white text-blue-700 font-black h-14 px-10 rounded-2xl shadow-xl shadow-black/20 hover:shadow-2xl hover:-translate-y-1 transition-all">Explore Programs</Button>
+              <Button onClick={() => handleNavigation("about")} className="w-full sm:w-auto bg-white/5 backdrop-blur-sm text-white border-2 border-white/70 font-black h-14 px-10 rounded-2xl hover:bg-white/15 hover:-translate-y-1 transition-all">Learn More</Button>
             </div>
           </div>
         </div>
@@ -221,13 +227,22 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               <h2 className="text-3xl md:text-5xl font-black uppercase tracking-tighter text-slate-900 leading-tight">Digital Platform for Students</h2>
               <p className="text-slate-600 text-base md:text-lg">One centralized platform for counseling, career guidance, and student support services.</p>
             </div>
-            <div className="bg-[#0066cc] rounded-[2rem] md:rounded-[3rem] p-8 md:p-10 text-white shadow-2xl">
-              <h3 className="text-2xl font-black uppercase mb-6">Quality Objectives</h3>
-              <ul className="space-y-4 text-sm md:text-base text-blue-100 font-medium">
-                <li>• Relevant and timely guidance programs</li>
-                <li>• Mental and emotional wellness promotion</li>
-                <li>• Improved accessibility of services</li>
-                <li>• Career and academic support</li>
+            <div className="relative overflow-hidden bg-gradient-to-br from-[#0059b8] via-[#0066cc] to-indigo-700 rounded-[2rem] md:rounded-[3rem] p-8 md:p-10 text-white shadow-2xl shadow-blue-900/30">
+              <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl" />
+              <div className="absolute bottom-0 left-0 w-32 h-32 bg-indigo-300/10 rounded-full -ml-10 -mb-10 blur-2xl" />
+              <h3 className="relative text-2xl font-black uppercase mb-6">Quality Objectives</h3>
+              <ul className="relative space-y-4 text-sm md:text-base text-blue-100 font-medium">
+                {[
+                  "Relevant and timely guidance programs",
+                  "Mental and emotional wellness promotion",
+                  "Improved accessibility of services",
+                  "Career and academic support",
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-lg bg-white/15 flex items-center justify-center shrink-0 text-white text-xs font-black">✓</span>
+                    {item}
+                  </li>
+                ))}
               </ul>
             </div>
           </div>
@@ -242,11 +257,11 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {features.map((feature, index) => (
-              <Card key={index} className="p-6 md:p-8 bg-slate-50 border-none rounded-[2rem] text-center hover:-translate-y-2 transition-all cursor-pointer" onClick={feature.action}>
-                <div className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-md">
-                  <feature.icon className="h-8 w-8 text-blue-600" />
+              <Card key={index} className="group p-6 md:p-8 bg-slate-50 border border-slate-100/60 rounded-[2rem] text-center hover:-translate-y-2 hover:shadow-xl hover:border-transparent transition-all duration-300 cursor-pointer" onClick={feature.action}>
+                <div className="w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-md shadow-blue-600/20 group-hover:scale-110 transition-transform duration-300">
+                  <feature.icon className="h-8 w-8 text-white" />
                 </div>
-                <h3 className="text-lg font-black uppercase mb-3">{feature.title}</h3>
+                <h3 className="text-lg font-black uppercase mb-3 group-hover:text-blue-600 transition-colors">{feature.title}</h3>
                 <p className="text-xs md:text-sm text-slate-500 font-medium">{feature.description}</p>
               </Card>
             ))}
@@ -266,12 +281,12 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               [1, 2, 3, 4].map((n) => <div key={n} className="aspect-[4/3] bg-slate-200 animate-pulse rounded-2xl" />)
             ) : (
               programs.map((program) => (
-                <Card key={program.id} className="rounded-3xl border-none overflow-hidden bg-white shadow-sm flex flex-col">
-                  <div className="aspect-video bg-slate-900 relative">
-                    {program.image_url ? <img src={program.image_url} className="w-full h-full object-cover" alt="" loading="lazy" decoding="async" /> : <div className="flex h-full items-center justify-center text-white"><ImageIcon size={30} /></div>}
+                <Card key={program.id} className="group rounded-3xl border border-slate-100/60 overflow-hidden bg-white shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col">
+                  <div className="aspect-video bg-slate-900 relative overflow-hidden">
+                    {program.image_url ? <img src={program.image_url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="" loading="lazy" decoding="async" /> : <div className="flex h-full items-center justify-center text-white"><ImageIcon size={30} /></div>}
                   </div>
                   <div className="p-6 flex-1 flex flex-col">
-                    <h3 className="text-md font-black uppercase leading-tight line-clamp-2 mb-4">{program.title}</h3>
+                    <h3 className="text-md font-black uppercase leading-tight line-clamp-2 mb-4 group-hover:text-blue-600 transition-colors">{program.title}</h3>
                     <div className="mt-auto space-y-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                       <div className="flex items-center gap-2"><Calendar size={12} className="text-blue-500" /> {formatProgramDate(program, (date) => new Date(date).toLocaleDateString())}</div>
                       <div className="flex items-center gap-2"><MapPin size={12} className="text-blue-500" /> {program.location}</div>
@@ -287,10 +302,12 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       {/* ================= CTA (FULL WIDTH MOBILE) ================= */}
       <section className="py-16 md:py-24 bg-white">
         <div className="max-w-[1200px] mx-auto px-4">
-          <div className="bg-[#0066cc] rounded-[2rem] md:rounded-[3rem] p-10 md:p-20 text-center text-white">
-            <h2 className="text-3xl md:text-6xl font-black uppercase mb-6">Start Your Journey</h2>
-            <p className="text-blue-100 mb-10 max-w-2xl mx-auto text-sm md:text-lg">Access counseling and student support services anytime online.</p>
-            <Button onClick={() => (window.location.href = "/login")} className="w-full sm:w-auto bg-white text-blue-700 font-black h-16 px-12 rounded-2xl">Access Portal</Button>
+          <div className="relative overflow-hidden bg-gradient-to-br from-[#0059b8] via-[#0066cc] to-indigo-700 rounded-[2rem] md:rounded-[3rem] p-10 md:p-20 text-center text-white shadow-2xl shadow-blue-900/30">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-300/20 rounded-full -mr-24 -mt-24 blur-[80px]" />
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-white/10 rounded-full -ml-24 -mb-24 blur-[80px]" />
+            <h2 className="relative text-3xl md:text-6xl font-black uppercase mb-6">Start Your Journey</h2>
+            <p className="relative text-blue-100 mb-10 max-w-2xl mx-auto text-sm md:text-lg">Access counseling and student support services anytime online.</p>
+            <Button onClick={() => (window.location.href = "/login")} className="relative w-full sm:w-auto bg-white text-blue-700 font-black h-16 px-12 rounded-2xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all">Access Portal</Button>
           </div>
         </div>
       </section>
