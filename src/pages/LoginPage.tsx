@@ -510,7 +510,13 @@ export default function LoginPage({
   };
 
   return (
-    <div className="min-h-screen w-full bg-slate-50 flex items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
+    <div className="relative min-h-screen w-full bg-slate-50 overflow-hidden flex items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
+      {/* Decorative only — same soft gradient-blob treatment as the other
+          public pages (AboutPage's contact section, HomePage's hero),
+          so this page stops looking like a bare leftover form. */}
+      <div className="absolute -top-32 -left-32 w-96 h-96 bg-indigo-200/40 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-blue-200/40 rounded-full blur-[100px] pointer-events-none" />
+
       {/* FORGOT PASSWORD MODAL */}
       {showForgotPassword && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -727,7 +733,7 @@ export default function LoginPage({
         </div>
       )}
 
-      <Card className="w-full max-w-2xl bg-white border-none shadow-2xl rounded-[2rem] sm:rounded-[3rem] overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <Card className="relative z-10 w-full max-w-2xl bg-white border-none shadow-2xl rounded-[2rem] sm:rounded-[3rem] overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
         {/* HEADER */}
         <div className="relative px-6 pt-6 sm:px-8 sm:pt-8">
           <button
@@ -740,7 +746,7 @@ export default function LoginPage({
           </button>
 
           <div className="flex flex-col items-center text-center mt-8 sm:mt-6">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-indigo-600 rounded-[1.5rem] sm:rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-100">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-indigo-600 to-blue-600 rounded-[1.5rem] sm:rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-200">
               {isRegister ? (
                 <UserPlus key="register-icon" className="w-8 h-8 sm:w-10 sm:h-10 text-white animate-in zoom-in-50 spin-in-6 duration-300" />
               ) : (
@@ -1296,7 +1302,7 @@ export default function LoginPage({
           <Button
             type="submit"
             disabled={isLoading}
-            className="w-full h-14 sm:h-16 mt-4 bg-slate-900 hover:bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] sm:text-xs transition-all shadow-xl shadow-slate-200"
+            className="w-full h-14 sm:h-16 mt-4 bg-slate-900 hover:bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] sm:text-xs transition-all shadow-xl shadow-slate-200 hover:shadow-2xl hover:-translate-y-0.5"
           >
             {isLoading ? (
               <>
