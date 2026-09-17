@@ -691,6 +691,15 @@ export default function AnalyticsDashboard() {
 
   const filteredMaterials = useMemo(() => {
     return materials.filter((material) => {
+      // Program handouts live in this same table (materials.program_id
+      // set) but belong to that program's own details panel, not the
+      // general IEC Materials library — same exclusion the public
+      // MaterialsPage applies. Left in, they swamp this section's counts
+      // (handouts far outnumber curated IEC uploads) and, since handouts
+      // are never given a `type`/`format`, drag every format/recent-list
+      // stat here down to "Unknown".
+      if (material.program_id) return false;
+
       const campus = normalize(material.campus);
 
       const campusMatch =
@@ -1605,41 +1614,6 @@ export default function AnalyticsDashboard() {
     }, [filteredMaterials]);
 
   /* -------------------------------------------------------
-     MATERIAL CAMPUS ANALYTICS
-  ------------------------------------------------------- */
-
-  const materialCampusAnalytics =
-    useMemo(() => {
-      const counts: Record<
-        string,
-        number
-      > = {};
-
-      filteredMaterials.forEach(
-        (material) => {
-          const campus =
-            safeString(
-              material.campus
-            ) ||
-            "Not Specified";
-
-          counts[campus] =
-            (counts[campus] || 0) + 1;
-        }
-      );
-
-      return Object.entries(counts)
-        .map(([name, value]) => ({
-          name,
-          value,
-        }))
-        .sort(
-          (a, b) =>
-            b.value - a.value
-        );
-    }, [filteredMaterials]);
-
-  /* -------------------------------------------------------
      IEC CATEGORY ANALYTICS
   ------------------------------------------------------- */
 
@@ -2386,9 +2360,6 @@ export default function AnalyticsDashboard() {
         by_format:
           materialFormatAnalytics,
 
-        by_campus:
-          materialCampusAnalytics,
-
         monthly_creation:
           iecMonthlyTrend,
 
@@ -3132,14 +3103,18 @@ export default function AnalyticsDashboard() {
         </div>
 
         {/* =================================================
-            MATERIAL FORMAT + CAMPUS
+            MATERIAL FORMAT
         ================================================= */}
+        {/* Campus breakdown was dropped here — every IEC material in
+            practice gets the same default campus on upload, so a
+            distribution-by-campus chart was always one full pie slice,
+            not an actual breakdown. */}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6">
 
           {/* FORMAT */}
 
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white max-w-2xl">
 
             <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
               Materials by Format
@@ -3196,64 +3171,6 @@ export default function AnalyticsDashboard() {
 
           </Card>
 
-          {/* CAMPUS */}
-
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-
-            <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-              Material Distribution by Campus
-            </h2>
-
-            <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
-              Where materials are assigned or available
-            </p>
-
-            <div className="h-72 mt-4">
-
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-              >
-                <PieChart>
-
-                  <Pie
-                    data={
-                      materialCampusAnalytics
-                    }
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={90}
-                    paddingAngle={3}
-                  >
-                    {materialCampusAnalytics.map(
-                      (_, index) => (
-                        <Cell
-                          key={index}
-                          fill={
-                            COLORS[
-                              index %
-                                COLORS.length
-                            ]
-                          }
-                        />
-                      )
-                    )}
-                  </Pie>
-
-                  <Tooltip />
-
-                  <Legend />
-
-                </PieChart>
-              </ResponsiveContainer>
-
-            </div>
-
-          </Card>
-
         </div>
 
         {/* =================================================
@@ -3304,27 +3221,32 @@ export default function AnalyticsDashboard() {
 
                       <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center text-indigo-600 shadow-sm shrink-0">
 
-                        {normalize(
-                          material.format
-                        ) === "pdf" ? (
-                          <FileText className="w-5 h-5" />
-                        ) : normalize(
-                            material.format
-                          ) === "png" ||
-                          normalize(
-                            material.format
-                          ) === "jpg" ||
-                          normalize(
-                            material.format
-                          ) === "jpeg" ? (
-                          <ImageIcon className="w-5 h-5" />
-                        ) : normalize(
-                            material.format
-                          ) === "mp4" ? (
-                          <Video className="w-5 h-5" />
-                        ) : (
-                          <File className="w-5 h-5" />
-                        )}
+                        {(() => {
+                          // `format` is never actually populated on
+                          // uploads — the real value lives in `type`
+                          // ("PDF"/"Image"/"Video"/...). Falling back to
+                          // it here is what materialFormatAnalytics
+                          // already does; this render just hadn't.
+                          const displayFormat = normalize(
+                            safeString(material.format) ||
+                              safeString(material.type)
+                          );
+                          if (displayFormat === "pdf") {
+                            return <FileText className="w-5 h-5" />;
+                          }
+                          if (
+                            displayFormat === "png" ||
+                            displayFormat === "jpg" ||
+                            displayFormat === "jpeg" ||
+                            displayFormat === "image"
+                          ) {
+                            return <ImageIcon className="w-5 h-5" />;
+                          }
+                          if (displayFormat === "mp4" || displayFormat === "video") {
+                            return <Video className="w-5 h-5" />;
+                          }
+                          return <File className="w-5 h-5" />;
+                        })()}
 
                       </div>
 
@@ -3347,9 +3269,8 @@ export default function AnalyticsDashboard() {
                           </span>
 
                           <span className="text-[8px] font-bold uppercase text-slate-400">
-                            {safeString(
-                              material.format
-                            ) ||
+                            {safeString(material.format) ||
+                              safeString(material.type) ||
                               "Unknown Format"}
                           </span>
 
