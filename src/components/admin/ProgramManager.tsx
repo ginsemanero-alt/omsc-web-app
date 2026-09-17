@@ -491,17 +491,12 @@ export default function ProgramManagement() {
                         <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 font-black uppercase text-[8px] tracking-wider rounded">
                           {program.guidance_service || 'Career Orientation'}
                         </span>
-                        {program.duration_label && (
-                          <span className="px-2 py-0.5 bg-amber-50 text-amber-600 font-black uppercase text-[8px] tracking-wider rounded">
-                            {program.duration_label}
-                          </span>
-                        )}
                       </div>
                       <h3 className="text-xl md:text-2xl font-black text-slate-800 uppercase tracking-tight mt-1 mb-2 leading-tight">
                         {program.title}
                       </h3>
                       <div className="flex flex-wrap gap-x-4 gap-y-2 text-slate-400 text-[9px] md:text-[10px] font-bold uppercase tracking-wider">
-                        <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {formatProgramDate(program)}</span>
+                        <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {formatProgramDate(program)}{program.duration_label && ` · ${program.duration_label}`}</span>
                         <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {program.time_range || 'N/A'}</span>
                         <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {program.location}</span>
                       </div>

@@ -249,11 +249,6 @@ export default function ProgramsActivities() {
                 <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-widest rounded-md inline-block">
                   {program.program_component || 'General'}
                 </span>
-                {program.duration_label && (
-                  <span className="px-3 py-1 bg-amber-50 text-amber-600 text-[9px] font-black uppercase tracking-widest rounded-md inline-block">
-                    {program.duration_label}
-                  </span>
-                )}
               </div>
               <h3 className="text-xl md:text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight uppercase leading-tight max-w-[85%]">
                 {program.title}
@@ -263,7 +258,7 @@ export default function ProgramsActivities() {
             <div className="px-6 md:px-8 grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-50/70 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100/30 dark:border-slate-700/30">
                 <Calendar className="w-4 h-4 text-indigo-500 shrink-0" />
-                <span>{formatProgramDate(program)}</span>
+                <span>{formatProgramDate(program)}{program.duration_label && ` · ${program.duration_label}`}</span>
               </div>
               <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-50/70 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100/30 dark:border-slate-700/30">
                 <Clock className="w-4 h-4 text-indigo-500 shrink-0" />
