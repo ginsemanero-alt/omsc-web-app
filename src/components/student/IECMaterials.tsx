@@ -7,6 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { PaginationControls } from '../../components/ui/pagination-controls';
 import { usePagination } from '../../hooks/usePagination';
+import { logActivity } from '../../lib/activityLog';
+import { useAuth } from '../../hooks/useAuth';
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a PDF preview.
 const PdfPreview = lazy(() => import('../shared/PdfPreview'));
@@ -31,6 +33,7 @@ import {
 } from 'lucide-react';
 
 export default function IECMaterials() {
+  const { user, userName: authUserName } = useAuth();
   const [activeTab, setActiveTab] = useState('articles');
   const [materials, setMaterials] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,6 +93,26 @@ export default function IECMaterials() {
   const handlePreview = (item: any) => {
     setPreviewItem(item);
     setIsPreviewOpen(true);
+
+    // Once per material per browser session, same reasoning as the
+    // Programs & Activities page view log (PHASE 12) — an admin wants to
+    // know who opened what and when, not a row for every re-open of a
+    // preview modal already on screen.
+    if (user?.email) {
+      const flagKey = `logged_material_view_${item.id}`;
+      if (!sessionStorage.getItem(flagKey)) {
+        sessionStorage.setItem(flagKey, '1');
+        logActivity({
+          actorEmail: user.email,
+          actorName: authUserName,
+          action: 'view',
+          entityType: 'material',
+          entityId: item.id,
+          entityLabel: item.title,
+          details: `campus: ${localStorage.getItem('userCampus') || 'Unknown'}`,
+        });
+      }
+    }
   };
 
   const downloadFile = async (url: string, filename: string) => {
