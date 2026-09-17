@@ -1,5 +1,4 @@
 import {
-  GraduationCap,
   LogOut,
   ChevronDown,
   Menu,
@@ -210,9 +209,11 @@ export default function TopNavBar({
             </Button>
 
             <div className="flex items-center gap-3">
-               <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-                 <GraduationCap className="w-6 h-6 text-primary-foreground" strokeWidth={1.5} />
-               </div>
+               <img
+                 src="https://guidance.omsc.edu.ph/assets/images/logo.png"
+                 alt="OMSU Guidance and Testing Center"
+                 className="w-10 h-10 rounded-full object-cover"
+               />
                <div className="hidden sm:block">
                  <h1 className="text-sm font-bold text-foreground leading-none">OMSU Guidance</h1>
                  <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">{campus}</p>

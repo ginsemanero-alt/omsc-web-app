@@ -1,6 +1,5 @@
 import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { GraduationCap } from 'lucide-react';
 import { Button } from "../ui/button"; // Ayusin ang path base sa folder mo
 import Footer from "../../components/ui/Footer"; 
 
@@ -23,7 +22,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <header className="fixed top-0 left-0 right-0 h-[72px] bg-white border-b z-50 shadow-sm">
         <div className="max-w-[1440px] mx-auto px-6 h-full flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-            <GraduationCap className="w-8 h-8 text-primary" />
+            <img
+              src="https://guidance.omsc.edu.ph/assets/images/logo.png"
+              alt="OMSU Guidance and Testing Center"
+              className="w-8 h-8 rounded-full object-cover"
+            />
             <h1 className="font-bold text-xl uppercase tracking-tighter text-slate-900">
               OMSU Guidance
             </h1>

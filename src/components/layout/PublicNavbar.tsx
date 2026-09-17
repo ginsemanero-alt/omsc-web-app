@@ -1,4 +1,3 @@
-import { GraduationCap } from 'lucide-react';
 import { Button } from "../../../src/components/ui/button";
 import { Link } from 'react-router-dom';
 
@@ -7,7 +6,11 @@ export default function PublicNavbar() {
     <header className="fixed top-0 left-0 right-0 h-[72px] bg-white/80 backdrop-blur-md border-b z-50">
       <div className="max-w-[1440px] mx-auto px-6 h-full flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <GraduationCap className="w-8 h-8 text-primary" />
+          <img
+            src="https://guidance.omsc.edu.ph/assets/images/logo.png"
+            alt="OMSU Guidance and Testing Center"
+            className="w-8 h-8 rounded-full object-cover"
+          />
           <h1 className="font-bold text-xl">OMSU Guidance</h1>
         </div>
         

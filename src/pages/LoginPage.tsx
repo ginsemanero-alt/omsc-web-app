@@ -750,7 +750,12 @@ export default function LoginPage({
               {isRegister ? (
                 <UserPlus key="register-icon" className="w-8 h-8 sm:w-10 sm:h-10 text-white animate-in zoom-in-50 spin-in-6 duration-300" />
               ) : (
-                <GraduationCap key="login-icon" className="w-8 h-8 sm:w-10 sm:h-10 text-white animate-in zoom-in-50 spin-in-6 duration-300" />
+                <img
+                  key="login-icon"
+                  src="https://guidance.omsc.edu.ph/assets/images/logo.png"
+                  alt="OMSU Guidance and Testing Center"
+                  className="w-11 h-11 sm:w-14 sm:h-14 rounded-full object-cover animate-in zoom-in-50 spin-in-6 duration-300"
+                />
               )}
             </div>
 
