@@ -490,7 +490,38 @@ app.post('/api/login', loginLimiter, async (req, res) => {
         if (!user) return res.status(404).json({ message: "User not found" });
 
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
+
+        if (!isMatch) {
+            // `users.password` (this bcrypt hash) and the Supabase Auth
+            // password are two separate stores that only ever get kept in
+            // sync by this login flow itself — the Forgot Password page
+            // only ever updates Auth. Right after a reset they drift: the
+            // new password is correct in Auth but this hash is still the
+            // old one, so a flat reject here would permanently lock the
+            // account out even with the right password. If Auth accepts
+            // it, trust that and repair the stale hash instead.
+            const { data: recovery } = await supabaseAnon.auth.signInWithPassword({
+                email: cleanEmail,
+                password: password,
+            });
+
+            if (!recovery?.session) {
+                return res.status(401).json({ message: "Invalid credentials" });
+            }
+
+            const freshHash = await bcrypt.hash(password, 10);
+            await supabase.from('users').update({ password: freshHash }).eq('id', user.id);
+
+            return res.json({
+                id: user.id,
+                role: user.role,
+                name: user.name,
+                email: user.email,
+                campus: user.campus,
+                access_token: recovery.session.access_token,
+                refresh_token: recovery.session.refresh_token,
+            });
+        }
 
         let { data: authData, error: authError } = await supabaseAnon.auth.signInWithPassword({
             email: cleanEmail,
