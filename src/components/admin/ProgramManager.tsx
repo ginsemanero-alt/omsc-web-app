@@ -84,8 +84,6 @@ export default function ProgramManagement() {
   const [isSavingEntry, setIsSavingEntry] = useState(false);
   const entryFileInputRef = useRef<HTMLInputElement>(null);
 
-  const isSystemLocked = programs.some(p => getEffectiveProgramStatus(p) === 'ongoing');
-
   const isDateOccupied = programs.some(p =>
     p.date === formData.date &&
     getEffectiveProgramStatus(p) !== 'completed' &&
@@ -206,11 +204,6 @@ export default function ProgramManagement() {
   };
 
   const handleSave = async () => {
-    if (!editingId && isSystemLocked) {
-      toast({ variant: "destructive", title: "Action Blocked", description: "Close the ongoing program first." });
-      return;
-    }
-
     try {
       setLoading(true);
       let finalImageUrl = formData.image_url;
@@ -430,18 +423,11 @@ export default function ProgramManagement() {
           <p className="text-slate-400 font-bold uppercase text-[9px] tracking-widest mt-1">Institutional Admin Deck</p>
         </div>
         
-        <Button 
-          onClick={() => handleOpenDialog()} 
-          disabled={isSystemLocked}
-          className={`rounded-xl md:rounded-2xl h-12 px-6 md:px-8 font-black uppercase text-[10px] tracking-wider transition-all w-full sm:w-auto ${
-            isSystemLocked ? "bg-slate-200 text-slate-400 cursor-not-allowed border-none" : "bg-indigo-600 hover:bg-indigo-700 text-white"
-          }`}
+        <Button
+          onClick={() => handleOpenDialog()}
+          className="rounded-xl md:rounded-2xl h-12 px-6 md:px-8 font-black uppercase text-[10px] tracking-wider transition-all w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white"
         >
-          {isSystemLocked ? (
-            <> <Clock className="w-4 h-4 mr-2 shrink-0" /> Deck Locked (Ongoing Event) </>
-          ) : (
-            <> <Plus className="w-4 h-4 mr-2 shrink-0" /> Create New Program </>
-          )}
+          <Plus className="w-4 h-4 mr-2 shrink-0" /> Create New Program
         </Button>
       </div>
 

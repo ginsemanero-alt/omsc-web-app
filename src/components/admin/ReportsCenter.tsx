@@ -7,11 +7,8 @@ import { Label } from "../ui/label";
 import { useToast } from "../../hooks/use-toast";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import * as XLSX from "xlsx";
-import { saveAs } from "file-saver";
 import {
   FileDown,
-  FileSpreadsheet,
   Loader2,
   BarChart3,
   Users,
@@ -401,6 +398,15 @@ export default function ReportsCenter() {
     try {
       const doc = new jsPDF() as any;
 
+      // A variable-length section (one row per program/category) can be
+      // genuinely empty for the selected period. An empty `body` renders
+      // just the header bar with nothing under it — indistinguishable
+      // from something broken. This keeps the table looking complete
+      // (one em-dash row) and says plainly why it's empty, instead.
+      const NO_RECORDS_NOTE = "No records found for the selected period.";
+      const tableBodyOrPlaceholder = <T,>(rows: T[], columnCount: number, mapRow: (row: T) => (string | number)[]) =>
+        rows.length > 0 ? rows.map(mapRow) : [Array(columnCount).fill("—")];
+
       const addHeader = () => {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(16);
@@ -431,7 +437,7 @@ export default function ReportsCenter() {
       autoTable(doc, {
         startY: nextY,
         head: [["Program", "Guidance Service", "Avg. Score", "Responses"]],
-        body: programAwareness.map((row) => [
+        body: tableBodyOrPlaceholder(programAwareness, 4, (row) => [
           row.name,
           row.guidanceService,
           row.averageScore !== null ? `${row.averageScore}%` : "No data",
@@ -440,7 +446,15 @@ export default function ReportsCenter() {
         headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
         styles: { fontSize: 8 },
       });
-      nextY = (doc.lastAutoTable?.finalY || nextY) + 12;
+      nextY = (doc.lastAutoTable?.finalY || nextY) + (programAwareness.length === 0 ? 5 : 12);
+
+      if (programAwareness.length === 0) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(8);
+        doc.setTextColor(148);
+        doc.text(NO_RECORDS_NOTE, 14, nextY);
+        nextY += 10;
+      }
 
       // SECTION 2 — Demographic Breakdown
       doc.setFont("helvetica", "bold");
@@ -509,10 +523,18 @@ export default function ReportsCenter() {
       autoTable(doc, {
         startY: nextY,
         head: [["Category", "Materials", "Downloads"]],
-        body: materialReach.byCategory.map((row) => [row.category, row.count, row.downloads]),
+        body: tableBodyOrPlaceholder(materialReach.byCategory, 3, (row) => [row.category, row.count, row.downloads]),
         headStyles: { fillColor: [190, 24, 93], textColor: [255, 255, 255], fontStyle: "bold" },
         styles: { fontSize: 8 },
       });
+
+      if (materialReach.byCategory.length === 0) {
+        const notesY = (doc.lastAutoTable?.finalY || nextY) + 6;
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(8);
+        doc.setTextColor(148);
+        doc.text(NO_RECORDS_NOTE, 14, notesY);
+      }
 
       doc.save(`OMSU_Guidance_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
 
@@ -521,81 +543,6 @@ export default function ReportsCenter() {
       toast({
         variant: "destructive",
         title: "PDF Generation Failed",
-        description: error?.message || "Please try again.",
-      });
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  /* =======================================================
-     EXCEL EXPORT
-  ======================================================= */
-
-  function exportExcel() {
-    setGenerating(true);
-
-    try {
-      const workbook = XLSX.utils.book_new();
-
-      const coverSheet = XLSX.utils.aoa_to_sheet([
-        ["OMSU GUIDANCE AND TESTING CENTER"],
-        ["Guidance Awareness & Analytics Report"],
-        [`Report Period: ${rangeLabel}`],
-        [`Generated: ${generatedAtLabel}`],
-      ]);
-      XLSX.utils.book_append_sheet(workbook, coverSheet, "Report Info");
-
-      const programSheet = XLSX.utils.json_to_sheet(
-        programAwareness.map((row) => ({
-          Program: row.name,
-          "Guidance Service": row.guidanceService,
-          "Avg. Score (%)": row.averageScore ?? "No data",
-          Responses: row.responseCount,
-        }))
-      );
-      XLSX.utils.book_append_sheet(workbook, programSheet, "Program Awareness");
-
-      const demographicRows = [
-        ...demographics.byYearLevel.map((r) => ({ Dimension: "Year Level", Segment: r.label, Count: r.count })),
-        ...demographics.byGender.map((r) => ({ Dimension: "Gender", Segment: r.label, Count: r.count })),
-        ...demographics.byAgeBand.map((r) => ({ Dimension: "Age Band", Segment: r.label, Count: r.count })),
-        { Dimension: "PWD Status", Segment: "PWD", Count: demographics.pwd },
-        { Dimension: "PWD Status", Segment: "Non-PWD", Count: demographics.nonPwd },
-        { Dimension: "IP Status", Segment: "Indigenous Peoples", Count: demographics.ip },
-        { Dimension: "IP Status", Segment: "Non-IP", Count: demographics.nonIp },
-      ];
-      const demographicSheet = XLSX.utils.json_to_sheet(demographicRows);
-      XLSX.utils.book_append_sheet(workbook, demographicSheet, "Demographics");
-
-      const coverageSheet = XLSX.utils.json_to_sheet(
-        guidanceCoverage.map((row) => ({
-          "Guidance Service": row.service,
-          Programs: row.programCount,
-          "Avg. Awareness Score (%)": row.averageScore ?? "No data",
-        }))
-      );
-      XLSX.utils.book_append_sheet(workbook, coverageSheet, "Guidance Coverage");
-
-      const materialSheet = XLSX.utils.json_to_sheet(
-        materialReach.byCategory.map((row) => ({
-          Category: row.category,
-          Materials: row.count,
-          Downloads: row.downloads,
-        }))
-      );
-      XLSX.utils.book_append_sheet(workbook, materialSheet, "IEC Material Reach");
-
-      const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
-      const blob = new Blob([buffer], { type: "application/octet-stream" });
-
-      saveAs(blob, `OMSU_Guidance_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
-
-      toast({ title: "Report Generated", description: "Your Excel report has downloaded." });
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Excel Generation Failed",
         description: error?.message || "Please try again.",
       });
     } finally {
@@ -686,14 +633,6 @@ export default function ReportsCenter() {
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
               Export PDF
             </Button>
-            <Button
-              onClick={exportExcel}
-              disabled={generating}
-              className="flex-1 lg:flex-none h-12 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-xs gap-2"
-            >
-              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
-              Export Excel
-            </Button>
           </div>
         </div>
       </Card>
@@ -712,9 +651,15 @@ export default function ReportsCenter() {
             Average knowledge score per program
           </p>
 
+          <div className="flex items-center justify-between px-3 pb-2 mb-1 border-b border-slate-100">
+            <span className="text-[8px] font-black uppercase text-slate-300 tracking-widest">Program</span>
+            <span className="text-[8px] font-black uppercase text-slate-300 tracking-widest">Avg. Score</span>
+          </div>
+
           {programAwareness.length === 0 ? (
-            <div className="h-32 flex items-center justify-center text-slate-400 text-xs font-bold">
-              No programs found.
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50">
+              <span className="text-xs font-bold text-slate-300">—</span>
+              <span className="text-sm font-black text-slate-300">—</span>
             </div>
           ) : (
             <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
@@ -730,6 +675,12 @@ export default function ReportsCenter() {
                 </div>
               ))}
             </div>
+          )}
+
+          {programAwareness.length === 0 && (
+            <p className="text-center text-[10px] font-bold text-slate-400 mt-3">
+              No records found for the selected period.
+            </p>
           )}
         </Card>
 
@@ -805,9 +756,15 @@ export default function ReportsCenter() {
             {materialReach.totalMaterials} materials · {materialReach.totalDownloads} downloads
           </p>
 
+          <div className="flex items-center justify-between px-3 pb-2 mb-1 border-b border-slate-100">
+            <span className="text-[8px] font-black uppercase text-slate-300 tracking-widest">Category</span>
+            <span className="text-[8px] font-black uppercase text-slate-300 tracking-widest">Materials / Downloads</span>
+          </div>
+
           {materialReach.byCategory.length === 0 ? (
-            <div className="h-32 flex items-center justify-center text-slate-400 text-xs font-bold">
-              No materials found.
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50">
+              <span className="text-xs font-bold text-slate-300">—</span>
+              <span className="text-sm font-black text-slate-300">—</span>
             </div>
           ) : (
             <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
@@ -821,6 +778,12 @@ export default function ReportsCenter() {
                 </div>
               ))}
             </div>
+          )}
+
+          {materialReach.byCategory.length === 0 && (
+            <p className="text-center text-[10px] font-bold text-slate-400 mt-3">
+              No records found for the selected period.
+            </p>
           )}
         </Card>
       </div>
