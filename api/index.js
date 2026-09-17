@@ -86,6 +86,16 @@ const createStaffLimiter = rateLimit({
     handler: rateLimitHandler,
 });
 
+// Same reasoning as createStaffLimiter — admin-session-gated already, this
+// just blunts a compromised admin token from mass-deleting accounts.
+const deleteUserLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
+});
+
 // Admin-session-gated, but a compromised admin token spamming this could
 // still mass-email every student repeatedly — cap it well below anything
 // a legitimate publishing workflow would ever hit.
@@ -347,6 +357,121 @@ app.post('/api/admin/create-staff', createStaffLimiter, async (req, res) => {
         res.status(201).json({ message: "Staff account created!", userId: data[0].id });
     } catch (error) {
         console.error("Create Staff Error:", error.message);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// The admin Users page used to delete straight from `users` via the
+// browser's own Supabase client — that only ever removed that one row.
+// The account's `profiles` row (keyed on the Auth uuid, not `users.id`)
+// and its Auth identity were left behind, so a "deleted" student kept
+// showing up in every demographics chart and, worse, could still log in.
+// Deleting all three needs the service-role key, so it has to happen here.
+app.post('/api/admin/delete-user', deleteUserLimiter, async (req, res) => {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+    if (!token) {
+        return res.status(401).json({ message: "Missing authorization token" });
+    }
+
+    try {
+        const { data: { user: callerAuthUser }, error: callerError } = await supabase.auth.getUser(token);
+
+        if (callerError || !callerAuthUser?.email) {
+            return res.status(401).json({ message: "Invalid or expired session" });
+        }
+
+        const { data: callerRecord } = await supabase
+            .from('users')
+            .select('role')
+            .eq('email', callerAuthUser.email.toLowerCase())
+            .maybeSingle();
+
+        if (callerRecord?.role !== 'admin') {
+            return res.status(403).json({ message: "Only admins can delete accounts" });
+        }
+
+        const { userId } = req.body;
+        if (!userId) {
+            return res.status(400).json({ message: "userId is required" });
+        }
+
+        const { data: targetUser, error: targetError } = await supabase
+            .from('users')
+            .select('id, name, email')
+            .eq('id', userId)
+            .maybeSingle();
+
+        if (targetError) throw targetError;
+        if (!targetUser) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        // profiles.id = the Auth uuid, which `users` never stores (see the
+        // linking note in /api/register) — email is the one field both
+        // `users` and Auth are guaranteed to agree on, so it's the bridge.
+        let authUserId = null;
+        if (targetUser.email) {
+            let page = 1;
+            const perPage = 200;
+            while (!authUserId) {
+                const { data: authPage, error: listError } = await supabase.auth.admin.listUsers({ page, perPage });
+                if (listError) {
+                    console.warn('delete-user: listUsers failed:', listError.message);
+                    break;
+                }
+                const match = authPage.users.find(
+                    (u) => u.email?.toLowerCase() === targetUser.email.toLowerCase()
+                );
+                if (match) {
+                    authUserId = match.id;
+                    break;
+                }
+                if (authPage.users.length < perPage) break;
+                page += 1;
+            }
+        }
+
+        if (authUserId) {
+            const { error: profileDeleteError } = await supabase
+                .from('profiles')
+                .delete()
+                .eq('id', authUserId);
+            if (profileDeleteError) {
+                console.warn('delete-user: profiles delete failed:', profileDeleteError.message);
+            }
+        }
+
+        const { error: userDeleteError } = await supabase
+            .from('users')
+            .delete()
+            .eq('id', userId);
+        if (userDeleteError) throw userDeleteError;
+
+        if (authUserId) {
+            const { error: authDeleteError } = await supabase.auth.admin.deleteUser(authUserId);
+            if (authDeleteError) {
+                console.warn('delete-user: auth delete failed:', authDeleteError.message);
+            }
+        }
+
+        try {
+            await supabase.from('activity_logs').insert([{
+                actor_email: callerAuthUser.email,
+                actor_name: callerRecord?.name || callerAuthUser.email,
+                action: 'delete',
+                entity_type: 'user',
+                entity_id: String(userId),
+                entity_label: targetUser.name || targetUser.email,
+            }]);
+        } catch (logErr) {
+            console.warn('Activity log write failed (delete-user):', logErr.message);
+        }
+
+        res.status(200).json({ message: "Account deleted." });
+    } catch (error) {
+        console.error("Delete User Error:", error.message);
         res.status(500).json({ message: error.message });
     }
 });

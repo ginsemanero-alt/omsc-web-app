@@ -185,13 +185,31 @@ export default function UserManagement() {
     if (!pendingAction) return;
     try {
       const targetUser = users.find((u) => String(u.id) === String(pendingAction.id));
-      const { error } = await supabase.from('users').delete().eq('id', pendingAction.id);
-      if (error) throw error;
-      logActivity({ actorEmail: authUser?.email, actorName: authUserName, action: 'delete', entityType: 'user', entityId: pendingAction.id, entityLabel: targetUser?.name || targetUser?.email });
+
+      // Deleting straight from `users` via this browser client used to
+      // leave the account's `profiles` row and Auth identity behind (the
+      // browser has no service-role key to touch either) — a "deleted"
+      // student kept showing up in demographics charts and could still
+      // log in. /api/admin/delete-user cleans up all three.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("No active session — please log in again.");
+
+      const response = await fetch('/api/admin/delete-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ userId: pendingAction.id }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.message || 'Failed to delete user.');
+
       toast({
-        title: "DELETED", 
-        description: "User removed successfully.", 
-        className: "bg-slate-900 text-white font-black rounded-2xl" 
+        title: "DELETED",
+        description: "User removed successfully.",
+        className: "bg-slate-900 text-white font-black rounded-2xl"
       });
       closeModals();
       fetchUsers();
