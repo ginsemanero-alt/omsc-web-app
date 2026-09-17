@@ -19,6 +19,7 @@ import {
   Archive,
   Info,
   Bell,
+  User,
   type LucideIcon,
 } from 'lucide-react';
 import { useState, useEffect } from 'react'; // Idinagdag ang useEffect
@@ -35,6 +36,12 @@ import {
 } from '../../components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '../../components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import StudentBottomNav from '../student/StudentBottomNav';
+
+// The floating mobile bar only ever shows these 4 destinations, in this
+// exact order, regardless of how navigationItems (which also carries
+// Profile/About for the desktop nav and admin's own drawer) is ordered.
+const STUDENT_BOTTOM_NAV_PATHS = ['/student', '/student/materials', '/student/programs', '/student/survey'];
 
 interface NavigationItem {
   label: string;
@@ -184,6 +191,10 @@ export default function TopNavBar({
     if (notification.action_path) navigate(notification.action_path);
   };
 
+  const bottomNavItems = STUDENT_BOTTOM_NAV_PATHS
+    .map((path) => navigationItems.find((item) => item.path === path))
+    .filter((item): item is NavigationItem => Boolean(item));
+
   // Compute initials base sa dynamic name
   const initials = displayName
     .split(' ')
@@ -198,15 +209,17 @@ export default function TopNavBar({
         <div className="max-w-[1440px] mx-auto px-6 h-full flex items-center justify-between">
           
           <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden text-foreground"
-              onClick={() => setIsSidebarOpen(true)}
-              aria-label="Open menu"
-            >
-              <Menu className="w-6 h-6" />
-            </Button>
+            {role === 'admin' && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden text-foreground"
+                onClick={() => setIsSidebarOpen(true)}
+                aria-label="Open menu"
+              >
+                <Menu className="w-6 h-6" />
+              </Button>
+            )}
 
             <div className="flex items-center gap-3">
                <img
@@ -327,6 +340,17 @@ export default function TopNavBar({
                   {displayName}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator className="dark:bg-slate-800" />
+                {role === 'student' && (
+                  <>
+                    <DropdownMenuItem onClick={() => navigate('/student/profile')} className="rounded-xl cursor-pointer p-3 text-slate-700 dark:text-slate-200">
+                      <User className="w-4 h-4 mr-2" /> <span className="font-bold uppercase text-[11px] tracking-widest">Profile</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/student/about')} className="rounded-xl cursor-pointer p-3 text-slate-700 dark:text-slate-200">
+                      <Info className="w-4 h-4 mr-2" /> <span className="font-bold uppercase text-[11px] tracking-widest">About</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="dark:bg-slate-800" />
+                  </>
+                )}
                 <DropdownMenuItem onClick={() => setShowLogoutConfirm(true)} className="text-red-600 focus:bg-red-50 dark:focus:bg-red-500/10 focus:text-red-700 dark:text-red-400 rounded-xl cursor-pointer p-3">
                   <LogOut className="w-4 h-4 mr-2" /> <span className="font-bold uppercase text-[11px] tracking-widest">Sign Out Account</span>
                 </DropdownMenuItem>
@@ -336,82 +360,91 @@ export default function TopNavBar({
         </div>
       </header>
 
-      {/* MOBILE SIDEBAR (Isinama din ang name dito) */}
-      <div className={`fixed top-0 left-0 h-full w-[280px] bg-white dark:bg-slate-900 z-[70] shadow-2xl transform transition-transform duration-300 ease-in-out md:hidden ${
-        isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      }`}>
-        <div className="p-6 flex flex-col h-full">
-          <div className="flex items-center justify-between gap-2 mb-8">
-            <div className="flex items-center gap-2 min-w-0">
-               <Avatar className="w-10 h-10 shrink-0">
-                 <AvatarFallback className="bg-primary text-white font-bold">{initials}</AvatarFallback>
-               </Avatar>
-               <div className="flex flex-col min-w-0">
-                 <span className="font-bold text-sm truncate text-slate-900 dark:text-slate-100">{displayName}</span>
-                 <span className="text-[10px] text-slate-400 font-bold uppercase truncate">{campus}</span>
-               </div>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              {onToggleTheme && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onToggleTheme}
-                  aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-                  className="text-slate-600 dark:text-slate-300"
-                >
-                  {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+      {/* MOBILE SIDEBAR — admin only; students get the floating bottom bar
+          below instead (see STUDENT BOTTOM NAV). */}
+      {role === 'admin' && (
+        <div className={`fixed top-0 left-0 h-full w-[280px] bg-white dark:bg-slate-900 z-[70] shadow-2xl transform transition-transform duration-300 ease-in-out md:hidden ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}>
+          <div className="p-6 flex flex-col h-full">
+            <div className="flex items-center justify-between gap-2 mb-8">
+              <div className="flex items-center gap-2 min-w-0">
+                 <Avatar className="w-10 h-10 shrink-0">
+                   <AvatarFallback className="bg-primary text-white font-bold">{initials}</AvatarFallback>
+                 </Avatar>
+                 <div className="flex flex-col min-w-0">
+                   <span className="font-bold text-sm truncate text-slate-900 dark:text-slate-100">{displayName}</span>
+                   <span className="text-[10px] text-slate-400 font-bold uppercase truncate">{campus}</span>
+                 </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                {onToggleTheme && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onToggleTheme}
+                    aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                    className="text-slate-600 dark:text-slate-300"
+                  >
+                    {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(false)} aria-label="Close menu" className="text-slate-600 dark:text-slate-300">
+                  <X className="w-6 h-6" />
                 </Button>
-              )}
-              <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(false)} aria-label="Close menu" className="text-slate-600 dark:text-slate-300">
-                <X className="w-6 h-6" />
+              </div>
+            </div>
+
+            <nav className="flex flex-col gap-2">
+              {/* Re-mounted (not just hidden) each time the sidebar opens, so
+                  the fade/slide-in replays instead of only playing once ever. */}
+              {isSidebarOpen &&
+                navigationItems.map((item: NavigationItem, index) => {
+                  const ItemIcon = item.icon ? NAV_ICONS[item.icon] : null;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setIsSidebarOpen(false)}
+                      style={{ animationDelay: `${index * 40}ms` }}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl text-base transition-all animate-in fade-in slide-in-from-left-4 duration-300 fill-mode-both ${
+                        currentPath === item.path
+                          ? 'bg-primary text-white shadow-lg font-bold'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      {ItemIcon && <ItemIcon className="w-5 h-5 shrink-0" />}
+                      {item.label}
+                    </Link>
+                  );
+                })}
+            </nav>
+
+            <div className="mt-auto pt-6 border-t dark:border-slate-800">
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 font-bold rounded-xl"
+                onClick={() => setShowLogoutConfirm(true)}
+              >
+                <LogOut className="w-5 h-5 mr-3" />
+                SIGN OUT
               </Button>
             </div>
           </div>
-
-          <nav className="flex flex-col gap-2">
-            {/* Re-mounted (not just hidden) each time the sidebar opens, so
-                the fade/slide-in replays instead of only playing once ever. */}
-            {isSidebarOpen &&
-              navigationItems.map((item: NavigationItem, index) => {
-                const ItemIcon = item.icon ? NAV_ICONS[item.icon] : null;
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    onClick={() => setIsSidebarOpen(false)}
-                    style={{ animationDelay: `${index * 40}ms` }}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-base transition-all animate-in fade-in slide-in-from-left-4 duration-300 fill-mode-both ${
-                      currentPath === item.path
-                        ? 'bg-primary text-white shadow-lg font-bold'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5'
-                    }`}
-                  >
-                    {ItemIcon && <ItemIcon className="w-5 h-5 shrink-0" />}
-                    {item.label}
-                  </Link>
-                );
-              })}
-          </nav>
-
-          <div className="mt-auto pt-6 border-t dark:border-slate-800">
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 font-bold rounded-xl"
-              onClick={() => setShowLogoutConfirm(true)}
-            >
-              <LogOut className="w-5 h-5 mr-3" />
-              SIGN OUT
-            </Button>
-          </div>
         </div>
-      </div>
-      
-      {isSidebarOpen && (
+      )}
+
+      {role === 'admin' && isSidebarOpen && (
         <div
           className="fixed inset-0 bg-black/40 z-[60] md:hidden backdrop-blur-sm"
           onClick={() => setIsSidebarOpen(false)}
         />
+      )}
+
+      {/* STUDENT BOTTOM NAV — floating mobile bar, replaces the hamburger
+          drawer for students only. */}
+      {role === 'student' && (
+        <StudentBottomNav items={bottomNavItems} currentPath={currentPath} />
       )}
 
       <Dialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>

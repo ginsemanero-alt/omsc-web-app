@@ -74,7 +74,7 @@ export default function StudentDashboard({ onLogout }: StudentDashboardProps) {
           onToggleTheme={toggleTheme}
         />
 
-        <main className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 py-6 md:py-10 mt-[72px] md:mt-[80px] flex-1 animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-hidden">
+        <main className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 pt-6 md:pt-10 pb-[calc(84px+env(safe-area-inset-bottom,0px))] md:pb-10 mt-[72px] md:mt-[80px] flex-1 animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-hidden">
           <Routes>
             <Route path="/" element={<DashboardOverview />} />
             <Route path="/programs" element={<ProgramsActivities />} />
