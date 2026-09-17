@@ -6,7 +6,6 @@ import ProgramManagement from '../components/admin/ProgramManager';
 import MaterialLibrary from '../components/admin/MaterialLibrary';
 import SurveyBuilder from '../components/admin/SurveyBuilder';
 import AnalyticsDashboard from '../components/admin/AnalyticsDashboard';
-import ReportsCenter from '../components/admin/ReportsCenter';
 import UserManagement from '../components/admin/UserManagement';
 import ActivityLog from '../components/admin/ActivityLog';
 import ArchiveScreen from '../components/admin/ArchiveScreen';
@@ -63,7 +62,6 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const navigationItems = [
     { label: 'Content', path: '/admin', icon: 'FolderOpen' },
     { label: 'Analytics', path: '/admin/analytics', icon: 'BarChart3' },
-    { label: 'Reports', path: '/admin/reports', icon: 'FileStack' },
     { label: 'Users', path: '/admin/users', icon: 'Users' },
     { label: 'Activity Log', path: '/admin/activity-log', icon: 'History' },
     { label: 'Archive', path: '/admin/archive', icon: 'Archive' },
@@ -97,7 +95,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         <Routes>
           <Route path="/" element={<ContentManagement />} />
           <Route path="/analytics" element={<AnalyticsDashboard />} />
-          <Route path="/reports" element={<ReportsCenter />} />
+          <Route path="/reports" element={<Navigate to="/admin/analytics" replace />} />
           <Route path="/users" element={<UserManagement />} />
           <Route path="/activity-log" element={<ActivityLog />} />
           <Route path="/archive" element={<ArchiveScreen />} />

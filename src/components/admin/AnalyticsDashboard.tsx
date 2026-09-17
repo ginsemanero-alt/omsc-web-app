@@ -4,6 +4,8 @@ import { supabase } from "../../lib/supabase";
 
 import { Card } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
 
 import {
   Select,
@@ -15,6 +17,7 @@ import {
 
 import {
   Download,
+  FileDown,
   Users,
   GraduationCap,
   BarChart3,
@@ -27,6 +30,7 @@ import {
   ShieldCheck,
   Info,
   BookOpen,
+  Layers,
   FileStack,
   CalendarDays,
   TrendingUp,
@@ -351,6 +355,28 @@ function isSameYear(dateValue?: string | null): boolean {
   return date.getFullYear() === now.getFullYear();
 }
 
+// Ported from the retired ReportsCenter screen — the "Export Report"
+// action reproduces its exact output, so its own date-range filtering
+// and averaging logic (independent of this dashboard's Campus/Program/
+// Year/Gender/Academic Year dropdown filters) comes along unchanged.
+function isWithinRange(dateStr: string | null | undefined, start: string, end: string): boolean {
+  if (!start && !end) return true;
+  if (!dateStr) return false;
+
+  const d = new Date(dateStr).getTime();
+  if (Number.isNaN(d)) return false;
+
+  if (start && d < new Date(start).getTime()) return false;
+  if (end && d > new Date(`${end}T23:59:59`).getTime()) return false;
+
+  return true;
+}
+
+function average(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return Math.round(values.reduce((sum, v) => sum + v, 0) / values.length);
+}
+
 /* =========================================================
    MAIN COMPONENT
 ========================================================= */
@@ -379,6 +405,13 @@ export default function AnalyticsDashboard() {
   const [selectedGender, setSelectedGender] = useState("all");
   const [selectedAcademicYear, setSelectedAcademicYear] =
     useState("all");
+
+  /* EXPORT REPORT — ported from the retired ReportsCenter screen; its
+     own date-range filter, independent of the dropdowns above. */
+
+  const [reportStartDate, setReportStartDate] = useState("");
+  const [reportEndDate, setReportEndDate] = useState("");
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   /* =======================================================
      FETCH DATA
@@ -1078,137 +1111,6 @@ export default function AnalyticsDashboard() {
       );
     });
   }, [filteredSurveyResponses, surveys]);
-
-  /* =======================================================
-     PRE-TEST / POST-TEST COMPARISON
-
-     A single survey only measures awareness at one point in time — it
-     can't show that a student's awareness actually improved. Pairing a
-     "(Pre-Test)" survey with a "(Post-Test)" survey of the same topic
-     (same title minus that suffix) lets us compute a per-student gain,
-     which is the actual evidence of improvement.
-
-     Works for both survey types: a Knowledge Assessment already has a
-     real percentage (from correct_option scoring). An opinion survey
-     (e.g. this study's Needs Assessment, re-run before/after the
-     system launches) has no correct answers to score, so
-     deriveOpinionAwarenessPercentage builds an equivalent 0-100 index
-     out of its Yes/No/Not Sure awareness questions and its 1-5 scale
-     questions instead, so both types can share this one comparison.
-  ======================================================= */
-
-  const getBaseTopicAndPhase = (
-    title: string
-  ): { base: string; phase: "pre" | "post" | null } => {
-    const preMatch = title.match(/^(.*?)\s*\(pre-test\)\s*$/i);
-    if (preMatch) return { base: preMatch[1].trim(), phase: "pre" };
-
-    const postMatch = title.match(/^(.*?)\s*\(post-test\)\s*$/i);
-    if (postMatch) return { base: postMatch[1].trim(), phase: "post" };
-
-    return { base: title, phase: null };
-  };
-
-  const deriveOpinionAwarenessPercentage = (
-    questions: any[],
-    answers: Record<string, any> | null | undefined
-  ): number | null => {
-    const values: number[] = [];
-
-    questions.forEach((question) => {
-      const given = answers?.[String(question.id)];
-
-      if (question?.type === "scale" && typeof given === "number") {
-        values.push(((given - 1) / 4) * 100);
-      } else if (
-        question?.type === "mcq" &&
-        Array.isArray(question.options) &&
-        question.options.includes("Yes") &&
-        question.options.includes("No")
-      ) {
-        if (given === "Yes") values.push(100);
-        else if (given === "Not Sure") values.push(50);
-        else if (given === "No") values.push(0);
-      }
-    });
-
-    return values.length > 0
-      ? Math.round(values.reduce((sum, v) => sum + v, 0) / values.length)
-      : null;
-  };
-
-  const prePostComparison = useMemo(() => {
-    const surveysById: Record<string, Survey> = {};
-    surveys.forEach((survey) => {
-      surveysById[safeString(survey.id)] = survey;
-    });
-
-    // topic -> studentId -> { pre?: percentage, post?: percentage }
-    const byTopic: Record<string, Record<string, { pre?: number; post?: number }>> = {};
-
-    filteredSurveyResponses.forEach((response) => {
-      const survey = surveysById[safeString(response.survey_id)];
-      if (!survey?.title) return;
-
-      const { base, phase } = getBaseTopicAndPhase(survey.title);
-      if (!phase) return;
-
-      let percentage: number | null;
-      if (survey.type === "knowledge") {
-        if (response.percentage === null || response.percentage === undefined) return;
-        percentage = response.percentage;
-      } else {
-        const questions = Array.isArray(survey.questions_data) ? survey.questions_data : [];
-        percentage = deriveOpinionAwarenessPercentage(questions, response.answers);
-        if (percentage === null) return;
-      }
-
-      const studentId =
-        userIdToStudentId[safeString(response.user_id)] ||
-        safeString(response.student_id);
-      if (!studentId) return;
-
-      if (!byTopic[base]) byTopic[base] = {};
-      if (!byTopic[base][studentId]) byTopic[base][studentId] = {};
-      byTopic[base][studentId][phase] = percentage;
-    });
-
-    const average = (values: number[]) =>
-      values.length > 0
-        ? Math.round(values.reduce((sum, v) => sum + v, 0) / values.length)
-        : null;
-
-    return Object.entries(byTopic)
-      .map(([topic, students]) => {
-        const preScores: number[] = [];
-        const postScores: number[] = [];
-        const gains: number[] = [];
-        let improvedCount = 0;
-
-        Object.values(students).forEach((entry) => {
-          if (entry.pre !== undefined) preScores.push(entry.pre);
-          if (entry.post !== undefined) postScores.push(entry.post);
-
-          if (entry.pre !== undefined && entry.post !== undefined) {
-            const gain = entry.post - entry.pre;
-            gains.push(gain);
-            if (gain > 0) improvedCount += 1;
-          }
-        });
-
-        return {
-          topic,
-          preAvg: average(preScores),
-          postAvg: average(postScores),
-          avgGain: average(gains),
-          pairedCount: gains.length,
-          improvedCount,
-          preOnlyCount: preScores.length,
-          postOnlyCount: postScores.length,
-        };
-      })
-      .sort((a, b) => b.pairedCount - a.pairedCount);
-  }, [filteredSurveyResponses, surveys, userIdToStudentId]);
 
   const awarenessAnalytics = useMemo(() => {
     const average = (values: number[]) =>
@@ -1959,6 +1861,311 @@ export default function AnalyticsDashboard() {
   };
 
   /* =======================================================
+     EXPORT REPORT — ported from the retired ReportsCenter screen.
+     Independent date-range filtering (not the dropdowns above) over
+     the same already-fetched profiles/programs/surveys/survey_responses/
+     materials, producing byte-for-byte the same PDF ReportsCenter used
+     to generate.
+  ======================================================= */
+
+  const reportFilteredProfiles = useMemo(
+    () => profiles.filter((p) => isWithinRange(p.created_at, reportStartDate, reportEndDate)),
+    [profiles, reportStartDate, reportEndDate]
+  );
+
+  const reportFilteredResponses = useMemo(
+    () => surveyResponses.filter((r) => isWithinRange(r.created_at, reportStartDate, reportEndDate)),
+    [surveyResponses, reportStartDate, reportEndDate]
+  );
+
+  const reportFilteredMaterials = useMemo(
+    () => materials.filter((m) => isWithinRange(m.created_at, reportStartDate, reportEndDate)),
+    [materials, reportStartDate, reportEndDate]
+  );
+
+  const reportScoredResponses = useMemo(() => {
+    const surveysById: Record<string, Survey> = {};
+    surveys.forEach((s) => {
+      surveysById[safeString(s.id)] = s;
+    });
+
+    return reportFilteredResponses.filter((r) => {
+      const survey = surveysById[safeString(r.survey_id)];
+      return survey?.type === "knowledge" && r.percentage !== null && r.percentage !== undefined;
+    });
+  }, [reportFilteredResponses, surveys]);
+
+  const reportProgramAwareness = useMemo(() => {
+    const buckets: Record<string, number[]> = {};
+
+    reportScoredResponses.forEach((response) => {
+      const survey = surveys.find((s) => safeString(s.id) === safeString(response.survey_id));
+      const questions = Array.isArray(survey?.questions_data) ? survey!.questions_data : [];
+
+      questions.forEach((question: any) => {
+        if (question?.type !== "mcq" || !question?.correct_option || !question?.related_program_id) {
+          return;
+        }
+
+        const programId = safeString(question.related_program_id);
+        if (!buckets[programId]) buckets[programId] = [];
+        buckets[programId].push(response.percentage || 0);
+      });
+    });
+
+    return programs
+      .map((program) => {
+        const values = buckets[safeString(program.id)] || [];
+        return {
+          name: getProgramName(program),
+          guidanceService: safeString(program.guidance_service) || "Not Categorized",
+          averageScore: average(values),
+          responseCount: values.length,
+        };
+      })
+      .sort((a, b) => b.responseCount - a.responseCount);
+  }, [programs, reportScoredResponses, surveys]);
+
+  const reportDemographics = useMemo(() => {
+    const groupBy = (keyFn: (p: Profile) => string) => {
+      const counts: Record<string, number> = {};
+      reportFilteredProfiles.forEach((p) => {
+        const key = keyFn(p);
+        counts[key] = (counts[key] || 0) + 1;
+      });
+      return Object.entries(counts)
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count);
+    };
+
+    const pwdCount = reportFilteredProfiles.filter((p) => p.is_pwd === true).length;
+    const ipCount = reportFilteredProfiles.filter((p) => p.is_ip === true).length;
+
+    return {
+      total: reportFilteredProfiles.length,
+      byYearLevel: groupBy((p) => getYearLevel(p.year_level)),
+      byGender: groupBy((p) => safeString(p.gender) || "Not Specified"),
+      byAgeBand: groupBy((p) => getAgeGroup(p.age)),
+      pwd: pwdCount,
+      nonPwd: reportFilteredProfiles.length - pwdCount,
+      ip: ipCount,
+      nonIp: reportFilteredProfiles.length - ipCount,
+    };
+  }, [reportFilteredProfiles]);
+
+  const reportGuidanceCoverage = useMemo(() => {
+    const programCounts: Record<string, number> = {};
+    programs.forEach((p) => {
+      const service = safeString(p.guidance_service);
+      if (service) programCounts[service] = (programCounts[service] || 0) + 1;
+    });
+
+    const serviceByProgramId: Record<string, string> = {};
+    programs.forEach((p) => {
+      const service = safeString(p.guidance_service);
+      if (service) serviceByProgramId[safeString(p.id)] = service;
+    });
+
+    const scoreBuckets: Record<string, number[]> = {};
+    reportScoredResponses.forEach((response) => {
+      const survey = surveys.find((s) => safeString(s.id) === safeString(response.survey_id));
+      const questions = Array.isArray(survey?.questions_data) ? survey!.questions_data : [];
+
+      questions.forEach((question: any) => {
+        if (question?.type !== "mcq" || !question?.correct_option || !question?.related_program_id) {
+          return;
+        }
+
+        const service = serviceByProgramId[safeString(question.related_program_id)];
+        if (!service) return;
+
+        if (!scoreBuckets[service]) scoreBuckets[service] = [];
+        scoreBuckets[service].push(response.percentage || 0);
+      });
+    });
+
+    return GUIDANCE_SERVICES.map((service) => ({
+      service,
+      programCount: programCounts[service] || 0,
+      averageScore: average(scoreBuckets[service] || []),
+    }));
+  }, [programs, reportScoredResponses, surveys]);
+
+  const reportMaterialReach = useMemo(() => {
+    const byCategory: Record<string, { count: number; downloads: number }> = {};
+
+    reportFilteredMaterials.forEach((m) => {
+      const category = safeString(m.category) || "Uncategorized";
+      if (!byCategory[category]) byCategory[category] = { count: 0, downloads: 0 };
+      byCategory[category].count += 1;
+      byCategory[category].downloads += m.downloads || 0;
+    });
+
+    return {
+      totalMaterials: reportFilteredMaterials.length,
+      totalDownloads: reportFilteredMaterials.reduce((sum, m) => sum + (m.downloads || 0), 0),
+      byCategory: Object.entries(byCategory)
+        .map(([category, data]) => ({ category, ...data }))
+        .sort((a, b) => b.count - a.count),
+    };
+  }, [reportFilteredMaterials]);
+
+  const reportRangeLabel =
+    reportStartDate || reportEndDate
+      ? `${reportStartDate || "Beginning"} to ${reportEndDate || "Present"}`
+      : "All-Time";
+
+  const exportReportPDF = () => {
+    setGeneratingReport(true);
+
+    try {
+      const doc = new jsPDF() as any;
+
+      const NO_RECORDS_NOTE = "No records found for the selected period.";
+      const tableBodyOrPlaceholder = <T,>(rows: T[], columnCount: number, mapRow: (row: T) => (string | number)[]) =>
+        rows.length > 0 ? rows.map(mapRow) : [Array(columnCount).fill("—")];
+
+      const generatedAtLabel = new Date().toLocaleString("en-US", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+
+      const addHeader = () => {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(16);
+        doc.setTextColor(15);
+        doc.text("OMSU GUIDANCE AND TESTING CENTER", 14, 18);
+
+        doc.setFontSize(12);
+        doc.text("Guidance Awareness & Analytics Report", 14, 26);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+        doc.text(`Report Period: ${reportRangeLabel}`, 14, 33);
+        doc.text(`Generated: ${generatedAtLabel}`, 14, 38);
+      };
+
+      addHeader();
+
+      let nextY = 46;
+
+      // SECTION 1 — Program Awareness Summary
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(15);
+      doc.text("Program Awareness Summary", 14, nextY);
+      nextY += 6;
+
+      autoTable(doc, {
+        startY: nextY,
+        head: [["Program", "Guidance Service", "Avg. Score", "Responses"]],
+        body: tableBodyOrPlaceholder(reportProgramAwareness, 4, (row) => [
+          row.name,
+          row.guidanceService,
+          row.averageScore !== null ? `${row.averageScore}%` : "No data",
+          row.responseCount,
+        ]),
+        headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
+        styles: { fontSize: 8 },
+      });
+      nextY = (doc.lastAutoTable?.finalY || nextY) + (reportProgramAwareness.length === 0 ? 5 : 12);
+
+      if (reportProgramAwareness.length === 0) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(8);
+        doc.setTextColor(148);
+        doc.text(NO_RECORDS_NOTE, 14, nextY);
+        nextY += 10;
+      }
+
+      // SECTION 2 — Demographic Breakdown
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text("Demographic Breakdown", 14, nextY);
+      nextY += 6;
+
+      autoTable(doc, {
+        startY: nextY,
+        head: [["Dimension", "Segment", "Count"]],
+        body: [
+          ...reportDemographics.byYearLevel.map((r) => ["Year Level", r.label, r.count]),
+          ...reportDemographics.byGender.map((r) => ["Gender", r.label, r.count]),
+          ...reportDemographics.byAgeBand.map((r) => ["Age Band", r.label, r.count]),
+          ["PWD Status", "PWD", reportDemographics.pwd],
+          ["PWD Status", "Non-PWD", reportDemographics.nonPwd],
+          ["IP Status", "Indigenous Peoples", reportDemographics.ip],
+          ["IP Status", "Non-IP", reportDemographics.nonIp],
+        ],
+        headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: "bold" },
+        styles: { fontSize: 8 },
+      });
+      nextY = (doc.lastAutoTable?.finalY || nextY) + 12;
+
+      if (nextY > 250) {
+        doc.addPage();
+        addHeader();
+        nextY = 46;
+      }
+
+      // SECTION 3 — Guidance Service Coverage
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text("Guidance Service Coverage", 14, nextY);
+      nextY += 6;
+
+      autoTable(doc, {
+        startY: nextY,
+        head: [["Guidance Service", "Programs", "Avg. Awareness Score"]],
+        body: reportGuidanceCoverage.map((row) => [
+          row.service,
+          row.programCount,
+          row.averageScore !== null ? `${row.averageScore}%` : "No data",
+        ]),
+        headStyles: { fillColor: [217, 119, 6], textColor: [255, 255, 255], fontStyle: "bold" },
+        styles: { fontSize: 8 },
+      });
+      nextY = (doc.lastAutoTable?.finalY || nextY) + 12;
+
+      if (nextY > 250) {
+        doc.addPage();
+        addHeader();
+        nextY = 46;
+      }
+
+      // SECTION 4 — IEC Material Reach
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text(
+        `IEC Material Reach (${reportMaterialReach.totalMaterials} materials, ${reportMaterialReach.totalDownloads} downloads)`,
+        14,
+        nextY
+      );
+      nextY += 6;
+
+      autoTable(doc, {
+        startY: nextY,
+        head: [["Category", "Materials", "Downloads"]],
+        body: tableBodyOrPlaceholder(reportMaterialReach.byCategory, 3, (row) => [row.category, row.count, row.downloads]),
+        headStyles: { fillColor: [190, 24, 93], textColor: [255, 255, 255], fontStyle: "bold" },
+        styles: { fontSize: 8 },
+      });
+
+      if (reportMaterialReach.byCategory.length === 0) {
+        const notesY = (doc.lastAutoTable?.finalY || nextY) + 6;
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(8);
+        doc.setTextColor(148);
+        doc.text(NO_RECORDS_NOTE, 14, notesY);
+      }
+
+      doc.save(`OMSU_Guidance_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+    } finally {
+      setGeneratingReport(false);
+    }
+  };
+
+  /* =======================================================
      PDF EXPORT
   ======================================================= */
 
@@ -2142,55 +2349,6 @@ export default function AnalyticsDashboard() {
       },
     });
 
-    let prePostY =
-      (doc.lastAutoTable
-        ?.finalY || nextY) + 12;
-
-    doc.setFontSize(13);
-
-    doc.text(
-      "PRE-TEST VS POST-TEST COMPARISON",
-      14,
-      prePostY
-    );
-
-    autoTable(doc, {
-      startY: prePostY + 6,
-
-      head: [
-        [
-          "TOPIC",
-          "PRE-TEST AVG",
-          "POST-TEST AVG",
-          "AVG GAIN",
-          "PAIRED STUDENTS",
-          "IMPROVED",
-        ],
-      ],
-
-      body: prePostComparison.map((row) => [
-        row.topic,
-        row.preAvg !== null ? `${row.preAvg}%` : "-",
-        row.postAvg !== null ? `${row.postAvg}%` : "-",
-        row.avgGain !== null ? `${row.avgGain >= 0 ? "+" : ""}${row.avgGain}%` : "-",
-        row.pairedCount,
-        row.pairedCount > 0 ? `${row.improvedCount}/${row.pairedCount}` : "-",
-      ]),
-
-      headStyles: {
-        fillColor: [
-          79,
-          70,
-          229,
-        ],
-        textColor: [
-          255,
-          255,
-          255,
-        ],
-      },
-    });
-
     doc.save(
       `OMSU_Guidance_Analytics_${new Date()
         .toISOString()
@@ -2253,15 +2411,68 @@ export default function AnalyticsDashboard() {
               </p>
             </div>
 
-            <Button
-              onClick={exportToPDF}
-              className="h-12 rounded-xl px-5 bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export PDF
-            </Button>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                onClick={exportToPDF}
+                className="h-12 rounded-xl px-5 bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export PDF
+              </Button>
+
+              <Button
+                onClick={exportReportPDF}
+                disabled={generatingReport}
+                className="h-12 rounded-xl px-5 bg-rose-600 hover:bg-rose-700 text-white font-black uppercase text-[10px] tracking-widest"
+              >
+                {generatingReport ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <FileDown className="w-4 h-4 mr-2" />
+                )}
+                Export Report
+              </Button>
+            </div>
           </div>
         </div>
+
+        {/* =================================================
+            EXPORT REPORT — DATE RANGE
+            (ported from the retired ReportsCenter screen)
+        ================================================= */}
+
+        <Card className="p-5 md:p-7 rounded-[2rem] border-none shadow-sm bg-white">
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5">
+            <div className="grid grid-cols-2 gap-4 w-full lg:w-auto">
+              <div className="space-y-1.5">
+                <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                  From
+                </Label>
+                <Input
+                  type="date"
+                  value={reportStartDate}
+                  onChange={(e) => setReportStartDate(e.target.value)}
+                  className="h-11 rounded-xl bg-slate-50 border-none font-bold text-xs"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                  To
+                </Label>
+                <Input
+                  type="date"
+                  value={reportEndDate}
+                  onChange={(e) => setReportEndDate(e.target.value)}
+                  className="h-11 rounded-xl bg-slate-50 border-none font-bold text-xs"
+                />
+              </div>
+            </div>
+
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Export Report Period: <span className="text-slate-700">{reportRangeLabel}</span>
+            </p>
+          </div>
+        </Card>
 
         {/* =================================================
             FILTERS
@@ -3258,76 +3469,6 @@ export default function AnalyticsDashboard() {
                           >
                             {row.reachedPct}%
                           </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
-
-          {/* PRE-TEST / POST-TEST COMPARISON */}
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-            <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
-              Pre-Test vs Post-Test Comparison
-            </h3>
-
-            <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
-              Average score/awareness gain for students who completed both a
-              "(Pre-Test)" and "(Post-Test)" survey of the same topic — works for
-              Knowledge Assessments (scored) and opinion surveys (Yes/No + 1–5
-              scale questions) alike
-            </p>
-
-            {prePostComparison.length === 0 ? (
-              <div className="h-40 flex items-center justify-center text-slate-400 text-xs font-bold text-center px-6">
-                No paired data yet. Create a survey titled "Topic (Pre-Test)" and
-                another "Topic (Post-Test)" with the same wording to see the
-                comparison here.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
-                      <th className="pb-3 pr-4">Topic</th>
-                      <th className="pb-3 pr-4">Pre-Test Avg</th>
-                      <th className="pb-3 pr-4">Post-Test Avg</th>
-                      <th className="pb-3 pr-4">Avg. Gain</th>
-                      <th className="pb-3 pr-4">Paired Students</th>
-                      <th className="pb-3">Improved</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {prePostComparison.map((row) => (
-                      <tr key={row.topic} className="border-b border-slate-50 last:border-none">
-                        <td className="py-3 pr-4 text-xs font-bold text-slate-700">
-                          {row.topic}
-                        </td>
-                        <td className="py-3 pr-4 text-xs font-black text-slate-500">
-                          {row.preAvg !== null ? `${row.preAvg}%` : "—"}
-                        </td>
-                        <td className="py-3 pr-4 text-xs font-black text-slate-500">
-                          {row.postAvg !== null ? `${row.postAvg}%` : "—"}
-                        </td>
-                        <td className="py-3 pr-4 text-xs font-black">
-                          {row.avgGain !== null ? (
-                            <span className={row.avgGain >= 0 ? "text-emerald-600" : "text-rose-500"}>
-                              {row.avgGain >= 0 ? "+" : ""}
-                              {row.avgGain}%
-                            </span>
-                          ) : (
-                            <span className="text-slate-300 font-bold">No pairs yet</span>
-                          )}
-                        </td>
-                        <td className="py-3 pr-4 text-xs font-black text-slate-900">
-                          {row.pairedCount}
-                        </td>
-                        <td className="py-3 text-xs font-black text-slate-900">
-                          {row.pairedCount > 0
-                            ? `${row.improvedCount}/${row.pairedCount}`
-                            : "—"}
                         </td>
                       </tr>
                     ))}
