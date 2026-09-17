@@ -4,8 +4,8 @@ import { supabase } from '../../lib/supabase';
 import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
 import { usePagination } from '../../hooks/usePagination';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -348,35 +348,47 @@ export default function UserManagement() {
       return;
     }
 
-    const rows = filteredUsers.map((user) => ({
-      Name: user.name || '',
-      Email: user.email || '',
-      Role: user.role || '',
-      'Student ID': user.student_id || '',
-      Campus: user.campus || '',
-      Program: user.program || '',
-      'Year Level': user.year_level || '',
-      Status: user.status || '',
-      Age: user.age ?? '',
-      Gender: user.gender || '',
-      PWD: user.is_pwd ? 'Yes' : 'No',
-      'Indigenous Person': user.is_ip ? 'Yes' : 'No',
-      'Date Registered': user.created_at ? new Date(user.created_at).toLocaleDateString() : '',
-    }));
+    const rows = filteredUsers.map((user) => [
+      user.name || '',
+      user.student_id || '',
+      user.email || '',
+      user.role || '',
+      user.campus || '',
+      user.program || '',
+      user.year_level ?? '',
+      user.age ?? '',
+      user.gender || '',
+      user.status || '',
+      user.is_pwd ? 'Yes' : 'No',
+      user.is_ip ? 'Yes' : 'No',
+      user.created_at ? new Date(user.created_at).toLocaleDateString() : '',
+    ]);
 
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    worksheet['!cols'] = Object.keys(rows[0]).map(() => ({ wch: 18 }));
+    const doc = new jsPDF({ orientation: 'landscape' }) as any;
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Users');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text('OMSU GUIDANCE AND TESTING CENTER', 14, 18);
+    doc.setFontSize(12);
+    doc.text('User Directory', 14, 26);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 33);
+    doc.text(`Records: ${filteredUsers.length}`, 14, 38);
 
-    const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([buffer], { type: 'application/octet-stream' });
-    saveAs(blob, `OMSU_Users_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    autoTable(doc, {
+      startY: 44,
+      head: [['Name', 'Student ID', 'Email', 'Role', 'Campus', 'Program', 'Year', 'Age', 'Gender', 'Status', 'PWD', 'IP', 'Registered']],
+      body: rows,
+      headStyles: { fillColor: [30, 41, 59] },
+      styles: { fontSize: 7, cellPadding: 2 },
+    });
+
+    doc.save(`OMSU_Users_${new Date().toISOString().slice(0, 10)}.pdf`);
 
     toast({
       title: "Export Ready",
-      description: `${filteredUsers.length} user(s) exported to Excel.`,
+      description: `${filteredUsers.length} user(s) exported to PDF.`,
       className: "bg-indigo-600 text-white font-black rounded-2xl"
     });
   };
@@ -436,7 +448,7 @@ export default function UserManagement() {
             className="h-12 rounded-2xl px-6 border-slate-200 text-slate-700 hover:bg-slate-50 font-black uppercase text-[10px] tracking-widest"
           >
             <Download className="w-4 h-4 mr-2" />
-            Export Users
+            Export PDF
           </Button>
           <Button
             onClick={() => setShowAddStaff(true)}
