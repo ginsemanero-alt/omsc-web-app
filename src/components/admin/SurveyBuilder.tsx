@@ -3,6 +3,7 @@ import { supabase } from "../../lib/supabase";
 import { logActivity } from "../../lib/activityLog";
 import { notifyStudents } from "../../lib/notifyStudents";
 import { useAuth } from "../../hooks/useAuth";
+import { IEC_CATEGORIES } from "../../lib/iecCategories";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -59,6 +60,12 @@ type Survey = {
   title: string;
   description?: string | null;
   category?: string | null;
+  // Separate from `category` (the 6 Guidance Services, kept aligned with
+  // programs.guidance_service — see the CATEGORIES comment below).
+  // iec_category uses the 8-value IEC Categories scheme instead, the
+  // same one materials.category uses, so a survey can be tied to the
+  // materials covering the same topic. Optional — PHASE 13 migration.
+  iec_category?: string | null;
   type: SurveyType;
   status: "draft" | "active" | "closed";
   questions_data: Question[];
@@ -253,6 +260,11 @@ export default function SurveyBuilder() {
       const title = String(formData.get("title") || "").trim();
       const description = String(formData.get("description") || "").trim();
       const category = String(formData.get("category") || "");
+      // "" from the "No IEC Category" option must be null, not an empty
+      // string — the CHECK constraint only allows NULL or one of the 8
+      // IEC Categories.
+      const iecCategoryRaw = String(formData.get("iec_category") || "");
+      const iecCategory = iecCategoryRaw === "" ? null : iecCategoryRaw;
       const type = String(formData.get("type") || "opinion") as SurveyType;
 
       if (!title) {
@@ -269,6 +281,7 @@ export default function SurveyBuilder() {
           title,
           description,
           category,
+          iec_category: iecCategory,
           type,
           status: "draft",
           questions_data: [],
@@ -345,19 +358,25 @@ export default function SurveyBuilder() {
   }
 
   async function updateSurveyInfo(
-    field: "title" | "description" | "category" | "type",
+    field: "title" | "description" | "category" | "iec_category" | "type",
     value: string
   ) {
     if (!editingSurvey) return;
 
+    // iec_category is optional — its CHECK constraint only allows NULL
+    // or one of the 8 IEC Categories, not an empty string, so "No IEC
+    // Category" (value === "") has to be stored as null.
+    const storedValue: string | null =
+      field === "iec_category" && value === "" ? null : value;
+
     setEditingSurvey({
       ...editingSurvey,
-      [field]: value,
+      [field]: storedValue,
     });
 
     await supabase
       .from("surveys")
-      .update({ [field]: value })
+      .update({ [field]: storedValue })
       .eq("id", editingSurvey.id);
   }
 
@@ -759,6 +778,33 @@ export default function SurveyBuilder() {
                 >
                   {CATEGORIES.map((category) => (
                     <option key={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+
+                <label className="text-[9px] font-black uppercase text-indigo-200 mt-5 block">
+                  IEC Category
+                </label>
+
+                {/* Separate from Survey Category above (the 6 Guidance
+                    Services, tied to programs) — this uses the same
+                    8-value scheme as materials.category, so a survey
+                    can be tied to the IEC materials on the same topic.
+                    Optional: no "required" default forced here. */}
+                <select
+                  value={editingSurvey.iec_category || ""}
+                  onChange={(e) =>
+                    updateSurveyInfo(
+                      "iec_category",
+                      e.target.value
+                    )
+                  }
+                  className="mt-2 w-full h-11 rounded-xl bg-white text-slate-800 px-3 font-bold text-xs outline-none"
+                >
+                  <option value="">No IEC Category</option>
+                  {IEC_CATEGORIES.map((category) => (
+                    <option key={category} value={category}>
                       {category}
                     </option>
                   ))}
@@ -1493,6 +1539,28 @@ export default function SurveyBuilder() {
                 >
                   {CATEGORIES.map((category) => (
                     <option key={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-black text-slate-600">
+                  IEC Category
+                </label>
+
+                {/* Optional, unlike Category above — no defaultValue, so
+                    "No IEC Category" is the default and createSurvey()
+                    stores null rather than an empty string. */}
+                <select
+                  name="iec_category"
+                  defaultValue=""
+                  className="mt-2 w-full h-12 rounded-xl bg-slate-50 px-4 text-sm font-bold outline-none"
+                >
+                  <option value="">No IEC Category</option>
+                  {IEC_CATEGORIES.map((category) => (
+                    <option key={category} value={category}>
                       {category}
                     </option>
                   ))}

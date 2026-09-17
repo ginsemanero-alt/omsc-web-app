@@ -4,6 +4,7 @@ import { compressImageFile } from '../../lib/imageCompress';
 import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
 import { usePagination } from '../../hooks/usePagination';
+import { IEC_CATEGORIES } from '../../lib/iecCategories';
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a PDF preview.
 const PdfPreview = lazy(() => import('../shared/PdfPreview'));
@@ -53,17 +54,6 @@ import {
 } from 'lucide-react';
 
 type MaterialType = 'PDF' | 'Image' | 'Video' | 'Audio' | 'Link';
-
-const IEC_CATEGORIES = [
-  'Guidance Services',
-  'Academic Development',
-  'Career Development',
-  'Personal & Social Development',
-  'Mental Health & Wellness',
-  'Psychological Testing & Assessment',
-  'Safe & Positive Learning Environment',
-  'Student Programs & Resources',
-] as const;
 
 const PROGRAM_COMPONENTS = [
   'Group Guidance',

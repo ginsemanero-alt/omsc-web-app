@@ -575,3 +575,26 @@ CREATE POLICY activity_logs_insert ON activity_logs
     is_admin()
     OR (action IN ('login', 'logout', 'view') AND actor_email = (auth.jwt() ->> 'email'))
   );
+
+-- ------------------------------------------------------------
+-- PHASE 13 — Let a survey carry an IEC category too
+--
+-- surveys.category uses the 6 Guidance Services (CATEGORIES in
+-- SurveyBuilder.tsx) so it lines up with programs.guidance_service via
+-- related_program_id — that link stays as-is. materials.category uses
+-- a completely different 8-value IEC Categories scheme (IEC_CATEGORIES,
+-- now shared from src/lib/iecCategories.ts), so a survey could never be
+-- tied to the materials covering the same topic. Adds a second,
+-- optional column instead of repurposing the existing one.
+-- ------------------------------------------------------------
+
+ALTER TABLE surveys ADD COLUMN IF NOT EXISTS iec_category text;
+
+ALTER TABLE surveys DROP CONSTRAINT IF EXISTS surveys_iec_category_check;
+ALTER TABLE surveys ADD CONSTRAINT surveys_iec_category_check
+  CHECK (iec_category IS NULL OR iec_category IN (
+    'Guidance Services', 'Academic Development', 'Career Development',
+    'Personal & Social Development', 'Mental Health & Wellness',
+    'Psychological Testing & Assessment',
+    'Safe & Positive Learning Environment', 'Student Programs & Resources'
+  ));

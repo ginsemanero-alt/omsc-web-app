@@ -26,9 +26,17 @@ import {
   HardDrive,
 } from "lucide-react";
 import { Input } from "../components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 import { supabase } from "../lib/supabase"; // 🌟 Ligtas na pipeline fallback
 import { usePagination } from "../hooks/usePagination";
 import { PaginationControls } from "../components/ui/pagination-controls";
+import { IEC_CATEGORIES } from "../lib/iecCategories";
 
 const MATERIALS_PAGE_SIZE = 9;
 
@@ -40,12 +48,14 @@ interface Material {
   thumbnail: string;
   url: string;
   downloads?: number;
+  category?: string | null;
 }
 
 const MaterialsPage: React.FC = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All");
   const [previewItem, setPreviewItem] = useState<Material | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
@@ -74,7 +84,8 @@ const MaterialsPage: React.FC = () => {
             description: m.description || "No description provided.",
             thumbnail: m.thumbnail || m.preview_url || "",
             url: m.url || m.file_url || "#",
-            downloads: m.downloads || m.view_count || 0
+            downloads: m.downloads || m.view_count || 0,
+            category: m.category || null,
           }));
 
           setMaterials(mappedMaterials);
@@ -170,8 +181,9 @@ const MaterialsPage: React.FC = () => {
   };
 
   const filteredMaterials = materials.filter(m =>
-    m.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.description.toLowerCase().includes(searchTerm.toLowerCase())
+    (m.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.description.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    (selectedCategory === "All" || m.category === selectedCategory)
   );
 
   const {
@@ -183,7 +195,7 @@ const MaterialsPage: React.FC = () => {
 
   useEffect(() => {
     setMaterialsPage(1);
-  }, [searchTerm]);
+  }, [searchTerm, selectedCategory]);
 
   return (
     <div className="w-full py-8 md:py-20 bg-slate-50 min-h-screen font-sans">
@@ -212,6 +224,21 @@ const MaterialsPage: React.FC = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+        </div>
+
+        {/* --- IEC CATEGORY FILTER --- */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-8 md:mb-10">
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger className="w-full sm:w-72 h-12 rounded-2xl border-none shadow-sm bg-white font-bold text-slate-600 uppercase text-[10px] tracking-widest">
+              <SelectValue placeholder="IEC Category" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl border-none shadow-xl bg-white">
+              <SelectItem value="All">All IEC Categories</SelectItem>
+              {IEC_CATEGORIES.map((category) => (
+                <SelectItem key={category} value={category}>{category}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* --- CONTENT GRID --- */}
@@ -261,6 +288,9 @@ const MaterialsPage: React.FC = () => {
                   </div>
 
                   <div className="p-6 md:p-8 flex flex-col flex-grow space-y-3">
+                    <Badge className="w-fit border-none font-black uppercase text-[8px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-600">
+                      {material.category || 'General Guidance'}
+                    </Badge>
                     <h3 className="text-xl md:text-2xl font-black uppercase tracking-tighter leading-tight text-slate-900 line-clamp-2">
                       {material.title}
                     </h3>

@@ -9,6 +9,7 @@ import { PaginationControls } from '../../components/ui/pagination-controls';
 import { usePagination } from '../../hooks/usePagination';
 import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
+import { IEC_CATEGORIES } from '../../lib/iecCategories';
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a PDF preview.
 const PdfPreview = lazy(() => import('../shared/PdfPreview'));
@@ -39,7 +40,8 @@ export default function IECMaterials() {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  
+  const [selectedCategory, setSelectedCategory] = useState('All');
+
   const [previewItem, setPreviewItem] = useState<any>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
@@ -90,29 +92,34 @@ export default function IECMaterials() {
     }
   }
 
+  // Once per material per browser session, same reasoning as the
+  // Programs & Activities page view log (PHASE 12) — an admin wants to
+  // know who opened what and when, not a row for every re-open of a
+  // preview or repeat download of something already opened. Called from
+  // BOTH handlePreview and the download handler (the primary button on
+  // an infographic card is Download, not Preview, so a student who never
+  // previews would otherwise never show up here at all), sharing one
+  // sessionStorage flag so doing both in one session still logs once.
+  const logMaterialView = (item: any) => {
+    if (!user?.email) return;
+    const flagKey = `logged_material_view_${item.id}`;
+    if (sessionStorage.getItem(flagKey)) return;
+    sessionStorage.setItem(flagKey, '1');
+    logActivity({
+      actorEmail: user.email,
+      actorName: authUserName,
+      action: 'view',
+      entityType: 'material',
+      entityId: item.id,
+      entityLabel: item.title,
+      details: `category: ${item.category ?? 'Unknown'}`,
+    });
+  };
+
   const handlePreview = (item: any) => {
     setPreviewItem(item);
     setIsPreviewOpen(true);
-
-    // Once per material per browser session, same reasoning as the
-    // Programs & Activities page view log (PHASE 12) — an admin wants to
-    // know who opened what and when, not a row for every re-open of a
-    // preview modal already on screen.
-    if (user?.email) {
-      const flagKey = `logged_material_view_${item.id}`;
-      if (!sessionStorage.getItem(flagKey)) {
-        sessionStorage.setItem(flagKey, '1');
-        logActivity({
-          actorEmail: user.email,
-          actorName: authUserName,
-          action: 'view',
-          entityType: 'material',
-          entityId: item.id,
-          entityLabel: item.title,
-          details: `campus: ${localStorage.getItem('userCampus') || 'Unknown'}`,
-        });
-      }
-    }
+    logMaterialView(item);
   };
 
   const downloadFile = async (url: string, filename: string) => {
@@ -145,7 +152,8 @@ export default function IECMaterials() {
   };
 
   const filteredData = materials.filter(m =>
-    m.title?.toLowerCase().includes(searchQuery.toLowerCase())
+    m.title?.toLowerCase().includes(searchQuery.toLowerCase()) &&
+    (selectedCategory === 'All' || m.category === selectedCategory)
   );
 
   // --- FILTERS ---
@@ -184,7 +192,7 @@ export default function IECMaterials() {
     setVideosPage(1);
     setAudioPage(1);
     setLinksPage(1);
-  }, [searchQuery]);
+  }, [searchQuery, selectedCategory]);
 
   // Helper function to format YouTube URLs for iframe
   const getYouTubeEmbedUrl = (url: string) => {
@@ -212,14 +220,27 @@ export default function IECMaterials() {
           </p>
         </div>
 
-        <div className="relative w-full md:w-80 group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <Input
-            placeholder="Search materials..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-11 h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20"
-          />
+        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+          <div className="relative w-full md:w-80 group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              placeholder="Search materials..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-11 h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20"
+            />
+          </div>
+
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="h-12 px-4 bg-slate-50 dark:bg-slate-800 dark:text-white border-none rounded-2xl font-bold text-sm text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/20"
+          >
+            <option value="All">All IEC Categories</option>
+            {IEC_CATEGORIES.map((category) => (
+              <option key={category} value={category}>{category}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -265,6 +286,7 @@ export default function IECMaterials() {
                       <FileText className="w-8 h-8 text-indigo-600" />
                     </div>
                     <div className="flex-1 min-w-0">
+                      <MaterialCategoryBadge category={item.category} />
                       <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-1">{item.title}</h3>
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{item.format || 'Document'}</p>
                       {item.description && (
@@ -281,7 +303,7 @@ export default function IECMaterials() {
                         <Button onClick={() => handlePreview(item)} className="flex-1 min-w-[90px] h-11 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs">
                           <Eye className="w-3 h-3 mr-2 shrink-0" /> Preview
                         </Button>
-                        <Button onClick={() => { downloadFile(item.file_url, item.title); incrementDownloadCount(item.id); }} variant="outline" className="flex-1 min-w-[90px] h-11 border-slate-200 dark:border-slate-700 rounded-xl font-black uppercase text-xs">
+                        <Button onClick={() => { downloadFile(item.file_url, item.title); incrementDownloadCount(item.id); logMaterialView(item); }} variant="outline" className="flex-1 min-w-[90px] h-11 border-slate-200 dark:border-slate-700 rounded-xl font-black uppercase text-xs">
                           <Download className="w-3 h-3 mr-2 shrink-0" /> Save
                         </Button>
                       </div>
@@ -328,11 +350,12 @@ export default function IECMaterials() {
                     </button>
                   </div>
                   <div className="p-6">
+                    <MaterialCategoryBadge category={item.category} />
                     <h3 className="font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-1">{item.title}</h3>
                     {item.description && (
                       <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">{item.description}</p>
                     )}
-                    <Button onClick={() => { downloadFile(item.file_url, item.title); incrementDownloadCount(item.id); }} className="w-full h-12 bg-slate-900 hover:bg-indigo-600 rounded-2xl font-black uppercase text-xs">
+                    <Button onClick={() => { downloadFile(item.file_url, item.title); incrementDownloadCount(item.id); logMaterialView(item); }} className="w-full h-12 bg-slate-900 hover:bg-indigo-600 rounded-2xl font-black uppercase text-xs">
                       <Download className="w-4 h-4 mr-2" /> Download
                     </Button>
                   </div>
@@ -352,6 +375,7 @@ export default function IECMaterials() {
                       <Youtube className="w-10 h-10 text-red-600" />
                     </div>
                     <div className="flex-1">
+                      <MaterialCategoryBadge category={item.category} />
                       <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 uppercase mb-1">{item.title}</h3>
                       {item.description && (
                         <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">{item.description}</p>
@@ -377,6 +401,7 @@ export default function IECMaterials() {
                       <Music className="w-8 h-8 text-purple-600" />
                     </div>
                     <div className="flex-1 min-w-0">
+                      <MaterialCategoryBadge category={item.category} />
                       <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-1">{item.title}</h3>
                       {item.description && (
                         <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3">{item.description}</p>
@@ -400,6 +425,7 @@ export default function IECMaterials() {
                       <LinkIcon className="w-8 h-8 text-indigo-600" />
                     </div>
                     <div className="flex-1 min-w-0">
+                      <MaterialCategoryBadge category={item.category} />
                       <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-1">{item.title}</h3>
                       {item.description && (
                         <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">{item.description}</p>
@@ -507,7 +533,7 @@ export default function IECMaterials() {
             {previewItem?.type !== 'Link' &&
               !previewItem?.file_url?.includes('youtube') &&
               !previewItem?.file_url?.includes('youtu.be') && (
-              <Button onClick={() => { downloadFile(previewItem.file_url, previewItem.title); incrementDownloadCount(previewItem.id); }} className="bg-indigo-600 rounded-xl font-black uppercase text-[10px] px-6 text-white">
+              <Button onClick={() => { downloadFile(previewItem.file_url, previewItem.title); incrementDownloadCount(previewItem.id); logMaterialView(previewItem); }} className="bg-indigo-600 rounded-xl font-black uppercase text-[10px] px-6 text-white">
                 Download Resource
               </Button>
             )}
@@ -515,6 +541,17 @@ export default function IECMaterials() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// Same badge style as MaterialCategory in admin's MaterialLibrary.tsx —
+// not imported from there since that component isn't exported, but kept
+// visually identical so a category means the same thing in both places.
+function MaterialCategoryBadge({ category }: { category?: string | null }) {
+  return (
+    <span className="inline-block px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-black uppercase text-[8px] tracking-wider rounded mb-1.5">
+      {category || 'General Guidance'}
+    </span>
   );
 }
 
