@@ -27,6 +27,10 @@ import {
 } from "lucide-react";
 import { Input } from "../components/ui/input";
 import { supabase } from "../lib/supabase"; // 🌟 Ligtas na pipeline fallback
+import { usePagination } from "../hooks/usePagination";
+import { PaginationControls } from "../components/ui/pagination-controls";
+
+const MATERIALS_PAGE_SIZE = 9;
 
 interface Material {
   id: number;
@@ -170,6 +174,17 @@ const MaterialsPage: React.FC = () => {
     m.description.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const {
+    page: materialsPage,
+    setPage: setMaterialsPage,
+    totalPages: materialsTotalPages,
+    pageItems: pagedMaterials,
+  } = usePagination(filteredMaterials, MATERIALS_PAGE_SIZE);
+
+  useEffect(() => {
+    setMaterialsPage(1);
+  }, [searchTerm]);
+
   return (
     <div className="w-full py-8 md:py-20 bg-slate-50 min-h-screen font-sans">
       <div className="max-w-[1200px] mx-auto px-4 md:px-6">
@@ -206,8 +221,9 @@ const MaterialsPage: React.FC = () => {
             <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Loading...</p>
           </div>
         ) : filteredMaterials.length > 0 ? (
+          <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-            {filteredMaterials.map((material) => {
+            {pagedMaterials.map((material) => {
               const TypeIcon = getTypeIcon(material.type);
               const image = isImage(material);
               const audio = isAudio(material);
@@ -273,6 +289,15 @@ const MaterialsPage: React.FC = () => {
               );
             })}
           </div>
+          <PaginationControls
+            page={materialsPage}
+            totalPages={materialsTotalPages}
+            totalItems={filteredMaterials.length}
+            pageSize={MATERIALS_PAGE_SIZE}
+            onPageChange={setMaterialsPage}
+            className="mt-8 md:mt-10 bg-white p-4 rounded-2xl shadow-sm"
+          />
+          </>
         ) : (
           <div className="text-center py-16 md:py-24 bg-white rounded-[2rem] md:rounded-[3rem] shadow-sm border-2 border-dashed border-slate-200 px-6">
             <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-xs md:text-sm">

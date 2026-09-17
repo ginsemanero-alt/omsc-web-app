@@ -5,9 +5,13 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import { PaginationControls } from '../../components/ui/pagination-controls';
+import { usePagination } from '../../hooks/usePagination';
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a PDF preview.
 const PdfPreview = lazy(() => import('../shared/PdfPreview'));
+
+const MATERIALS_PAGE_SIZE = 12;
 import {
   FileText,
   Image as ImageIcon,
@@ -143,6 +147,22 @@ export default function IECMaterials() {
 
   const links = filteredData.filter(m => m.type === 'Link');
 
+  // Each tab paginates independently — switching tabs shows a completely
+  // different list.
+  const { page: articlesPage, setPage: setArticlesPage, totalPages: articlesTotalPages, pageItems: pagedArticles } = usePagination(articles, MATERIALS_PAGE_SIZE);
+  const { page: infographicsPage, setPage: setInfographicsPage, totalPages: infographicsTotalPages, pageItems: pagedInfographics } = usePagination(infographics, MATERIALS_PAGE_SIZE);
+  const { page: videosPage, setPage: setVideosPage, totalPages: videosTotalPages, pageItems: pagedVideos } = usePagination(videos, MATERIALS_PAGE_SIZE);
+  const { page: audioPage, setPage: setAudioPage, totalPages: audioTotalPages, pageItems: pagedAudio } = usePagination(audioItems, MATERIALS_PAGE_SIZE);
+  const { page: linksPage, setPage: setLinksPage, totalPages: linksTotalPages, pageItems: pagedLinks } = usePagination(links, MATERIALS_PAGE_SIZE);
+
+  useEffect(() => {
+    setArticlesPage(1);
+    setInfographicsPage(1);
+    setVideosPage(1);
+    setAudioPage(1);
+    setLinksPage(1);
+  }, [searchQuery]);
+
   // Helper function to format YouTube URLs for iframe
   const getYouTubeEmbedUrl = (url: string) => {
     if (!url) return '';
@@ -213,8 +233,9 @@ export default function IECMaterials() {
         ) : (
           <>
             {/* ARTICLES TAB */}
-            <TabsContent value="articles" className="grid grid-cols-1 md:grid-cols-2 gap-6 outline-none">
-              {articles.length > 0 ? articles.map((item) => (
+            <TabsContent value="articles" className="outline-none">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {articles.length > 0 ? pagedArticles.map((item) => (
                 <Card key={item.id} className="p-6 bg-white dark:bg-slate-900 border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all group">
                   <div className="flex gap-5">
                     <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-50 transition-colors">
@@ -245,11 +266,14 @@ export default function IECMaterials() {
                   </div>
                 </Card>
               )) : <EmptyState message="No articles found" />}
+            </div>
+            <PaginationControls page={articlesPage} totalPages={articlesTotalPages} totalItems={articles.length} pageSize={MATERIALS_PAGE_SIZE} onPageChange={setArticlesPage} className="mt-6" />
             </TabsContent>
 
             {/* INFOGRAPHICS TAB */}
-            <TabsContent value="infographics" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 outline-none">
-              {infographics.length > 0 ? infographics.map((item) => (
+            <TabsContent value="infographics" className="outline-none">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {infographics.length > 0 ? pagedInfographics.map((item) => (
                 <Card key={item.id} className="overflow-hidden bg-white dark:bg-slate-900 border-none shadow-sm rounded-[2.5rem] group hover:shadow-2xl transition-all duration-500">
                   <div
                     className="relative h-64 bg-slate-100 dark:bg-slate-800 overflow-hidden cursor-pointer"
@@ -291,11 +315,14 @@ export default function IECMaterials() {
                   </div>
                 </Card>
               )) : <EmptyState message="No infographics found" />}
+            </div>
+            <PaginationControls page={infographicsPage} totalPages={infographicsTotalPages} totalItems={infographics.length} pageSize={MATERIALS_PAGE_SIZE} onPageChange={setInfographicsPage} className="mt-6" />
             </TabsContent>
 
             {/* VIDEOS TAB */}
-            <TabsContent value="videos" className="grid grid-cols-1 md:grid-cols-2 gap-6 outline-none">
-              {videos.length > 0 ? videos.map((item) => (
+            <TabsContent value="videos" className="outline-none">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {videos.length > 0 ? pagedVideos.map((item) => (
                 <Card key={item.id} className="p-8 bg-white dark:bg-slate-900 border-none shadow-sm rounded-[2.5rem] group">
                   <div className="flex items-center gap-6">
                     <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center">
@@ -313,11 +340,14 @@ export default function IECMaterials() {
                   </div>
                 </Card>
               )) : <EmptyState message="No videos found" />}
+            </div>
+            <PaginationControls page={videosPage} totalPages={videosTotalPages} totalItems={videos.length} pageSize={MATERIALS_PAGE_SIZE} onPageChange={setVideosPage} className="mt-6" />
             </TabsContent>
 
             {/* AUDIO TAB */}
-            <TabsContent value="audio" className="grid grid-cols-1 md:grid-cols-2 gap-6 outline-none">
-              {audioItems.length > 0 ? audioItems.map((item) => (
+            <TabsContent value="audio" className="outline-none">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {audioItems.length > 0 ? pagedAudio.map((item) => (
                 <Card key={item.id} className="p-6 bg-white dark:bg-slate-900 border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all group">
                   <div className="flex items-center gap-5">
                     <div className="w-16 h-16 bg-purple-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-purple-100 transition-colors">
@@ -333,11 +363,14 @@ export default function IECMaterials() {
                   </div>
                 </Card>
               )) : <EmptyState message="No audio resources found" />}
+            </div>
+            <PaginationControls page={audioPage} totalPages={audioTotalPages} totalItems={audioItems.length} pageSize={MATERIALS_PAGE_SIZE} onPageChange={setAudioPage} className="mt-6" />
             </TabsContent>
 
             {/* LINKS TAB */}
-            <TabsContent value="links" className="grid grid-cols-1 md:grid-cols-2 gap-6 outline-none">
-              {links.length > 0 ? links.map((item) => (
+            <TabsContent value="links" className="outline-none">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {links.length > 0 ? pagedLinks.map((item) => (
                 <Card key={item.id} className="p-6 bg-white dark:bg-slate-900 border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all group">
                   <div className="flex items-center gap-5">
                     <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-100 transition-colors">
@@ -360,6 +393,8 @@ export default function IECMaterials() {
                   </div>
                 </Card>
               )) : <EmptyState message="No linked resources found" />}
+            </div>
+            <PaginationControls page={linksPage} totalPages={linksTotalPages} totalItems={links.length} pageSize={MATERIALS_PAGE_SIZE} onPageChange={setLinksPage} className="mt-6" />
             </TabsContent>
           </>
         )}

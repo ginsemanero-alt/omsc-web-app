@@ -5,7 +5,9 @@ import { logActivity } from '../../lib/activityLog';
 import { formatProgramDate } from '../../lib/formatProgramDate';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
 import { useAuth } from '../../hooks/useAuth';
+import { usePagination } from '../../hooks/usePagination';
 import { Card } from '../../components/ui/card';
+import { PaginationControls } from '../../components/ui/pagination-controls';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { useToast } from '../../hooks/use-toast';
@@ -25,6 +27,8 @@ import {
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a handout PDF preview.
 const PdfPreview = lazy(() => import('../shared/PdfPreview'));
+
+const PROGRAMS_PAGE_SIZE = 8;
 
 export default function ProgramManagement() {
   const { toast } = useToast();
@@ -275,6 +279,22 @@ export default function ProgramManagement() {
     }
   };
 
+  const filteredPrograms = programs
+    .filter(p => p.title?.toLowerCase().includes(searchQuery.toLowerCase()))
+    .slice()
+    .sort(compareProgramsForDisplay);
+
+  const {
+    page: programsPage,
+    setPage: setProgramsPage,
+    totalPages: programsTotalPages,
+    pageItems: pagedPrograms,
+  } = usePagination(filteredPrograms, PROGRAMS_PAGE_SIZE);
+
+  useEffect(() => {
+    setProgramsPage(1);
+  }, [searchQuery]);
+
   return (
     <div className="space-y-6 md:space-y-8 p-4 md:p-6 pb-20 max-w-[1400px] mx-auto font-sans w-full overflow-hidden animate-in fade-in duration-300">
       
@@ -315,11 +335,7 @@ export default function ProgramManagement() {
 
       {/* GRID */}
       <div className="grid grid-cols-1 gap-4 md:gap-6">
-        {programs
-          .filter(p => p.title?.toLowerCase().includes(searchQuery.toLowerCase()))
-          .slice()
-          .sort(compareProgramsForDisplay)
-          .map((program) => {
+        {pagedPrograms.map((program) => {
           const effectiveStatus = getEffectiveProgramStatus(program);
           const normalHandouts = program.materials?.filter((m: any) => !m.title?.startsWith('CERTIFICATE_TEMPLATE:')) || [];
 
@@ -426,6 +442,15 @@ export default function ProgramManagement() {
           );
         })}
       </div>
+
+      <PaginationControls
+        page={programsPage}
+        totalPages={programsTotalPages}
+        totalItems={filteredPrograms.length}
+        pageSize={PROGRAMS_PAGE_SIZE}
+        onPageChange={setProgramsPage}
+        className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100"
+      />
 
       {/* CREATE MODAL */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

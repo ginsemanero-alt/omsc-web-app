@@ -3,11 +3,15 @@ import { supabase } from '../../lib/supabase';
 import { compressImageFile } from '../../lib/imageCompress';
 import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
+import { usePagination } from '../../hooks/usePagination';
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a PDF preview.
 const PdfPreview = lazy(() => import('../shared/PdfPreview'));
 
+const MATERIALS_PAGE_SIZE = 12;
+
 import { Card } from '../../components/ui/card';
+import { PaginationControls } from '../../components/ui/pagination-controls';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import {
@@ -945,6 +949,30 @@ export default function IECMaterials() {
       material.file_url?.includes('youtu.be')
   );
 
+  // Each tab paginates independently — switching tabs shows a completely
+  // different list, so there's no single "current page" that would make
+  // sense shared across all three.
+  const {
+    page: articlesPage, setPage: setArticlesPage,
+    totalPages: articlesTotalPages, pageItems: pagedArticles,
+  } = usePagination(articles, MATERIALS_PAGE_SIZE);
+
+  const {
+    page: infographicsPage, setPage: setInfographicsPage,
+    totalPages: infographicsTotalPages, pageItems: pagedInfographics,
+  } = usePagination(infographics, MATERIALS_PAGE_SIZE);
+
+  const {
+    page: videosPage, setPage: setVideosPage,
+    totalPages: videosTotalPages, pageItems: pagedVideos,
+  } = usePagination(videos, MATERIALS_PAGE_SIZE);
+
+  useEffect(() => {
+    setArticlesPage(1);
+    setInfographicsPage(1);
+    setVideosPage(1);
+  }, [normalizedSearch, selectedCategory, selectedComponent, selectedTag]);
+
   // =========================================================
   // RENDER
   // =========================================================
@@ -1075,10 +1103,11 @@ export default function IECMaterials() {
 
             <TabsContent
               value="articles"
-              className="grid grid-cols-1 md:grid-cols-2 gap-6 outline-none"
+              className="outline-none"
             >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {articles.length > 0 ? (
-                articles.map((item) => (
+                pagedArticles.map((item) => (
                   <Card
                     key={item.id}
                     className="p-6 bg-white border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all group relative"
@@ -1168,6 +1197,15 @@ export default function IECMaterials() {
               ) : (
                 <EmptyState message="No articles found" />
               )}
+            </div>
+            <PaginationControls
+              page={articlesPage}
+              totalPages={articlesTotalPages}
+              totalItems={articles.length}
+              pageSize={MATERIALS_PAGE_SIZE}
+              onPageChange={setArticlesPage}
+              className="mt-6"
+            />
             </TabsContent>
 
             {/* =====================================================
@@ -1176,10 +1214,11 @@ export default function IECMaterials() {
 
             <TabsContent
               value="infographics"
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 outline-none"
+              className="outline-none"
             >
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {infographics.length > 0 ? (
-                infographics.map((item) => {
+                pagedInfographics.map((item) => {
 
                   const imageUrl =
                     item.file_url ||
@@ -1269,6 +1308,15 @@ export default function IECMaterials() {
               ) : (
                 <EmptyState message="No infographics found" />
               )}
+            </div>
+            <PaginationControls
+              page={infographicsPage}
+              totalPages={infographicsTotalPages}
+              totalItems={infographics.length}
+              pageSize={MATERIALS_PAGE_SIZE}
+              onPageChange={setInfographicsPage}
+              className="mt-6"
+            />
             </TabsContent>
 
             {/* =====================================================
@@ -1277,10 +1325,11 @@ export default function IECMaterials() {
 
             <TabsContent
               value="videos"
-              className="grid grid-cols-1 md:grid-cols-2 gap-6 outline-none"
+              className="outline-none"
             >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {videos.length > 0 ? (
-                videos.map((item) => (
+                pagedVideos.map((item) => (
                   <Card
                     key={item.id}
                     className="p-8 bg-white border-none shadow-sm rounded-[2.5rem] group relative"
@@ -1353,6 +1402,15 @@ export default function IECMaterials() {
               ) : (
                 <EmptyState message="No videos found" />
               )}
+            </div>
+            <PaginationControls
+              page={videosPage}
+              totalPages={videosTotalPages}
+              totalItems={videos.length}
+              pageSize={MATERIALS_PAGE_SIZE}
+              onPageChange={setVideosPage}
+              className="mt-6"
+            />
             </TabsContent>
           </>
         )}

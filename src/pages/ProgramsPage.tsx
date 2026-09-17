@@ -13,6 +13,10 @@ import {
 import { supabase } from "../lib/supabase"; // 🌟 Ligtas na backend fallback core pipeline
 import { formatProgramDate } from "../lib/formatProgramDate";
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from "../lib/programStatus";
+import { usePagination } from "../hooks/usePagination";
+import { PaginationControls } from "../components/ui/pagination-controls";
+
+const PROGRAMS_PAGE_SIZE = 9;
 
 const GUIDANCE_SERVICES = [
   'Information Services',
@@ -108,6 +112,17 @@ const ProgramsPage: React.FC = () => {
     })
     .sort(compareProgramsForDisplay);
 
+  const {
+    page: programsPage,
+    setPage: setProgramsPage,
+    totalPages: programsTotalPages,
+    pageItems: pagedPrograms,
+  } = usePagination(filteredPrograms, PROGRAMS_PAGE_SIZE);
+
+  useEffect(() => {
+    setProgramsPage(1);
+  }, [searchTerm, guidanceServiceFilter, programComponentFilter]);
+
   return (
     <div className="w-full py-8 md:py-20 bg-slate-50 min-h-screen font-sans">
       <div className="max-w-[1200px] mx-auto px-4 md:px-6">
@@ -173,8 +188,9 @@ const ProgramsPage: React.FC = () => {
             </p>
           </div>
         ) : filteredPrograms.length > 0 ? (
+          <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-            {filteredPrograms.map((program) => {
+            {pagedPrograms.map((program) => {
               const isCompleted = getEffectiveProgramStatus(program) === 'completed';
               return (
               <Card
@@ -268,6 +284,15 @@ const ProgramsPage: React.FC = () => {
               );
             })}
           </div>
+          <PaginationControls
+            page={programsPage}
+            totalPages={programsTotalPages}
+            totalItems={filteredPrograms.length}
+            pageSize={PROGRAMS_PAGE_SIZE}
+            onPageChange={setProgramsPage}
+            className="mt-8 md:mt-10 bg-white p-4 rounded-2xl shadow-sm"
+          />
+          </>
         ) : (
           <div className="text-center py-16 md:py-24 bg-white rounded-[2rem] md:rounded-[3rem] shadow-sm border-2 border-dashed border-slate-200 px-6">
             <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-xs md:text-sm">

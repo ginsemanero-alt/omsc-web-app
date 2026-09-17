@@ -3,8 +3,12 @@ import { supabase } from '../../lib/supabase';
 import { Card } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { PaginationControls } from '../../components/ui/pagination-controls';
+import { usePagination } from '../../hooks/usePagination';
 import { Search, Loader2, History, PlusCircle, Pencil, Trash2, ShieldAlert, LogIn, LogOut, Eye } from 'lucide-react';
 import type { ActivityAction, ActivityEntityType } from '../../lib/activityLog';
+
+const LOGS_PAGE_SIZE = 20;
 
 interface LogRow {
   id: number;
@@ -85,6 +89,17 @@ export default function ActivityLog() {
     return matchesSearch && matchesAction && matchesEntity;
   });
 
+  const {
+    page: logsPage,
+    setPage: setLogsPage,
+    totalPages: logsTotalPages,
+    pageItems: pagedLogs,
+  } = usePagination(filteredLogs, LOGS_PAGE_SIZE);
+
+  useEffect(() => {
+    setLogsPage(1);
+  }, [searchQuery, actionFilter, entityFilter]);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div>
@@ -161,7 +176,7 @@ export default function ActivityLog() {
                 </p>
               </Card>
             ) : (
-              filteredLogs.map((log) => {
+              pagedLogs.map((log) => {
                 const style = ACTION_STYLE[log.action];
                 const Icon = style.Icon;
                 // Login/logout describe the actor's own session, not an
@@ -204,6 +219,15 @@ export default function ActivityLog() {
               })
             )}
           </div>
+
+          <PaginationControls
+            page={logsPage}
+            totalPages={logsTotalPages}
+            totalItems={filteredLogs.length}
+            pageSize={LOGS_PAGE_SIZE}
+            onPageChange={setLogsPage}
+            className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100"
+          />
         </>
       )}
     </div>

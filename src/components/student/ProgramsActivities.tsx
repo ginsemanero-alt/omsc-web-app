@@ -13,10 +13,14 @@ import { formatProgramDate } from '../../lib/formatProgramDate';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
 import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
+import { usePagination } from '../../hooks/usePagination';
+import { PaginationControls } from '../../components/ui/pagination-controls';
 
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a handout PDF preview.
 const PdfPreview = lazy(() => import('../shared/PdfPreview'));
+
+const PROGRAMS_PAGE_SIZE = 8;
 
 const GUIDANCE_SERVICES = [
   'Information Services',
@@ -136,6 +140,17 @@ export default function ProgramsActivities() {
     })
     .sort(compareProgramsForDisplay);
 
+  const {
+    page: programsPage,
+    setPage: setProgramsPage,
+    totalPages: programsTotalPages,
+    pageItems: pagedPrograms,
+  } = usePagination(filteredPrograms, PROGRAMS_PAGE_SIZE);
+
+  useEffect(() => {
+    setProgramsPage(1);
+  }, [searchQuery, guidanceServiceFilter, programComponentFilter]);
+
   if (loading) {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
@@ -191,7 +206,7 @@ export default function ProgramsActivities() {
 
       {/* RENDER CARDS GRID LOOP */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-        {filteredPrograms.map((program) => {
+        {pagedPrograms.map((program) => {
           const effectiveStatus = getEffectiveProgramStatus(program);
           return (
           <Card key={program.id} className="rounded-2xl md:rounded-[2.5rem] border-none shadow-sm bg-white dark:bg-slate-900 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex flex-col gap-6 border-b-4 border-b-slate-100 dark:border-b-slate-800">
@@ -294,6 +309,15 @@ export default function ProgramsActivities() {
           );
         })}
       </div>
+
+      <PaginationControls
+        page={programsPage}
+        totalPages={programsTotalPages}
+        totalItems={filteredPrograms.length}
+        pageSize={PROGRAMS_PAGE_SIZE}
+        onPageChange={setProgramsPage}
+        className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800"
+      />
 
       <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
         <DialogContent className="max-w-4xl w-[95vw] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl [&>button]:bg-black/50 [&>button]:rounded-full [&>button]:p-1.5 [&>button]:text-white [&>button]:opacity-100">
