@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { supabase } from '../../lib/supabase';
 import { compressImageFile } from '../../lib/imageCompress';
 import { logActivity } from '../../lib/activityLog';
+import { notifyStudents } from '../../lib/notifyStudents';
 import { formatProgramDate } from '../../lib/formatProgramDate';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
 import { useAuth } from '../../hooks/useAuth';
@@ -224,6 +225,7 @@ export default function ProgramManagement() {
         if (!data || data.length === 0) throw new Error("Failed to capture generated record primary key.");
         currentProgramId = data[0].id;
         logActivity({ actorEmail: user?.email, actorName: userName, action: 'create', entityType: 'program', entityId: currentProgramId, entityLabel: payload.title });
+        notifyStudents('program', payload.title, payload.content);
       }
 
       if (materialFile && currentProgramId) {

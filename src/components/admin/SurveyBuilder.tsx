@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { logActivity } from "../../lib/activityLog";
+import { notifyStudents } from "../../lib/notifyStudents";
 import { useAuth } from "../../hooks/useAuth";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
@@ -379,6 +380,12 @@ export default function SurveyBuilder() {
 
       if (error) throw error;
       logActivity({ actorEmail: user?.email, actorName: userName, action: "update", entityType: "survey", entityId: survey.id, entityLabel: survey.title, details: `status changed to "${newStatus}"` });
+
+      // Only on the moment a survey actually goes live for students —
+      // not draft creation, and not re-closing/re-opening later.
+      if (newStatus === "active") {
+        notifyStudents("survey", survey.title, survey.description);
+      }
 
       await fetchSurveys();
 

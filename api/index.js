@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import cors from 'cors';
 import bcrypt from 'bcryptjs'; // ← bcryptjs, hindi bcrypt (mas stable sa Vercel serverless)
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { Resend } from 'resend';
 
 
 const app = express();
@@ -85,6 +86,17 @@ const createStaffLimiter = rateLimit({
     handler: rateLimitHandler,
 });
 
+// Admin-session-gated, but a compromised admin token spamming this could
+// still mass-email every student repeatedly — cap it well below anything
+// a legitimate publishing workflow would ever hit.
+const notifyLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
+});
+
 // Light blanket cap on every /api/* route as a general safety net against
 // scripted abuse/scraping, on top of the stricter limiters above.
 const globalApiLimiter = rateLimit({
@@ -108,6 +120,21 @@ if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const supabaseAnon = createClient(supabaseUrl, supabaseAnonKey);
+
+// --- RESEND CONFIG (student email notifications) ---
+// Optional by design — set up after the rest of this feature was already
+// built, so its absence must never break Program/Survey publishing itself.
+// `resend` stays null until RESEND_API_KEY is set; every call site below
+// checks for that and just skips sending (with a console.warn) instead of
+// throwing. `onboarding@resend.dev` is Resend's own sandbox sender, which
+// works immediately with no domain verification — fine for getting this
+// running, but swap in a verified domain (RESEND_FROM_EMAIL) before this
+// is relied on for real.
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'OMSU Guidance <onboarding@resend.dev>';
+if (!resend) {
+    console.warn('⚠️  RESEND_API_KEY not set — student email notifications are disabled until it is configured.');
+}
 
 // --- ROUTES ---
 
@@ -372,6 +399,107 @@ app.post('/api/login', loginLimiter, async (req, res) => {
     } catch (err) {
         console.error("Login Error:", err.message);
         res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+// Fans out one email to every active student when the admin publishes a
+// new Program or activates a new Survey. Same admin-session-check shape
+// as /api/admin/create-staff — this sends real email to potentially every
+// student in the system, so it's gated the same way.
+app.post('/api/notify-students', notifyLimiter, async (req, res) => {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+    if (!token) {
+        return res.status(401).json({ message: "Missing authorization token" });
+    }
+
+    try {
+        const { data: { user: callerAuthUser }, error: callerError } = await supabase.auth.getUser(token);
+
+        if (callerError || !callerAuthUser?.email) {
+            return res.status(401).json({ message: "Invalid or expired session" });
+        }
+
+        const { data: callerRecord } = await supabase
+            .from('users')
+            .select('role')
+            .eq('email', callerAuthUser.email.toLowerCase())
+            .maybeSingle();
+
+        if (callerRecord?.role !== 'admin') {
+            return res.status(403).json({ message: "Only admins can send student notifications" });
+        }
+
+        if (!resend) {
+            console.warn('Skipped student notification — RESEND_API_KEY not configured.');
+            return res.status(200).json({ sent: 0, skipped: true, message: "Email notifications are not configured yet." });
+        }
+
+        const { type, title, details, actionPath } = req.body;
+        if (type !== 'program' && type !== 'survey') {
+            return res.status(400).json({ message: "type must be 'program' or 'survey'" });
+        }
+        if (!title?.trim()) {
+            return res.status(400).json({ message: "title is required" });
+        }
+
+        const { data: students, error: studentsError } = await supabase
+            .from('users')
+            .select('email')
+            .eq('role', 'student')
+            .eq('status', 'active');
+
+        if (studentsError) throw studentsError;
+
+        const recipients = [...new Set((students || []).map((s) => s.email).filter(Boolean))];
+        if (recipients.length === 0) {
+            return res.status(200).json({ sent: 0, message: "No active students to notify." });
+        }
+
+        const siteUrl = (process.env.SITE_URL || 'https://www.webguidance.online').replace(/\/$/, '');
+        const link = `${siteUrl}${actionPath || (type === 'program' ? '/student/programs' : '/student/survey')}`;
+        const subject = type === 'program'
+            ? `New Guidance Program: ${title}`
+            : `New Survey Available: ${title}`;
+        const html = `
+            <div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; color: #1e293b;">
+                <h2 style="color: #4f46e5; margin-bottom: 4px;">${subject}</h2>
+                <p style="color: #475569; line-height: 1.6;">${(details || '').trim() || `A new ${type === 'program' ? 'guidance program' : 'survey'} titled "${title}" has just been posted.`}</p>
+                <p style="margin: 24px 0;">
+                    <a href="${link}" style="display:inline-block;background:#4f46e5;color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:bold;">
+                        View on the Portal
+                    </a>
+                </p>
+                <p style="color:#94a3b8;font-size:12px;">OMSU Guidance System — you're receiving this because you have an active student account.</p>
+            </div>
+        `;
+
+        // Resend's batch endpoint tops out at 100 emails per call.
+        const BATCH_SIZE = 100;
+        let sentCount = 0;
+        for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+            const chunk = recipients.slice(i, i + BATCH_SIZE);
+            const { error: sendError } = await resend.batch.send(
+                chunk.map((email) => ({
+                    from: RESEND_FROM,
+                    to: email,
+                    subject,
+                    html,
+                }))
+            );
+
+            if (sendError) {
+                console.error('Resend batch send error:', sendError);
+            } else {
+                sentCount += chunk.length;
+            }
+        }
+
+        res.status(200).json({ sent: sentCount, total: recipients.length });
+    } catch (error) {
+        console.error("Notify Students Error:", error.message);
+        res.status(500).json({ message: error.message });
     }
 });
 
