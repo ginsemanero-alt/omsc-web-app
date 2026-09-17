@@ -1330,6 +1330,80 @@ export default function AnalyticsDashboard() {
   }, [programs, scoredSurveyResponses, surveys]);
 
   /* =======================================================
+     PROGRAM PARTICIPATION BY COURSE
+
+     Answers the "which academic course hasn't been reached by
+     guidance?" question — something Guidance Service Coverage above
+     can't, since that only measures gaps between the 6 service
+     *categories*, not academic courses. Reads a checkbox question
+     whose options are mapped to programs via option_program_ids (e.g.
+     "Which of these programs have you participated in?" with a
+     "None of the above" option left deliberately unmapped). A
+     respondent who picked zero mapped options counts as "not reached,"
+     grouped by their own academic program from `profiles.program`.
+  ======================================================= */
+
+  const programParticipationByCourse = useMemo(() => {
+    const perStudent: Record<string, { reached: boolean; course: string }> = {};
+
+    filteredSurveyResponses.forEach((response) => {
+      const survey = surveys.find(
+        (s) => safeString(s.id) === safeString(response.survey_id)
+      );
+      const questions = Array.isArray(survey?.questions_data)
+        ? survey!.questions_data
+        : [];
+
+      questions.forEach((question: any) => {
+        const optionProgramIds = question?.option_program_ids;
+        if (
+          question?.type !== "checkbox" ||
+          !optionProgramIds ||
+          Object.keys(optionProgramIds).length === 0
+        ) {
+          return;
+        }
+
+        const studentId =
+          userIdToStudentId[safeString(response.user_id)] ||
+          safeString(response.student_id);
+        if (!studentId) return;
+
+        const profile = profileByStudentId[studentId];
+        const course = safeString(profile?.program) || "Not Specified";
+
+        const given = response.answers?.[String(question.id)];
+        const selected: string[] = Array.isArray(given) ? given : [];
+        const reachedThisQuestion = selected.some(
+          (option) => optionProgramIds[option] !== undefined
+        );
+
+        if (!perStudent[studentId]) {
+          perStudent[studentId] = { reached: false, course };
+        }
+        if (reachedThisQuestion) perStudent[studentId].reached = true;
+      });
+    });
+
+    const byCourse: Record<string, { reached: number; total: number }> = {};
+    Object.values(perStudent).forEach(({ reached, course }) => {
+      if (!byCourse[course]) byCourse[course] = { reached: 0, total: 0 };
+      byCourse[course].total += 1;
+      if (reached) byCourse[course].reached += 1;
+    });
+
+    return Object.entries(byCourse)
+      .map(([course, { reached, total }]) => ({
+        course,
+        reached,
+        notReached: total - reached,
+        total,
+        reachedPct: total > 0 ? Math.round((reached / total) * 100) : 0,
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [filteredSurveyResponses, surveys, userIdToStudentId, profileByStudentId]);
+
+  /* =======================================================
      CAMPUS
   ======================================================= */
 
@@ -2215,6 +2289,28 @@ export default function AnalyticsDashboard() {
 
     rows.push([]);
 
+    /* PROGRAM PARTICIPATION BY COURSE */
+
+    rows.push([
+      "COURSE",
+      "REACHED",
+      "NOT REACHED",
+      "RESPONDENTS",
+      "% REACHED",
+    ]);
+
+    programParticipationByCourse.forEach((row) => {
+      rows.push([
+        row.course,
+        row.reached,
+        row.notReached,
+        row.total,
+        row.reachedPct,
+      ]);
+    });
+
+    rows.push([]);
+
     /* PRE-TEST / POST-TEST COMPARISON */
 
     rows.push([
@@ -2421,6 +2517,8 @@ export default function AnalyticsDashboard() {
       },
 
       pre_post_comparison: prePostComparison,
+
+      program_participation_by_course: programParticipationByCourse,
 
       survey_response_data:
         filteredSurveyResponses,
@@ -3514,6 +3612,67 @@ export default function AnalyticsDashboard() {
                 </tbody>
               </table>
             </div>
+          </Card>
+
+          {/* PROGRAM PARTICIPATION BY COURSE */}
+          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+            <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
+              Program Participation by Course
+            </h3>
+
+            <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
+              Share of respondents per academic course who reported joining at
+              least one linked guidance program
+            </p>
+
+            {programParticipationByCourse.length === 0 ? (
+              <div className="h-40 flex items-center justify-center text-slate-400 text-xs font-bold text-center px-6">
+                No data yet. Add a "Checkbox (Multiple Answers)" question with
+                its options linked to Programs (e.g. "Which of these programs
+                have you participated in?") to a survey to see this report.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                      <th className="pb-3 pr-4">Course</th>
+                      <th className="pb-3 pr-4">Reached</th>
+                      <th className="pb-3 pr-4">Not Reached</th>
+                      <th className="pb-3 pr-4">Respondents</th>
+                      <th className="pb-3">% Reached</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {programParticipationByCourse.map((row) => (
+                      <tr key={row.course} className="border-b border-slate-50 last:border-none">
+                        <td className="py-3 pr-4 text-xs font-bold text-slate-700">
+                          {row.course}
+                        </td>
+                        <td className="py-3 pr-4 text-xs font-black text-emerald-600">
+                          {row.reached}
+                        </td>
+                        <td className="py-3 pr-4 text-xs font-black text-rose-500">
+                          {row.notReached}
+                        </td>
+                        <td className="py-3 pr-4 text-xs font-black text-slate-900">
+                          {row.total}
+                        </td>
+                        <td className="py-3 text-xs font-black">
+                          <span
+                            className={
+                              row.reachedPct < 50 ? "text-rose-500" : "text-indigo-600"
+                            }
+                          >
+                            {row.reachedPct}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Card>
 
           {/* PRE-TEST / POST-TEST COMPARISON */}

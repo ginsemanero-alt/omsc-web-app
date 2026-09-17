@@ -26,17 +26,21 @@ import {
   ArrowRight,
   BookOpen,
   Calendar,
+  Check,
 } from 'lucide-react';
 
 interface Question {
   id: string | number;
   text: string;
-  type: 'mcq' | 'scale' | 'text' | string;
+  type: 'mcq' | 'scale' | 'text' | 'checkbox' | string;
   options?: string[];
   required?: boolean;
   correct_option?: string;
   related_program_id?: number | null;
   related_material_id?: number | null;
+  // checkbox only
+  allow_other?: boolean;
+  option_program_ids?: Record<string, number> | null;
 }
 
 interface Survey {
@@ -393,6 +397,12 @@ export default function QuizzesSurveys() {
       return false;
     }
 
+    // checkbox answers are an array of selected option strings — nothing
+    // checked yet is not answered, even though the key exists.
+    if (Array.isArray(value) && value.length === 0) {
+      return false;
+    }
+
     return true;
   };
 
@@ -705,6 +715,101 @@ export default function QuizzesSurveys() {
               Highest
             </span>
           </div>
+        </div>
+      );
+    }
+
+    /*
+     * CHECKBOX (multiple answers)
+     */
+    if (question.type === 'checkbox') {
+      const OTHER_PREFIX = 'Other: ';
+      const selectedList: string[] = Array.isArray(selectedAnswer) ? selectedAnswer : [];
+      const otherEntry = selectedList.find((v) => v.startsWith(OTHER_PREFIX));
+      const otherChecked = otherEntry !== undefined;
+      const otherText = otherEntry ? otherEntry.slice(OTHER_PREFIX.length) : '';
+
+      const toggleOption = (option: string) => {
+        const next = selectedList.includes(option)
+          ? selectedList.filter((v) => v !== option)
+          : [...selectedList, option];
+        updateAnswer(question.id, next);
+      };
+
+      const toggleOther = () => {
+        const next = otherChecked
+          ? selectedList.filter((v) => !v.startsWith(OTHER_PREFIX))
+          : [...selectedList, OTHER_PREFIX];
+        updateAnswer(question.id, next);
+      };
+
+      const setOtherText = (text: string) => {
+        const withoutOther = selectedList.filter((v) => !v.startsWith(OTHER_PREFIX));
+        updateAnswer(question.id, [...withoutOther, OTHER_PREFIX + text]);
+      };
+
+      const checkRow = (checked: boolean, label: string, onClick: () => void, key: string) => (
+        <button
+          key={key}
+          type="button"
+          onClick={onClick}
+          className={`
+            w-full text-left p-4 sm:p-5 rounded-2xl border-2
+            transition-all duration-200
+            ${
+              checked
+                ? 'border-indigo-600 bg-indigo-50 shadow-md'
+                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-indigo-300 hover:bg-slate-50'
+            }
+          `}
+        >
+          <div className="flex items-start gap-3">
+            <div
+              className={`
+                mt-0.5 w-5 h-5 rounded-md border-2
+                flex items-center justify-center shrink-0
+                ${checked ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'}
+              `}
+            >
+              {checked && <Check className="w-3.5 h-3.5 text-white" />}
+            </div>
+            <span
+              className={`
+                text-sm sm:text-base font-semibold leading-relaxed
+                ${checked ? 'text-indigo-900' : 'text-slate-600'}
+              `}
+            >
+              {label}
+            </span>
+          </div>
+        </button>
+      );
+
+      return (
+        <div className="space-y-3">
+          {(question.options || []).map((option) =>
+            checkRow(selectedList.includes(option), option, () => toggleOption(option), option)
+          )}
+
+          {question.allow_other && (
+            <div className="space-y-2">
+              {checkRow(otherChecked, 'Other', toggleOther, '__other__')}
+              {otherChecked && (
+                <input
+                  type="text"
+                  value={otherText}
+                  onChange={(event) => setOtherText(event.target.value)}
+                  placeholder="Please specify..."
+                  className="
+                    w-full h-12 px-4 rounded-2xl bg-slate-50 dark:bg-slate-800
+                    border border-slate-200 dark:border-slate-700
+                    text-sm font-medium text-slate-700 dark:text-slate-200
+                    outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100
+                  "
+                />
+              )}
+            </div>
+          )}
         </div>
       );
     }
@@ -1374,11 +1479,18 @@ export default function QuizzesSurveys() {
 
                             <div className="mt-3 p-3 sm:p-4 rounded-xl bg-slate-50 dark:bg-slate-800">
                               <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-words">
-                                {answer !== undefined &&
-                                answer !== null &&
-                                String(answer).trim() !== ''
-                                  ? String(answer)
-                                  : 'No answer provided'}
+                                {(() => {
+                                  if (Array.isArray(answer)) {
+                                    return answer.length > 0
+                                      ? answer.join(', ')
+                                      : 'No answer provided';
+                                  }
+                                  return answer !== undefined &&
+                                    answer !== null &&
+                                    String(answer).trim() !== ''
+                                    ? String(answer)
+                                    : 'No answer provided';
+                                })()}
                               </p>
                             </div>
                           </div>

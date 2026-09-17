@@ -40,7 +40,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 
-type QuestionType = "mcq" | "scale" | "text";
+type QuestionType = "mcq" | "scale" | "text" | "checkbox";
 type SurveyType = "knowledge" | "opinion";
 
 type Question = {
@@ -53,6 +53,15 @@ type Question = {
   correct_option?: string;
   related_program_id?: number | null;
   related_material_id?: number | null;
+  // checkbox only: shows a write-in "Other, please specify" option
+  // alongside the fixed choices.
+  allow_other?: boolean;
+  // checkbox only, optional: option text -> program id, for a "which of
+  // these programs have you participated in" style question. Powers the
+  // Program Participation by Course analytics — an option left
+  // unmapped (e.g. "None of the above", "Other") is treated as "did not
+  // reach this program" rather than ignored.
+  option_program_ids?: Record<string, number> | null;
 };
 
 type Survey = {
@@ -94,6 +103,7 @@ const CATEGORIES = [
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "mcq", label: "Multiple Choice" },
+  { value: "checkbox", label: "Checkbox (Multiple Answers)" },
   { value: "scale", label: "Rating Scale 1–5" },
   { value: "text", label: "Text Response" },
 ];
@@ -610,13 +620,15 @@ export default function SurveyBuilder() {
       type,
     };
 
-    if (type === "mcq") {
+    if (type === "mcq" || type === "checkbox") {
       updated.options =
         question.options?.length
           ? question.options
           : ["Option 1", "Option 2"];
     } else {
       delete updated.options;
+      delete updated.allow_other;
+      delete updated.option_program_ids;
     }
 
     updateQuestion(questionIndex, updated);
@@ -654,6 +666,26 @@ export default function SurveyBuilder() {
     );
 
     updateQuestion(questionIndex, { options });
+  }
+
+  // checkbox questions only — maps one option's text to a program id (or
+  // clears the mapping when programId is null), for the Program
+  // Participation by Course report.
+  function setOptionProgram(
+    questionIndex: number,
+    option: string,
+    programId: number | null
+  ) {
+    const question = questions[questionIndex];
+    const nextMap = { ...(question.option_program_ids || {}) };
+
+    if (programId === null) {
+      delete nextMap[option];
+    } else {
+      nextMap[option] = programId;
+    }
+
+    updateQuestion(questionIndex, { option_program_ids: nextMap });
   }
 
   function removeQuestion(questionId: string | number) {
@@ -1069,6 +1101,108 @@ export default function SurveyBuilder() {
                               Shown to a student if they miss this question, so the
                               assessment doubles as an awareness intervention.
                             </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {question.type === "checkbox" && (
+                      <div className="space-y-3 border-l-4 border-indigo-100 pl-4">
+                        {(question.options || []).map(
+                          (option, optionIndex) => (
+                            <div
+                              key={optionIndex}
+                              className="flex gap-2"
+                            >
+                              <Input
+                                value={option}
+                                onChange={(e) =>
+                                  updateOption(
+                                    index,
+                                    optionIndex,
+                                    e.target.value
+                                  )
+                                }
+                                className="bg-slate-50 border-none rounded-xl"
+                              />
+
+                              <Button
+                                variant="ghost"
+                                onClick={() =>
+                                  removeOption(
+                                    index,
+                                    optionIndex
+                                  )
+                                }
+                                className="text-slate-300 hover:text-rose-500"
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          )
+                        )}
+
+                        <Button
+                          variant="ghost"
+                          onClick={() => addOption(index)}
+                          className="text-indigo-600 font-black uppercase text-[9px]"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Option
+                        </Button>
+
+                        <label className="flex items-center gap-3 cursor-pointer w-fit pt-1">
+                          <input
+                            type="checkbox"
+                            checked={question.allow_other === true}
+                            onChange={(e) =>
+                              updateQuestion(index, {
+                                allow_other: e.target.checked,
+                              })
+                            }
+                            className="w-4 h-4 accent-indigo-600"
+                          />
+                          <span className="text-xs font-bold text-slate-500">
+                            Allow "Other, please specify"
+                          </span>
+                        </label>
+
+                        {(question.options || []).length > 0 && (
+                          <div className="mt-4 space-y-2 border-t border-indigo-100 pt-4">
+                            <label className="text-[9px] font-black uppercase text-indigo-500">
+                              Link options to Programs (optional)
+                            </label>
+                            <p className="text-[9px] text-slate-400 leading-relaxed -mt-1">
+                              Powers the Program Participation by Course report —
+                              leave an option unmapped (e.g. "None of the above")
+                              to count it as "did not participate."
+                            </p>
+
+                            {(question.options || []).map((option, optionIndex) => (
+                              <div key={optionIndex} className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-600 flex-1 truncate">
+                                  {option}
+                                </span>
+                                <select
+                                  value={question.option_program_ids?.[option] ?? ""}
+                                  onChange={(e) =>
+                                    setOptionProgram(
+                                      index,
+                                      option,
+                                      e.target.value ? Number(e.target.value) : null
+                                    )
+                                  }
+                                  className="w-56 h-10 rounded-xl bg-white border border-indigo-100 px-3 text-xs font-bold text-slate-700 outline-none"
+                                >
+                                  <option value="">Not a program</option>
+                                  {programOptions.map((program) => (
+                                    <option key={program.id} value={program.id}>
+                                      {program.title}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -1727,15 +1861,17 @@ export default function SurveyBuilder() {
                               </p>
 
                               <p className="mt-2 font-bold text-slate-800 text-sm">
-                                {response.answers?.[
-                                  question.id
-                                ] !== undefined
-                                  ? String(
-                                      response.answers[
-                                        question.id
-                                      ]
-                                    )
-                                  : "No response"}
+                                {(() => {
+                                  const given = response.answers?.[question.id];
+                                  if (given === undefined || given === null) {
+                                    return "No response";
+                                  }
+                                  // checkbox answers are stored as an array of
+                                  // the selected option strings.
+                                  return Array.isArray(given)
+                                    ? given.join(", ") || "No response"
+                                    : String(given);
+                                })()}
                               </p>
                             </div>
                           )
