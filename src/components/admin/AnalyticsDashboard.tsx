@@ -1087,12 +1087,19 @@ export default function AnalyticsDashboard() {
   /* =======================================================
      PRE-TEST / POST-TEST COMPARISON
 
-     A single Knowledge Assessment only measures awareness at one
-     point in time — it can't show that a student actually learned
-     something. Pairing a "(Pre-Test)" survey with a "(Post-Test)"
-     survey of the same topic (same title minus that suffix) lets us
-     compute a per-student gain score, which is the actual evidence
-     of a knowledge/awareness improvement.
+     A single survey only measures awareness at one point in time — it
+     can't show that a student's awareness actually improved. Pairing a
+     "(Pre-Test)" survey with a "(Post-Test)" survey of the same topic
+     (same title minus that suffix) lets us compute a per-student gain,
+     which is the actual evidence of improvement.
+
+     Works for both survey types: a Knowledge Assessment already has a
+     real percentage (from correct_option scoring). An opinion survey
+     (e.g. this study's Needs Assessment, re-run before/after the
+     system launches) has no correct answers to score, so
+     deriveOpinionAwarenessPercentage builds an equivalent 0-100 index
+     out of its Yes/No/Not Sure awareness questions and its 1-5 scale
+     questions instead, so both types can share this one comparison.
   ======================================================= */
 
   const getBaseTopicAndPhase = (
@@ -1107,6 +1114,34 @@ export default function AnalyticsDashboard() {
     return { base: title, phase: null };
   };
 
+  const deriveOpinionAwarenessPercentage = (
+    questions: any[],
+    answers: Record<string, any> | null | undefined
+  ): number | null => {
+    const values: number[] = [];
+
+    questions.forEach((question) => {
+      const given = answers?.[String(question.id)];
+
+      if (question?.type === "scale" && typeof given === "number") {
+        values.push(((given - 1) / 4) * 100);
+      } else if (
+        question?.type === "mcq" &&
+        Array.isArray(question.options) &&
+        question.options.includes("Yes") &&
+        question.options.includes("No")
+      ) {
+        if (given === "Yes") values.push(100);
+        else if (given === "Not Sure") values.push(50);
+        else if (given === "No") values.push(0);
+      }
+    });
+
+    return values.length > 0
+      ? Math.round(values.reduce((sum, v) => sum + v, 0) / values.length)
+      : null;
+  };
+
   const prePostComparison = useMemo(() => {
     const surveysById: Record<string, Survey> = {};
     surveys.forEach((survey) => {
@@ -1116,12 +1151,22 @@ export default function AnalyticsDashboard() {
     // topic -> studentId -> { pre?: percentage, post?: percentage }
     const byTopic: Record<string, Record<string, { pre?: number; post?: number }>> = {};
 
-    scoredSurveyResponses.forEach((response) => {
+    filteredSurveyResponses.forEach((response) => {
       const survey = surveysById[safeString(response.survey_id)];
       if (!survey?.title) return;
 
       const { base, phase } = getBaseTopicAndPhase(survey.title);
       if (!phase) return;
+
+      let percentage: number | null;
+      if (survey.type === "knowledge") {
+        if (response.percentage === null || response.percentage === undefined) return;
+        percentage = response.percentage;
+      } else {
+        const questions = Array.isArray(survey.questions_data) ? survey.questions_data : [];
+        percentage = deriveOpinionAwarenessPercentage(questions, response.answers);
+        if (percentage === null) return;
+      }
 
       const studentId =
         userIdToStudentId[safeString(response.user_id)] ||
@@ -1130,7 +1175,7 @@ export default function AnalyticsDashboard() {
 
       if (!byTopic[base]) byTopic[base] = {};
       if (!byTopic[base][studentId]) byTopic[base][studentId] = {};
-      byTopic[base][studentId][phase] = response.percentage ?? 0;
+      byTopic[base][studentId][phase] = percentage;
     });
 
     const average = (values: number[]) =>
@@ -1168,7 +1213,7 @@ export default function AnalyticsDashboard() {
         };
       })
       .sort((a, b) => b.pairedCount - a.pairedCount);
-  }, [scoredSurveyResponses, surveys, userIdToStudentId]);
+  }, [filteredSurveyResponses, surveys, userIdToStudentId]);
 
   const awarenessAnalytics = useMemo(() => {
     const average = (values: number[]) =>
@@ -3682,8 +3727,10 @@ export default function AnalyticsDashboard() {
             </h3>
 
             <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
-              Average score gain for students who completed both a "(Pre-Test)" and
-              "(Post-Test)" survey of the same topic
+              Average score/awareness gain for students who completed both a
+              "(Pre-Test)" and "(Post-Test)" survey of the same topic — works for
+              Knowledge Assessments (scored) and opinion surveys (Yes/No + 1–5
+              scale questions) alike
             </p>
 
             {prePostComparison.length === 0 ? (
