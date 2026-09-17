@@ -562,10 +562,12 @@ app.post('/api/login', loginLimiter, async (req, res) => {
     }
 });
 
-// Fans out one email to every active student when the admin publishes a
-// new Program or activates a new Survey. Same admin-session-check shape
-// as /api/admin/create-staff — this sends real email to potentially every
-// student in the system, so it's gated the same way.
+// Notifies every active student when the admin publishes a new Program
+// or activates a new Survey — both an in-app row (the primary channel;
+// always attempted) and an email (best-effort, only if RESEND_API_KEY
+// is configured). Same admin-session-check shape as
+// /api/admin/create-staff — this fans out to potentially every student
+// in the system, so it's gated the same way.
 app.post('/api/notify-students', notifyLimiter, async (req, res) => {
     const authHeader = req.headers.authorization || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -591,11 +593,6 @@ app.post('/api/notify-students', notifyLimiter, async (req, res) => {
             return res.status(403).json({ message: "Only admins can send student notifications" });
         }
 
-        if (!resend) {
-            console.warn('Skipped student notification — RESEND_API_KEY not configured.');
-            return res.status(200).json({ sent: 0, skipped: true, message: "Email notifications are not configured yet." });
-        }
-
         const { type, title, details, actionPath } = req.body;
         if (type !== 'program' && type !== 'survey') {
             return res.status(400).json({ message: "type must be 'program' or 'survey'" });
@@ -606,28 +603,58 @@ app.post('/api/notify-students', notifyLimiter, async (req, res) => {
 
         const { data: students, error: studentsError } = await supabase
             .from('users')
-            .select('email')
+            .select('id, email')
             .eq('role', 'student')
             .eq('status', 'active');
 
         if (studentsError) throw studentsError;
 
-        const recipients = [...new Set((students || []).map((s) => s.email).filter(Boolean))];
-        if (recipients.length === 0) {
-            return res.status(200).json({ sent: 0, message: "No active students to notify." });
+        const activeStudents = students || [];
+        if (activeStudents.length === 0) {
+            return res.status(200).json({ notified: 0, emailSent: 0, message: "No active students to notify." });
         }
 
+        const link = actionPath || (type === 'program' ? '/student/programs' : '/student/survey');
+        const message = (details || '').trim() || `A new ${type === 'program' ? 'guidance program' : 'survey'} titled "${title}" has just been posted.`;
+
+        // In-app notification — the primary channel, so this always runs
+        // regardless of whether email is configured. A failure here is
+        // logged but doesn't block the email attempt below.
+        let notifiedCount = 0;
+        const notificationRows = activeStudents.map((s) => ({
+            user_id: s.id,
+            type,
+            title,
+            message,
+            action_path: link,
+        }));
+        const { error: notifyError, count } = await supabase
+            .from('notifications')
+            .insert(notificationRows, { count: 'exact' });
+        if (notifyError) {
+            console.error('In-app notification insert failed:', notifyError.message);
+        } else {
+            notifiedCount = count ?? notificationRows.length;
+        }
+
+        if (!resend) {
+            console.warn('Skipped email notification — RESEND_API_KEY not configured.');
+            return res.status(200).json({ notified: notifiedCount, emailSent: 0, emailSkipped: true, total: activeStudents.length });
+        }
+
+        const recipients = [...new Set(activeStudents.map((s) => s.email).filter(Boolean))];
+
         const siteUrl = (process.env.SITE_URL || 'https://www.webguidance.online').replace(/\/$/, '');
-        const link = `${siteUrl}${actionPath || (type === 'program' ? '/student/programs' : '/student/survey')}`;
+        const fullLink = `${siteUrl}${link}`;
         const subject = type === 'program'
             ? `New Guidance Program: ${title}`
             : `New Survey Available: ${title}`;
         const html = `
             <div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; color: #1e293b;">
                 <h2 style="color: #4f46e5; margin-bottom: 4px;">${subject}</h2>
-                <p style="color: #475569; line-height: 1.6;">${(details || '').trim() || `A new ${type === 'program' ? 'guidance program' : 'survey'} titled "${title}" has just been posted.`}</p>
+                <p style="color: #475569; line-height: 1.6;">${message}</p>
                 <p style="margin: 24px 0;">
-                    <a href="${link}" style="display:inline-block;background:#4f46e5;color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:bold;">
+                    <a href="${fullLink}" style="display:inline-block;background:#4f46e5;color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:bold;">
                         View on the Portal
                     </a>
                 </p>
@@ -656,7 +683,7 @@ app.post('/api/notify-students', notifyLimiter, async (req, res) => {
             }
         }
 
-        res.status(200).json({ sent: sentCount, total: recipients.length });
+        res.status(200).json({ notified: notifiedCount, emailSent: sentCount, total: activeStudents.length });
     } catch (error) {
         console.error("Notify Students Error:", error.message);
         res.status(500).json({ message: error.message });

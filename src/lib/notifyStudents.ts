@@ -32,10 +32,11 @@ export async function notifyStudents(
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       console.warn('notifyStudents failed:', data?.message || response.statusText);
-    } else if (data?.skipped) {
-      console.warn('notifyStudents skipped:', data.message);
     } else {
-      console.log(`notifyStudents: sent ${data.sent}/${data.total ?? data.sent} student emails.`);
+      console.log(
+        `notifyStudents: ${data.notified ?? 0} in-app notification(s), ` +
+        `${data.emailSent ?? 0} email(s) sent of ${data.total ?? 0} active student(s).`
+      );
     }
   } catch (err) {
     console.warn('notifyStudents error:', err);

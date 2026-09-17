@@ -19,10 +19,11 @@ import {
   AlertCircle,
   Archive,
   Info,
+  Bell,
   type LucideIcon,
 } from 'lucide-react';
 import { useState, useEffect } from 'react'; // Idinagdag ang useEffect
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase'; // Siguraduhin na tama ang path ng supabase client mo
 import { Button } from '../../components/ui/button';
 import {
@@ -40,6 +41,16 @@ interface NavigationItem {
   label: string;
   path: string;
   icon?: string;
+}
+
+interface NotificationRow {
+  id: number;
+  type: 'program' | 'survey';
+  title: string;
+  message: string | null;
+  action_path: string | null;
+  read_at: string | null;
+  created_at: string;
 }
 
 // navigationItems (from AdminDashboard/StudentDashboard) carries icon names
@@ -75,6 +86,7 @@ interface TopNavBarProps {
 }
 
 export default function TopNavBar({
+  role,
   userName: initialUserName, // Ginawang initial lang
   campus,
   onLogout,
@@ -83,7 +95,8 @@ export default function TopNavBar({
   isDark,
   onToggleTheme,
 }: TopNavBarProps) {
-  
+  const navigate = useNavigate();
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [displayName, setDisplayName] = useState(initialUserName); // State para sa dynamic name
   // Both sign-out entry points (desktop dropdown, mobile sidebar) used to
@@ -112,6 +125,65 @@ export default function TopNavBar({
     }
     fetchActualName();
   }, []);
+
+  // IN-APP NOTIFICATIONS — student only. Publishing a Program or
+  // activating a Survey inserts one row per active student (see
+  // /api/notify-students); this is what surfaces them: a badge count
+  // here, and a one-time-per-login banner below.
+  const [notifications, setNotifications] = useState<NotificationRow[]>([]);
+  const [showBanner, setShowBanner] = useState(false);
+
+  const fetchNotifications = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.email) return;
+
+    // notifications.user_id is users.id (bigint), not the auth uuid —
+    // same bridge useAuth.tsx's own role lookup uses.
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', user.email)
+      .maybeSingle();
+    if (!userRow) return;
+
+    const { data } = await supabase
+      .from('notifications')
+      .select('id, type, title, message, action_path, read_at, created_at')
+      .eq('user_id', userRow.id)
+      .order('created_at', { ascending: false })
+      .limit(30);
+
+    const rows = (data || []) as NotificationRow[];
+    setNotifications(rows);
+
+    // Once per browser session — a student re-visiting pages all
+    // session shouldn't see the banner pop up again each time.
+    const hasUnread = rows.some((n) => !n.read_at);
+    if (hasUnread && !sessionStorage.getItem('notif_banner_shown')) {
+      sessionStorage.setItem('notif_banner_shown', '1');
+      setShowBanner(true);
+    }
+  };
+
+  useEffect(() => {
+    if (role !== 'student') return;
+    fetchNotifications();
+  }, [role]);
+
+  const unreadCount = notifications.filter((n) => !n.read_at).length;
+
+  const markAsRead = async (ids: number[]) => {
+    if (ids.length === 0) return;
+    setNotifications((prev) =>
+      prev.map((n) => (ids.includes(n.id) ? { ...n, read_at: n.read_at || new Date().toISOString() } : n))
+    );
+    await supabase.from('notifications').update({ read_at: new Date().toISOString() }).in('id', ids);
+  };
+
+  const handleNotificationClick = (notification: NotificationRow) => {
+    if (!notification.read_at) markAsRead([notification.id]);
+    if (notification.action_path) navigate(notification.action_path);
+  };
 
   // Compute initials base sa dynamic name
   const initials = displayName
@@ -169,6 +241,59 @@ export default function TopNavBar({
           </nav>
 
           <div className="flex items-center gap-2">
+            {role === 'student' && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative text-foreground hover:bg-slate-100 dark:hover:bg-white/10"
+                    aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+                  >
+                    <Bell className="w-5 h-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute top-1 right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80 rounded-2xl p-2 shadow-xl border-slate-100 dark:border-slate-800 dark:bg-slate-900 max-h-96 overflow-y-auto">
+                  <DropdownMenuLabel className="font-black text-slate-800 dark:text-slate-100 px-3 py-2 uppercase tracking-tight text-xs">
+                    Notifications
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator className="dark:bg-slate-800" />
+                  {notifications.length === 0 ? (
+                    <p className="text-center text-[11px] font-bold text-slate-400 uppercase py-6">
+                      Nothing yet
+                    </p>
+                  ) : (
+                    notifications.map((n) => (
+                      <DropdownMenuItem
+                        key={n.id}
+                        onClick={() => handleNotificationClick(n)}
+                        className={`rounded-xl cursor-pointer p-3 flex flex-col items-start gap-0.5 ${
+                          n.read_at ? 'opacity-60' : 'bg-indigo-50 dark:bg-indigo-500/10'
+                        }`}
+                      >
+                        <span className="font-bold text-xs text-slate-800 dark:text-slate-100 leading-tight">
+                          {n.title}
+                        </span>
+                        {n.message && (
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-2">
+                            {n.message}
+                          </span>
+                        )}
+                        <span className="text-[9px] font-bold text-slate-300 dark:text-slate-500 uppercase mt-0.5">
+                          {new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+
             {onToggleTheme && (
               <Button
                 variant="ghost"
@@ -323,6 +448,51 @@ export default function TopNavBar({
               Yes, Sign Out
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Shown once per login session when there's something unread —
+          catches a student who never opens the bell dropdown at all. */}
+      <Dialog open={showBanner} onOpenChange={setShowBanner}>
+        <DialogContent className="max-w-md rounded-3xl p-7">
+          <div className="mx-auto w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 flex items-center justify-center">
+            <Bell />
+          </div>
+
+          <DialogHeader className="mt-4">
+            <DialogTitle className="text-xl font-black text-center dark:text-slate-100">
+              {unreadCount} New Update{unreadCount === 1 ? '' : 's'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="mt-4 space-y-2 max-h-64 overflow-y-auto">
+            {notifications.filter((n) => !n.read_at).map((n) => (
+              <button
+                key={n.id}
+                type="button"
+                onClick={() => {
+                  setShowBanner(false);
+                  handleNotificationClick(n);
+                }}
+                className="w-full text-left p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
+              >
+                <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{n.title}</p>
+                {n.message && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mt-0.5">{n.message}</p>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <Button
+            onClick={() => {
+              markAsRead(notifications.filter((n) => !n.read_at).map((n) => n.id));
+              setShowBanner(false);
+            }}
+            className="w-full mt-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black"
+          >
+            Dismiss
+          </Button>
         </DialogContent>
       </Dialog>
     </>

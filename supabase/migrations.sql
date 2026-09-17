@@ -731,3 +731,46 @@ CREATE POLICY about_content_select_public ON about_content
 DROP POLICY IF EXISTS about_content_update_admin ON about_content;
 CREATE POLICY about_content_update_admin ON about_content
   FOR UPDATE USING (is_admin()) WITH CHECK (is_admin());
+
+-- ------------------------------------------------------------
+-- PHASE 17 — In-app notifications, alongside the existing email
+--
+-- Publishing a Program or activating a Survey only ever emailed
+-- students (see notifyStudents.ts / /api/notify-students) — nothing
+-- shown inside the app itself, and nothing at all if RESEND_API_KEY
+-- isn't configured. One row per active student per publish event.
+-- Inserted only by /api/notify-students with the service-role key
+-- (same reason `users` has no client-side INSERT policy: this table
+-- doesn't need one either), read/marked-read by the student it
+-- belongs to.
+-- ------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id          bigserial primary key,
+  user_id     bigint not null references users(id) on delete cascade,
+  type        text not null check (type in ('program', 'survey')),
+  title       text not null,
+  message     text,
+  action_path text,
+  read_at     timestamptz,
+  created_at  timestamptz not null default now()
+);
+
+CREATE INDEX IF NOT EXISTS notifications_user_id_read_at_idx
+  ON notifications (user_id, read_at);
+
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS notifications_select_own ON notifications;
+CREATE POLICY notifications_select_own ON notifications
+  FOR SELECT USING (
+    user_id IN (SELECT id FROM users WHERE email = (auth.jwt() ->> 'email'))
+  );
+
+DROP POLICY IF EXISTS notifications_update_own ON notifications;
+CREATE POLICY notifications_update_own ON notifications
+  FOR UPDATE USING (
+    user_id IN (SELECT id FROM users WHERE email = (auth.jwt() ->> 'email'))
+  ) WITH CHECK (
+    user_id IN (SELECT id FROM users WHERE email = (auth.jwt() ->> 'email'))
+  );
