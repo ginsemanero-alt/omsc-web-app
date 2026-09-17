@@ -598,3 +598,59 @@ ALTER TABLE surveys ADD CONSTRAINT surveys_iec_category_check
     'Psychological Testing & Assessment',
     'Safe & Positive Learning Environment', 'Student Programs & Resources'
   ));
+
+-- ------------------------------------------------------------
+-- PHASE 14 — Program entries (a timeline within one program)
+--
+-- A single program row has one date/time_range, which can't represent
+-- a month-long campaign (e.g. Suicide Prevention Month) made up of
+-- several distinct week-by-week activities, each with its own photos.
+-- This is NOT a calendar/scheduling feature — program_entries is a
+-- simple ordered timeline of sub-entries belonging to one program,
+-- shown as a vertical scroll, not tabs or a calendar grid.
+--
+-- duration_label is a free-text field the admin types directly (e.g.
+-- "1 Month", "3 Days") — deliberately not derived/parsed from `date`
+-- or `date_display`, since this app already treats parsing an end date
+-- back out of arbitrary display text as unreliable (see
+-- getEffectiveProgramStatus's date_display comment in
+-- src/lib/programStatus.ts).
+-- ------------------------------------------------------------
+
+ALTER TABLE programs ADD COLUMN IF NOT EXISTS duration_label text;
+
+CREATE TABLE IF NOT EXISTS program_entries (
+  id          bigserial primary key,
+  program_id  bigint not null references programs(id) on delete cascade,
+  label       text not null,
+  description text,
+  caption     text,
+  -- Array, not a single image_url — an entry like "Week 1" can carry
+  -- more than one photo.
+  image_urls  text[],
+  sort_order  integer not null default 0,
+  created_at  timestamptz not null default now()
+);
+
+CREATE INDEX IF NOT EXISTS program_entries_program_id_sort_order_idx
+  ON program_entries (program_id, sort_order);
+
+-- Same shape as the programs table's own policies (see PHASE 5): public
+-- read, admin-only write.
+ALTER TABLE program_entries ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS program_entries_select_public ON program_entries;
+CREATE POLICY program_entries_select_public ON program_entries
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS program_entries_insert_admin ON program_entries;
+CREATE POLICY program_entries_insert_admin ON program_entries
+  FOR INSERT WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS program_entries_update_admin ON program_entries;
+CREATE POLICY program_entries_update_admin ON program_entries
+  FOR UPDATE USING (is_admin()) WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS program_entries_delete_admin ON program_entries;
+CREATE POLICY program_entries_delete_admin ON program_entries
+  FOR DELETE USING (is_admin());

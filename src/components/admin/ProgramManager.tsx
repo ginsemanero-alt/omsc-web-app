@@ -62,6 +62,7 @@ export default function ProgramManagement() {
     title: '',
     date: '',
     date_display: '',
+    duration_label: '',
     location: '',
     program_component: 'Group Guidance',
     guidance_service: 'Career Orientation',
@@ -70,6 +71,17 @@ export default function ProgramManagement() {
     image_url: '',
     content: ''
   });
+
+  // Entries (timeline) for whichever program is currently open in the
+  // edit dialog. Only meaningful once a program has an id — a new,
+  // unsaved program has nowhere to attach entries to yet.
+  const [entries, setEntries] = useState<any[]>([]);
+  const [entryLabel, setEntryLabel] = useState('');
+  const [entryDescription, setEntryDescription] = useState('');
+  const [entryCaption, setEntryCaption] = useState('');
+  const [entryFiles, setEntryFiles] = useState<File[]>([]);
+  const [isSavingEntry, setIsSavingEntry] = useState(false);
+  const entryFileInputRef = useRef<HTMLInputElement>(null);
 
   const isSystemLocked = programs.some(p => getEffectiveProgramStatus(p) === 'ongoing');
 
@@ -90,9 +102,17 @@ export default function ProgramManagement() {
             id,
             title,
             file_url
+          ),
+          program_entries (
+            id,
+            label,
+            description,
+            caption,
+            image_urls,
+            sort_order
           )
         `)
-        .order('created_at', { ascending: false }); 
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
       setPrograms(data || []);
@@ -141,6 +161,7 @@ export default function ProgramManagement() {
         title: program.title || '',
         date: program.date || '',
         date_display: program.date_display || '',
+        duration_label: program.duration_label || '',
         location: program.location || '',
         program_component: program.program_component || 'Group Guidance',
         guidance_service: program.guidance_service || 'Career Orientation',
@@ -150,7 +171,12 @@ export default function ProgramManagement() {
         content: program.content || ''
       });
       setPreviewUrl(program.image_url || '');
-      
+      setEntries(
+        (program.program_entries || [])
+          .slice()
+          .sort((a: any, b: any) => a.sort_order - b.sort_order)
+      );
+
       if (program.time_range && program.time_range.includes(' - ')) {
         const parts = program.time_range.split(' - ');
         setStartTime(parts[0] || '08:00');
@@ -159,16 +185,21 @@ export default function ProgramManagement() {
     } else {
       setEditingId(null);
       setFormData({
-        title: '', date: '', date_display: '', location: '',
+        title: '', date: '', date_display: '', duration_label: '', location: '',
         program_component: 'Group Guidance', guidance_service: 'Career Orientation',
         capacity: 0, status: 'upcoming', image_url: '', content: ''
       });
       setPreviewUrl('');
+      setEntries([]);
       setStartTime('08:00');
       setEndTime('17:00');
     }
     setMaterialFile(null);
     setSelectedFile(null);
+    setEntryLabel('');
+    setEntryDescription('');
+    setEntryCaption('');
+    setEntryFiles([]);
     setIsDialogOpen(true);
   };
 
@@ -203,6 +234,7 @@ export default function ProgramManagement() {
         title: formData.title,
         date: formData.date,
         date_display: formData.date_display.trim() || null,
+        duration_label: formData.duration_label.trim() || null,
         location: formData.location,
         program_component: formData.program_component,
         guidance_service: formData.guidance_service,
@@ -254,6 +286,91 @@ export default function ProgramManagement() {
       toast({ variant: "destructive", title: "Save Error", description: err.message });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ENTRIES (timeline) — a separate, ordered set of sub-records under one
+  // program (e.g. "Week 1", "Week 2" of a month-long campaign), each with
+  // its own photos. Deliberately independent of handleSave above: a
+  // program with zero entries must save and display exactly as it always
+  // has, so entries are only ever added/removed once the program itself
+  // already exists (editingId is set).
+  const handleAddEntry = async () => {
+    if (!editingId) return;
+    if (!entryLabel.trim()) {
+      toast({ variant: "destructive", title: "Label required", description: "Give this entry a label, e.g. \"Week 1\"." });
+      return;
+    }
+
+    try {
+      setIsSavingEntry(true);
+
+      const imageUrls: string[] = [];
+      for (const file of entryFiles) {
+        // Same bucket and path convention the poster upload above already
+        // uses — no new bucket, no new storage policy needed.
+        const uploadFile = await compressImageFile(file);
+        const path = `posters/${Date.now()}_${uploadFile.name}`;
+        const { error: uploadError } = await supabase.storage.from('program-posters').upload(path, uploadFile, { cacheControl: '31536000' });
+        if (uploadError) throw uploadError;
+        const { data } = supabase.storage.from('program-posters').getPublicUrl(path);
+        imageUrls.push(data.publicUrl);
+      }
+
+      const { data, error } = await supabase
+        .from('program_entries')
+        .insert([{
+          program_id: editingId,
+          label: entryLabel.trim(),
+          description: entryDescription.trim() || null,
+          caption: entryCaption.trim() || null,
+          image_urls: imageUrls.length > 0 ? imageUrls : null,
+          sort_order: entries.length,
+        }])
+        .select();
+
+      if (error) throw error;
+
+      setEntries([...entries, data[0]]);
+      setEntryLabel('');
+      setEntryDescription('');
+      setEntryCaption('');
+      setEntryFiles([]);
+      if (entryFileInputRef.current) entryFileInputRef.current.value = '';
+      toast({ title: "Entry added" });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Entry Error", description: err.message });
+    } finally {
+      setIsSavingEntry(false);
+    }
+  };
+
+  const handleDeleteEntry = async (entryId: number) => {
+    try {
+      const { error } = await supabase.from('program_entries').delete().eq('id', entryId);
+      if (error) throw error;
+      setEntries(entries.filter((e) => e.id !== entryId));
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Delete Error", description: err.message });
+    }
+  };
+
+  const handleMoveEntry = async (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= entries.length) return;
+
+    const reordered = entries.slice();
+    [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+
+    // Persist new sort_order values for just the two swapped rows.
+    try {
+      await Promise.all([
+        supabase.from('program_entries').update({ sort_order: index }).eq('id', reordered[index].id),
+        supabase.from('program_entries').update({ sort_order: targetIndex }).eq('id', reordered[targetIndex].id),
+      ]);
+      setEntries(reordered);
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Reorder Error", description: err.message });
     }
   };
 
@@ -374,6 +491,11 @@ export default function ProgramManagement() {
                         <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 font-black uppercase text-[8px] tracking-wider rounded">
                           {program.guidance_service || 'Career Orientation'}
                         </span>
+                        {program.duration_label && (
+                          <span className="px-2 py-0.5 bg-amber-50 text-amber-600 font-black uppercase text-[8px] tracking-wider rounded">
+                            {program.duration_label}
+                          </span>
+                        )}
                       </div>
                       <h3 className="text-xl md:text-2xl font-black text-slate-800 uppercase tracking-tight mt-1 mb-2 leading-tight">
                         {program.title}
@@ -507,6 +629,8 @@ export default function ProgramManagement() {
                 {isDateOccupied && <p className="text-[8px] text-rose-500 font-black uppercase flex items-center gap-1 ml-1 tracking-wider animate-bounce"><AlertCircle className="w-3 h-3 shrink-0" /> Date occupied</p>}
                 <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider block pt-1">Display Date (Optional)</Label>
                 <Input value={formData.date_display} onChange={(e) => setFormData({...formData, date_display: e.target.value})} placeholder="e.g. February 18-19, 2026" className="rounded-xl bg-slate-50 border-none h-12 font-bold px-3 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-100" />
+                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider block pt-1">Duration Label (Optional)</Label>
+                <Input value={formData.duration_label} onChange={(e) => setFormData({...formData, duration_label: e.target.value})} placeholder="e.g. 1 Month" className="rounded-xl bg-slate-50 border-none h-12 font-bold px-3 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-100" />
               </div>
 
               <div className="space-y-1.5">
@@ -573,6 +697,68 @@ export default function ProgramManagement() {
                 <option value="completed">Completed</option>
               </select>
             </div>
+
+            {/* ENTRIES (TIMELINE) — only once the program itself has an id.
+                A brand-new, unsaved program has nothing for an entry to
+                attach to yet; save it first, then reopen it to add entries. */}
+            {editingId && (
+              <div className="space-y-3 border-t border-slate-100 pt-5">
+                <div>
+                  <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Entries (Timeline)</Label>
+                  <p className="text-[9px] text-slate-400 ml-1 mt-0.5">
+                    For a multi-part program (e.g. a month-long campaign) — one entry per week, day, or milestone.
+                  </p>
+                </div>
+
+                {entries.length > 0 && (
+                  <div className="space-y-2">
+                    {entries.map((entry, index) => (
+                      <div key={entry.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl">
+                        {entry.image_urls?.[0] && (
+                          <img src={entry.image_urls[0]} className="w-14 h-14 rounded-lg object-cover shrink-0" alt="" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-black text-slate-800 truncate">{entry.label}</p>
+                          {entry.description && (
+                            <p className="text-[10px] text-slate-500 line-clamp-2 mt-0.5">{entry.description}</p>
+                          )}
+                          {entry.image_urls?.length > 1 && (
+                            <p className="text-[9px] font-bold text-indigo-500 mt-0.5">{entry.image_urls.length} photos</p>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-1 shrink-0">
+                          <button type="button" onClick={() => handleMoveEntry(index, -1)} disabled={index === 0} className="text-slate-400 hover:text-indigo-600 disabled:opacity-20">
+                            <ChevronUp className="w-4 h-4" />
+                          </button>
+                          <button type="button" onClick={() => handleMoveEntry(index, 1)} disabled={index === entries.length - 1} className="text-slate-400 hover:text-indigo-600 disabled:opacity-20">
+                            <ChevronDown className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <button type="button" onClick={() => handleDeleteEntry(entry.id)} className="text-slate-300 hover:text-rose-500 shrink-0">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="p-4 bg-white border-2 border-dashed border-slate-200 rounded-xl space-y-2">
+                  <Input value={entryLabel} onChange={(e) => setEntryLabel(e.target.value)} placeholder='Label, e.g. "Week 1"' className="rounded-lg bg-slate-50 border-none h-10 font-bold px-3 text-xs" />
+                  <Textarea value={entryDescription} onChange={(e) => setEntryDescription(e.target.value)} placeholder="Description (optional)" className="h-16 rounded-lg bg-slate-50 border-none p-3 text-xs resize-none" />
+                  <Input value={entryCaption} onChange={(e) => setEntryCaption(e.target.value)} placeholder="Caption (optional)" className="rounded-lg bg-slate-50 border-none h-10 font-bold px-3 text-xs" />
+                  <div onClick={() => entryFileInputRef.current?.click()} className="h-10 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center px-3 cursor-pointer text-slate-600 text-xs">
+                    <Camera className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
+                    <span className="truncate flex-1 font-bold">
+                      {entryFiles.length > 0 ? `${entryFiles.length} photo(s) selected` : 'Choose photos...'}
+                    </span>
+                    <input type="file" ref={entryFileInputRef} className="hidden" accept="image/*" multiple onChange={(e) => setEntryFiles(Array.from(e.target.files || []))} />
+                  </div>
+                  <Button type="button" onClick={handleAddEntry} disabled={isSavingEntry} variant="outline" className="w-full h-10 rounded-lg font-black uppercase text-[10px]">
+                    {isSavingEntry ? <Loader2 className="animate-spin h-4 w-4 mx-auto" /> : (<><Plus className="w-3.5 h-3.5 mr-2" /> Add Entry</>)}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             <div className="pt-2">
               <Button onClick={handleSave} disabled={loading || isDateOccupied} className="w-full h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-xs shadow-md">
