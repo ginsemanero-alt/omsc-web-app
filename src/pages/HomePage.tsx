@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { formatProgramDate } from "../lib/formatProgramDate";
+import { getEffectiveProgramStatus } from "../lib/programStatus";
 import { Button } from "../../src/components/ui/button";
 import { Card } from "../../src/components/ui/card";
 import {
@@ -35,6 +36,8 @@ interface Program {
   category: string;
   location: string;
   date: string;
+  status: string;
+  time_range?: string | null;
   image_url?: string;
   date_display?: string;
 }
@@ -285,10 +288,16 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             {isLoading ? (
               [1, 2, 3, 4].map((n) => <div key={n} className="aspect-[4/3] bg-slate-200 animate-pulse rounded-2xl" />)
             ) : (
-              programs.map((program) => (
+              programs.map((program) => {
+                const effectiveStatus = getEffectiveProgramStatus(program);
+                return (
                 <Card key={program.id} className="group rounded-3xl border border-slate-100/60 overflow-hidden bg-white shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col">
                   <div className="aspect-video bg-slate-900 relative overflow-hidden">
                     {program.image_url ? <img src={program.image_url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="" loading="lazy" decoding="async" /> : <div className="flex h-full items-center justify-center text-white"><ImageIcon size={30} /></div>}
+                    <div className={`absolute top-3 right-3 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm
+                      ${effectiveStatus === 'ongoing' ? 'bg-emerald-500 text-white animate-pulse' : effectiveStatus === 'completed' ? 'bg-slate-700 text-white' : 'bg-blue-600 text-white'}`}>
+                      {effectiveStatus}
+                    </div>
                   </div>
                   <div className="p-6 flex-1 flex flex-col">
                     <h3 className="text-md font-black uppercase leading-tight line-clamp-2 mb-4 group-hover:text-blue-600 transition-colors">{program.title}</h3>
@@ -298,7 +307,8 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                     </div>
                   </div>
                 </Card>
-              ))
+                );
+              })
             )}
           </div>
         </div>
