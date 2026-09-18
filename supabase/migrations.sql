@@ -774,3 +774,30 @@ CREATE POLICY notifications_update_own ON notifications
   ) WITH CHECK (
     user_id IN (SELECT id FROM users WHERE email = (auth.jwt() ->> 'email'))
   );
+
+-- ------------------------------------------------------------
+-- PHASE 18 — Analytics AI Insight cache
+--
+-- One cached explanation for the whole Analytics dashboard (see
+-- /api/analytics-insight), keyed by a fixed section id with a hash
+-- of the aggregate numbers it was generated from. All reads/writes
+-- go through that endpoint's service-role client, never the
+-- browser's own — same reasoning as `notifications` needing no
+-- client-side INSERT policy, this needs no client-side write
+-- policy at all. The admin-only SELECT policy exists only so a
+-- future admin-facing read doesn't need a new policy to be added.
+-- ------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS analytics_insights (
+  section      text primary key,
+  insight      text not null,
+  data_hash    text not null,
+  model_used   text not null,
+  generated_at timestamptz not null default now()
+);
+
+ALTER TABLE analytics_insights ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS analytics_insights_select_admin ON analytics_insights;
+CREATE POLICY analytics_insights_select_admin ON analytics_insights
+  FOR SELECT USING (is_admin());

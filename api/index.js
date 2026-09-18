@@ -5,6 +5,7 @@ import cors from 'cors';
 import bcrypt from 'bcryptjs'; // ← bcryptjs, hindi bcrypt (mas stable sa Vercel serverless)
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { Resend } from 'resend';
+import crypto from 'crypto';
 
 
 const app = express();
@@ -107,6 +108,20 @@ const notifyLimiter = rateLimit({
     handler: rateLimitHandler,
 });
 
+// OpenRouter's free tier is 50 requests/day account-wide, and a failed
+// attempt still counts against it — capped well below that so a burst of
+// admin clicks (or retries during testing) can't exhaust the day's quota
+// before a real thesis-defense session needs it. Cache hits (the common
+// case once numbers stop changing) never reach this limiter's protected
+// work at all, since they're served before any OpenRouter call is made.
+const analyticsInsightLimiter = rateLimit({
+    windowMs: 24 * 60 * 60 * 1000,
+    limit: 40,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
+});
+
 // Light blanket cap on every /api/* route as a general safety net against
 // scripted abuse/scraping, on top of the stricter limiters above.
 const globalApiLimiter = rateLimit({
@@ -144,6 +159,142 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 const RESEND_FROM = process.env.RESEND_FROM_EMAIL || 'OMSU Guidance <onboarding@resend.dev>';
 if (!resend) {
     console.warn('⚠️  RESEND_API_KEY not set — student email notifications are disabled until it is configured.');
+}
+
+// --- OPENROUTER CONFIG (Analytics AI Insight) ---
+// Server-side only, on purpose — this key must never reach the browser.
+// Pinned exact free-model ids, not a generic "auto" pick: OpenRouter's free
+// tier is 50 requests/day account-wide and a model silently swapping out
+// from under us would make the "matches what I approved" guarantee (and any
+// results consistency during a live thesis defense) impossible to reason
+// about. Primary is tried once; on any failure, the fallback is tried
+// exactly once — no loops, since failed attempts still burn the daily quota.
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_PRIMARY_MODEL = 'google/gemma-4-31b-it:free';
+const OPENROUTER_FALLBACK_MODEL = 'qwen/qwen3.8-27b:free';
+if (!OPENROUTER_API_KEY) {
+    console.warn('⚠️  OPENROUTER_API_KEY not set — the Analytics AI Insight feature is disabled until it is configured.');
+}
+
+// Deterministic hash of the aggregated numbers an insight was generated
+// from — object key order isn't guaranteed stable across requests, so keys
+// are sorted recursively before hashing; otherwise the same underlying
+// data could hash differently and defeat the cache for no reason.
+function canonicalStringify(value) {
+    if (Array.isArray(value)) {
+        return `[${value.map(canonicalStringify).join(',')}]`;
+    }
+    if (value && typeof value === 'object') {
+        const keys = Object.keys(value).sort();
+        return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalStringify(value[k])}`).join(',')}}`;
+    }
+    return JSON.stringify(value);
+}
+
+function hashMetrics(metrics) {
+    return crypto.createHash('sha256').update(canonicalStringify(metrics)).digest('hex');
+}
+
+// Defense in depth: the frontend is only ever supposed to send aggregate
+// figures, but this asserts it server-side before anything is forwarded to
+// a third party. Rejects outright rather than trying to strip/redact —
+// a payload that shouldn't contain this in the first place is a bug to
+// surface, not paper over.
+//
+// Deliberately NOT blocking a bare "name" or "label" key — those are the
+// standard chart-data convention this codebase already uses for category/
+// type labels (e.g. materialTypeAnalytics: [{ name: "PDF", count: 5 }]),
+// and blocking them flags every legitimate aggregate as a false positive.
+// Only compound, unambiguously person-identifying key names are blocked.
+const PII_KEY_BLOCKLIST = new Set([
+    'email', 'actor_email', 'actor_name', 'full_name', 'fullname',
+    'student_id', 'studentid', 'user_id', 'userid', 'contact_no',
+    'contactno', 'phone', 'address', 'password',
+]);
+const EMAIL_PATTERN = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+const UUID_PATTERN = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
+
+function findPII(value, path = 'metrics') {
+    if (Array.isArray(value)) {
+        for (let i = 0; i < value.length; i += 1) {
+            const found = findPII(value[i], `${path}[${i}]`);
+            if (found) return found;
+        }
+        return null;
+    }
+    if (value && typeof value === 'object') {
+        for (const key of Object.keys(value)) {
+            if (PII_KEY_BLOCKLIST.has(key.toLowerCase())) {
+                return `${path}.${key}`;
+            }
+            const found = findPII(value[key], `${path}.${key}`);
+            if (found) return found;
+        }
+        return null;
+    }
+    if (typeof value === 'string' && (EMAIL_PATTERN.test(value) || UUID_PATTERN.test(value))) {
+        return path;
+    }
+    return null;
+}
+
+async function callOpenRouter(model, metrics, sectionLabel) {
+    const systemPrompt = [
+        'You are explaining guidance-office analytics data to a school guidance counselor who is not a developer or data analyst.',
+        'Write a few short paragraphs in plain, everyday language — detailed and specific, not a one-line summary.',
+        'Only ever refer to numbers that literally appear in the JSON data you are given. Never invent, estimate, or round a number that is not present in that data.',
+        'If a figure is missing or zero, say so plainly instead of guessing.',
+    ].join(' ');
+
+    const userPrompt = `Section: ${sectionLabel}\n\nAggregated data (JSON):\n${JSON.stringify(metrics, null, 2)}\n\nExplain in detail what this data means for the guidance office.`;
+
+    // A hung provider (no response, ever) is worse than a fast error — it
+    // would stall this request indefinitely instead of moving on to the
+    // fallback model within a reasonable time. 20s is generous for a
+    // single free-model completion but still fails fast enough that the
+    // primary+fallback path resolves well under a typical page-load
+    // patience budget.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+
+    let response;
+    try {
+        response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt },
+                ],
+            }),
+            signal: controller.signal,
+        });
+    } catch (err) {
+        if (err.name === 'AbortError') {
+            throw new Error(`OpenRouter (${model}) timed out after 20s`);
+        }
+        throw err;
+    } finally {
+        clearTimeout(timeout);
+    }
+
+    if (!response.ok) {
+        const errorBody = await response.text().catch(() => '');
+        throw new Error(`OpenRouter (${model}) returned ${response.status}: ${errorBody.slice(0, 300)}`);
+    }
+
+    const data = await response.json();
+    const text = data?.choices?.[0]?.message?.content?.trim();
+    if (!text) {
+        throw new Error(`OpenRouter (${model}) returned no explanation text`);
+    }
+
+    return text;
 }
 
 // --- ROUTES ---
@@ -686,6 +837,121 @@ app.post('/api/notify-students', notifyLimiter, async (req, res) => {
         res.status(200).json({ notified: notifiedCount, emailSent: sentCount, total: activeStudents.length });
     } catch (error) {
         console.error("Notify Students Error:", error.message);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// AI-generated plain-language explanation of the admin's Analytics
+// dashboard, via OpenRouter (see the OPENROUTER CONFIG block above for the
+// pinned models and the reasoning behind them). Same admin-session-check
+// shape as the other admin-gated endpoints. Caches by section + a hash of
+// the numbers the insight was generated from, so a click on unchanged data
+// is instant and needs no OpenRouter call at all — this must keep working
+// even if OpenRouter itself is down, since it's relied on live during a
+// thesis defense.
+app.post('/api/analytics-insight', analyticsInsightLimiter, async (req, res) => {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+    if (!token) {
+        return res.status(401).json({ message: "Missing authorization token" });
+    }
+
+    try {
+        const { data: { user: callerAuthUser }, error: callerError } = await supabase.auth.getUser(token);
+
+        if (callerError || !callerAuthUser?.email) {
+            return res.status(401).json({ message: "Invalid or expired session" });
+        }
+
+        const { data: callerRecord } = await supabase
+            .from('users')
+            .select('role')
+            .eq('email', callerAuthUser.email.toLowerCase())
+            .maybeSingle();
+
+        if (callerRecord?.role !== 'admin') {
+            return res.status(403).json({ message: "Only admins can generate analytics insights" });
+        }
+
+        if (!OPENROUTER_API_KEY) {
+            return res.status(503).json({ message: "AI Insight is not configured on this server yet." });
+        }
+
+        const { section, sectionLabel, metrics, regenerate } = req.body;
+
+        if (!section?.trim() || !sectionLabel?.trim()) {
+            return res.status(400).json({ message: "section and sectionLabel are required" });
+        }
+        if (!metrics || typeof metrics !== 'object' || Array.isArray(metrics)) {
+            return res.status(400).json({ message: "metrics must be an object of aggregate figures" });
+        }
+
+        const piiPath = findPII(metrics);
+        if (piiPath) {
+            // Logged, not detailed to the client — the exact path could
+            // itself hint at the shape of whatever slipped through.
+            console.error(`analytics-insight: rejected payload, possible PII at ${piiPath}`);
+            return res.status(400).json({ message: "Payload rejected: only aggregate figures are allowed." });
+        }
+
+        const dataHash = hashMetrics(metrics);
+
+        if (!regenerate) {
+            const { data: cached } = await supabase
+                .from('analytics_insights')
+                .select('insight, data_hash, model_used, generated_at')
+                .eq('section', section)
+                .maybeSingle();
+
+            if (cached && cached.data_hash === dataHash) {
+                return res.status(200).json({
+                    section,
+                    insight: cached.insight,
+                    generatedAt: cached.generated_at,
+                    cached: true,
+                    model: cached.model_used,
+                });
+            }
+        }
+
+        let insightText;
+        let modelUsed;
+        try {
+            insightText = await callOpenRouter(OPENROUTER_PRIMARY_MODEL, metrics, sectionLabel);
+            modelUsed = OPENROUTER_PRIMARY_MODEL;
+        } catch (primaryError) {
+            console.warn('analytics-insight: primary model failed:', primaryError.message);
+            try {
+                insightText = await callOpenRouter(OPENROUTER_FALLBACK_MODEL, metrics, sectionLabel);
+                modelUsed = OPENROUTER_FALLBACK_MODEL;
+            } catch (fallbackError) {
+                console.error('analytics-insight: fallback model also failed:', fallbackError.message);
+                return res.status(502).json({ message: "AI Insight is temporarily unavailable. Please try again later." });
+            }
+        }
+
+        const generatedAt = new Date().toISOString();
+
+        const { error: upsertError } = await supabase
+            .from('analytics_insights')
+            .upsert(
+                { section, insight: insightText, data_hash: dataHash, model_used: modelUsed, generated_at: generatedAt },
+                { onConflict: 'section' }
+            );
+        if (upsertError) {
+            console.warn('analytics-insight: cache write failed:', upsertError.message);
+        }
+
+        res.status(200).json({
+            section,
+            insight: insightText,
+            generatedAt,
+            cached: false,
+            model: modelUsed,
+        });
+    } catch (error) {
+        console.error("Analytics Insight Error:", error.message);
         res.status(500).json({ message: error.message });
     }
 });

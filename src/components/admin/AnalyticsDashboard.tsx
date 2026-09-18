@@ -39,6 +39,7 @@ import {
   File,
   Trophy,
   Target,
+  Sparkles,
 } from "lucide-react";
 
 import {
@@ -60,6 +61,7 @@ import {
 import { motion } from "framer-motion";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { fetchAnalyticsInsight, type AnalyticsInsightResult } from "../../lib/analyticsInsight";
 
 /* =========================================================
    TYPES
@@ -412,6 +414,13 @@ export default function AnalyticsDashboard() {
   const [reportStartDate, setReportStartDate] = useState("");
   const [reportEndDate, setReportEndDate] = useState("");
   const [generatingReport, setGeneratingReport] = useState(false);
+
+  /* AI INSIGHT — one plain-language explanation of the whole dashboard,
+     via /api/analytics-insight (OpenRouter, server-side only). */
+
+  const [insight, setInsight] = useState<AnalyticsInsightResult | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightError, setInsightError] = useState<string | null>(null);
 
   /* =======================================================
      FETCH DATA
@@ -2166,6 +2175,74 @@ export default function AnalyticsDashboard() {
   };
 
   /* =======================================================
+     AI INSIGHT — one comprehensive explanation of the whole dashboard.
+     Every value below is already an aggregate (counts/averages/
+     percentages/labels) computed above for the on-screen charts
+     themselves — nothing here reaches into raw rows.
+  ======================================================= */
+
+  const buildInsightMetrics = () => ({
+    overview: {
+      studentsCovered: totalStudents,
+      guidancePrograms: totalGuidancePrograms,
+      activeSurveys,
+      uniqueSurveyParticipants: surveyParticipants,
+      surveyResponses: totalSurveyResponses,
+      totalMaterials,
+      totalIECMaterials,
+      iecMaterialsThisMonth,
+      materialsThisMonth,
+      materialsThisYear,
+      totalIECDownloads: totalIECDowloads,
+      downloadsThisMonth,
+      pwdStudents: inclusionAnalytics.pwd,
+      ipStudents: inclusionAnalytics.ip,
+    },
+    materials: {
+      byCategory: iecCategoryAnalytics,
+      byType: materialTypeAnalytics,
+      byFormat: materialFormatAnalytics,
+    },
+    knowledgeAwareness: {
+      overallAverageScorePercent: awarenessAnalytics.overall,
+      scoredResponses: awarenessAnalytics.totalResponses,
+      byProgram: programAwarenessAnalytics,
+      byYearLevel: awarenessAnalytics.byYearLevel,
+      byGender: awarenessAnalytics.byGender,
+      byPwdStatus: awarenessAnalytics.byPwd,
+      byIpStatus: awarenessAnalytics.byIp,
+      guidanceServiceCoverage,
+      programParticipationByCourse,
+    },
+    demographics: {
+      byCourse: courseAnalytics,
+      byYearLevel: yearLevelAnalytics,
+      byGender: genderAnalytics,
+      byAgeBand: ageAnalytics,
+      byCampus: campusAnalytics,
+    },
+  });
+
+  const handleGenerateInsight = async (regenerate = false) => {
+    setInsightLoading(true);
+    setInsightError(null);
+
+    try {
+      const result = await fetchAnalyticsInsight(
+        "full_dashboard",
+        "Full Analytics Dashboard",
+        buildInsightMetrics(),
+        regenerate
+      );
+      setInsight(result);
+    } catch (err: any) {
+      setInsightError(err.message || "Failed to generate insight.");
+    } finally {
+      setInsightLoading(false);
+    }
+  };
+
+  /* =======================================================
      PDF EXPORT
   ======================================================= */
 
@@ -2432,9 +2509,74 @@ export default function AnalyticsDashboard() {
                 )}
                 Export Report
               </Button>
+
+              <Button
+                onClick={() => handleGenerateInsight(false)}
+                disabled={insightLoading}
+                className="h-12 rounded-xl px-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] tracking-widest"
+              >
+                {insightLoading ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4 mr-2" />
+                )}
+                AI Insight
+              </Button>
             </div>
           </div>
         </div>
+
+        {/* =================================================
+            AI INSIGHT — plain-language explanation of the whole
+            dashboard, via /api/analytics-insight (OpenRouter).
+        ================================================= */}
+
+        {(insightLoading || insightError || insight) && (
+          <Card className="border-none shadow-sm rounded-[1.75rem] p-5 md:p-7 bg-white">
+            <div className="flex items-center justify-between gap-3 mb-1">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-indigo-600" />
+                <h3 className="text-sm font-black uppercase tracking-tight text-slate-800">
+                  AI Insight
+                </h3>
+              </div>
+
+              {insight && !insightLoading && (
+                <Button
+                  variant="ghost"
+                  onClick={() => handleGenerateInsight(true)}
+                  className="h-8 px-3 rounded-lg font-black uppercase text-[9px] tracking-widest text-indigo-600 hover:bg-indigo-50"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                  Regenerate
+                </Button>
+              )}
+            </div>
+
+            {insightLoading ? (
+              <div className="flex items-center gap-2 py-6 text-slate-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-xs font-bold uppercase tracking-widest">Generating explanation...</span>
+              </div>
+            ) : insightError ? (
+              <p className="text-xs font-bold text-rose-500 py-4">{insightError}</p>
+            ) : insight ? (
+              <>
+                <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-4">
+                  Generated {new Date(insight.generatedAt).toLocaleString()}
+                  {insight.cached ? " · cached" : ""}
+                </p>
+                <div className="space-y-3">
+                  {insight.insight.split(/\n{2,}/).map((paragraph, i) => (
+                    <p key={i} className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                      {paragraph}
+                    </p>
+                  ))}
+                </div>
+              </>
+            ) : null}
+          </Card>
+        )}
 
         {/* =================================================
             EXPORT REPORT — DATE RANGE
