@@ -814,3 +814,14 @@ CREATE POLICY analytics_insights_select_admin ON analytics_insights
 -- ------------------------------------------------------------
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_test_account boolean NOT NULL DEFAULT false;
+
+-- ------------------------------------------------------------
+-- PHASE 20 — Multi-photo program poster/cover gallery
+--
+-- programs.image_url stays exactly as-is (the primary cover shown
+-- on every card/thumbnail everywhere) — this only adds room for
+-- additional cover photos, so nothing that already reads image_url
+-- needs to change.
+-- ------------------------------------------------------------
+
+ALTER TABLE programs ADD COLUMN IF NOT EXISTS gallery_urls text[];

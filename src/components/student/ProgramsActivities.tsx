@@ -15,6 +15,7 @@ import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
 import { usePagination } from '../../hooks/usePagination';
 import { PaginationControls } from '../../components/ui/pagination-controls';
+import ProgramEntryTimeline from '../shared/ProgramEntryTimeline';
 
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a handout PDF preview.
@@ -51,6 +52,7 @@ interface Program {
   registered: number;
   status: string;
   image_url?: string;
+  gallery_urls?: string[] | null;
   content?: string;
   date_display?: string;
   duration_label?: string | null;
@@ -311,59 +313,27 @@ export default function ProgramsActivities() {
                       </div>
                     )}
 
-                    {(() => {
-                      const timelineEntries = (program.program_entries || [])
-                        .slice()
-                        .sort((a, b) => a.sort_order - b.sort_order);
+                    <ProgramEntryTimeline
+                      entries={program.program_entries || []}
+                      onImageClick={(url, title) => setPreviewImage({ url, title })}
+                    />
 
-                      // Not a calendar, not tabs — just a plain ordered
-                      // scroll. A program with no entries shows nothing
-                      // extra here at all, not even an empty state.
-                      if (timelineEntries.length === 0) return null;
-
-                      return (
-                        <div className="max-h-[32rem] overflow-y-auto pr-1 space-y-0">
-                          {timelineEntries.map((entry, index) => (
-                            <div key={entry.id} className="relative pl-8 pb-6 last:pb-0">
-                              {index < timelineEntries.length - 1 && (
-                                <div className="absolute left-[7px] top-3 bottom-0 w-px bg-slate-200 dark:bg-slate-700" />
-                              )}
-                              <div className="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-indigo-600 border-4 border-white dark:border-slate-900 shadow" />
-
-                              <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">
-                                {entry.label}
-                              </p>
-
-                              {(entry.image_urls?.length ?? 0) > 0 && (
-                                <div className="flex gap-2 overflow-x-auto mt-2 pb-1">
-                                  {entry.image_urls!.map((url: string, i: number) => (
-                                    <img
-                                      key={i}
-                                      src={url}
-                                      alt={entry.label}
-                                      className="h-32 w-auto rounded-xl object-cover shrink-0 cursor-pointer"
-                                      onClick={() => setPreviewImage({ url, title: entry.label })}
-                                    />
-                                  ))}
-                                </div>
-                              )}
-
-                              {entry.description && (
-                                <p className="text-xs md:text-sm text-slate-600 dark:text-slate-300 font-medium leading-relaxed mt-2">
-                                  {entry.description}
-                                </p>
-                              )}
-
-                              {entry.caption && (
-                                <p className="text-[10px] text-slate-400 italic mt-1">
-                                  {entry.caption}
-                                </p>
-                              )}
-                            </div>
+                    {(program.gallery_urls?.length ?? 0) > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[9px] font-black uppercase text-indigo-500 tracking-widest ml-1">More Photos</p>
+                        <div className="flex gap-2 overflow-x-auto pb-1">
+                          {program.gallery_urls!.map((url, i) => (
+                            <img
+                              key={i}
+                              src={url}
+                              alt={program.title}
+                              className="h-28 w-auto rounded-xl object-cover shrink-0 cursor-pointer"
+                              onClick={() => setPreviewImage({ url, title: program.title })}
+                            />
                           ))}
                         </div>
-                      );
-                    })()}
+                      </div>
+                    )}
                   </div>
                 );
               })()}

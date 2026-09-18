@@ -6,6 +6,7 @@ import { notifyStudents } from '../../lib/notifyStudents';
 import { formatProgramDate } from '../../lib/formatProgramDate';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
 import ZoomableImage from '../shared/ZoomableImage';
+import ProgramEntryTimeline from '../shared/ProgramEntryTimeline';
 import { useAuth } from '../../hooks/useAuth';
 import { usePagination } from '../../hooks/usePagination';
 import { Card } from '../../components/ui/card';
@@ -52,8 +53,9 @@ export default function ProgramManagement() {
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [deleteTargetTitle, setDeleteTargetTitle] = useState('');
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrl, setPreviewUrl] = useState('');
+  const [existingGalleryUrls, setExistingGalleryUrls] = useState<string[]>([]);
   const [materialFile, setMaterialFile] = useState<File | null>(null);
 
   const [startTime, setStartTime] = useState('08:00');
@@ -81,7 +83,9 @@ export default function ProgramManagement() {
   const [entryDescription, setEntryDescription] = useState('');
   const [entryCaption, setEntryCaption] = useState('');
   const [entryFiles, setEntryFiles] = useState<File[]>([]);
+  const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
   const [isSavingEntry, setIsSavingEntry] = useState(false);
+  const [showStudentPreview, setShowStudentPreview] = useState(false);
   const entryFileInputRef = useRef<HTMLInputElement>(null);
 
   const isDateOccupied = programs.some(p =>
@@ -171,6 +175,7 @@ export default function ProgramManagement() {
         content: program.content || ''
       });
       setPreviewUrl(program.image_url || '');
+      setExistingGalleryUrls(program.gallery_urls || []);
       setEntries(
         (program.program_entries || [])
           .slice()
@@ -190,16 +195,15 @@ export default function ProgramManagement() {
         capacity: 0, status: 'upcoming', image_url: '', content: ''
       });
       setPreviewUrl('');
+      setExistingGalleryUrls([]);
       setEntries([]);
       setStartTime('08:00');
       setEndTime('17:00');
     }
     setMaterialFile(null);
-    setSelectedFile(null);
-    setEntryLabel('');
-    setEntryDescription('');
-    setEntryCaption('');
-    setEntryFiles([]);
+    setSelectedFiles([]);
+    setShowStudentPreview(false);
+    resetEntryForm();
     setIsDialogOpen(true);
   };
 
@@ -207,20 +211,30 @@ export default function ProgramManagement() {
     try {
       setLoading(true);
       let finalImageUrl = formData.image_url;
+      let finalGalleryUrls = existingGalleryUrls;
 
-      if (selectedFile) {
+      if (selectedFiles.length > 0) {
         // Posters are displayed in a card a few hundred px wide — resizing
         // to 1280px max before upload cuts typical camera/screenshot
         // uploads by 80-90% with no visible quality loss at display size.
-        const uploadFile = await compressImageFile(selectedFile);
-        const path = `posters/${Date.now()}_${uploadFile.name}`;
-        // Path always includes Date.now(), so the same URL can never point
-        // to different content later — safe to cache for a full year
-        // instead of Supabase's 1 hour default.
-        const { error: uploadError } = await supabase.storage.from('program-posters').upload(path, uploadFile, { cacheControl: '31536000' });
-        if (uploadError) throw uploadError;
-        const { data } = supabase.storage.from('program-posters').getPublicUrl(path);
-        finalImageUrl = data.publicUrl;
+        const uploadedUrls: string[] = [];
+        for (const file of selectedFiles) {
+          const uploadFile = await compressImageFile(file);
+          const path = `posters/${Date.now()}_${uploadFile.name}`;
+          // Path always includes Date.now(), so the same URL can never point
+          // to different content later — safe to cache for a full year
+          // instead of Supabase's 1 hour default.
+          const { error: uploadError } = await supabase.storage.from('program-posters').upload(path, uploadFile, { cacheControl: '31536000' });
+          if (uploadError) throw uploadError;
+          const { data } = supabase.storage.from('program-posters').getPublicUrl(path);
+          uploadedUrls.push(data.publicUrl);
+        }
+        // First selected photo is the primary cover shown everywhere
+        // (cards, thumbnails); any additional ones are the gallery —
+        // a fresh selection replaces the whole set, same as how entry
+        // photos work.
+        finalImageUrl = uploadedUrls[0];
+        finalGalleryUrls = uploadedUrls.slice(1);
       }
 
       const combinedTime = `${formatTo12h(startTime)} - ${formatTo12h(endTime)}`;
@@ -236,6 +250,7 @@ export default function ProgramManagement() {
         capacity: Number(formData.capacity),
         status: formData.status,
         image_url: finalImageUrl,
+        gallery_urls: finalGalleryUrls.length > 0 ? finalGalleryUrls : null,
         content: formData.content,
         time_range: combinedTime
       };
@@ -290,7 +305,29 @@ export default function ProgramManagement() {
   // program with zero entries must save and display exactly as it always
   // has, so entries are only ever added/removed once the program itself
   // already exists (editingId is set).
-  const handleAddEntry = async () => {
+  const resetEntryForm = () => {
+    setEditingEntryId(null);
+    setEntryLabel('');
+    setEntryDescription('');
+    setEntryCaption('');
+    setEntryFiles([]);
+    if (entryFileInputRef.current) entryFileInputRef.current.value = '';
+  };
+
+  // An entry that was saved with only text and no photos — a common
+  // slip — is not a dead end: clicking it here loads it back into this
+  // same form, and any newly-chosen photos are added on top of whatever
+  // it already has, not swapped in for them.
+  const handleEditEntryClick = (entry: any) => {
+    setEditingEntryId(entry.id);
+    setEntryLabel(entry.label || '');
+    setEntryDescription(entry.description || '');
+    setEntryCaption(entry.caption || '');
+    setEntryFiles([]);
+    if (entryFileInputRef.current) entryFileInputRef.current.value = '';
+  };
+
+  const handleSaveEntry = async () => {
     if (!editingId) return;
     if (!entryLabel.trim()) {
       toast({ variant: "destructive", title: "Label required", description: "Give this entry a label, e.g. \"Week 1\"." });
@@ -300,7 +337,7 @@ export default function ProgramManagement() {
     try {
       setIsSavingEntry(true);
 
-      const imageUrls: string[] = [];
+      const newImageUrls: string[] = [];
       for (const file of entryFiles) {
         // Same bucket and path convention the poster upload above already
         // uses — no new bucket, no new storage policy needed.
@@ -309,30 +346,48 @@ export default function ProgramManagement() {
         const { error: uploadError } = await supabase.storage.from('program-posters').upload(path, uploadFile, { cacheControl: '31536000' });
         if (uploadError) throw uploadError;
         const { data } = supabase.storage.from('program-posters').getPublicUrl(path);
-        imageUrls.push(data.publicUrl);
+        newImageUrls.push(data.publicUrl);
       }
 
-      const { data, error } = await supabase
-        .from('program_entries')
-        .insert([{
-          program_id: editingId,
-          label: entryLabel.trim(),
-          description: entryDescription.trim() || null,
-          caption: entryCaption.trim() || null,
-          image_urls: imageUrls.length > 0 ? imageUrls : null,
-          sort_order: entries.length,
-        }])
-        .select();
+      if (editingEntryId) {
+        const existing = entries.find((e) => e.id === editingEntryId);
+        const combinedImageUrls = [...(existing?.image_urls || []), ...newImageUrls];
 
-      if (error) throw error;
+        const { data, error } = await supabase
+          .from('program_entries')
+          .update({
+            label: entryLabel.trim(),
+            description: entryDescription.trim() || null,
+            caption: entryCaption.trim() || null,
+            image_urls: combinedImageUrls.length > 0 ? combinedImageUrls : null,
+          })
+          .eq('id', editingEntryId)
+          .select();
 
-      setEntries([...entries, data[0]]);
-      setEntryLabel('');
-      setEntryDescription('');
-      setEntryCaption('');
-      setEntryFiles([]);
-      if (entryFileInputRef.current) entryFileInputRef.current.value = '';
-      toast({ title: "Entry added" });
+        if (error) throw error;
+
+        setEntries(entries.map((e) => (e.id === editingEntryId ? data[0] : e)));
+        toast({ title: "Entry updated" });
+      } else {
+        const { data, error } = await supabase
+          .from('program_entries')
+          .insert([{
+            program_id: editingId,
+            label: entryLabel.trim(),
+            description: entryDescription.trim() || null,
+            caption: entryCaption.trim() || null,
+            image_urls: newImageUrls.length > 0 ? newImageUrls : null,
+            sort_order: entries.length,
+          }])
+          .select();
+
+        if (error) throw error;
+
+        setEntries([...entries, data[0]]);
+        toast({ title: "Entry added" });
+      }
+
+      resetEntryForm();
     } catch (err: any) {
       toast({ variant: "destructive", title: "Entry Error", description: err.message });
     } finally {
@@ -345,6 +400,7 @@ export default function ProgramManagement() {
       const { error } = await supabase.from('program_entries').delete().eq('id', entryId);
       if (error) throw error;
       setEntries(entries.filter((e) => e.id !== entryId));
+      if (editingEntryId === entryId) resetEntryForm();
     } catch (err: any) {
       toast({ variant: "destructive", title: "Delete Error", description: err.message });
     }
@@ -584,11 +640,27 @@ export default function ProgramManagement() {
                         <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest block">Upload Event Poster</span>
                       </div>
                     )}
-                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if(file) { setSelectedFile(file); setPreviewUrl(URL.createObjectURL(file)); }
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      if (files.length > 0) {
+                        setSelectedFiles(files);
+                        setPreviewUrl(URL.createObjectURL(files[0]));
+                      }
                     }} />
                   </div>
+                  {/* Multiple photos selectable — first one is the cover
+                      shown on cards; the rest become the poster gallery
+                      students see under "View Details". */}
+                  {selectedFiles.length > 1 && (
+                    <p className="text-[9px] font-bold text-indigo-500 ml-1">
+                      +{selectedFiles.length - 1} more photo{selectedFiles.length - 1 > 1 ? 's' : ''} selected for the gallery
+                    </p>
+                  )}
+                  {selectedFiles.length === 0 && existingGalleryUrls.length > 0 && (
+                    <p className="text-[9px] font-bold text-slate-400 ml-1">
+                      {existingGalleryUrls.length} additional gallery photo{existingGalleryUrls.length > 1 ? 's' : ''} already saved — choosing new photos replaces all of them.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Activity Title</Label>
@@ -698,7 +770,10 @@ export default function ProgramManagement() {
                 {entries.length > 0 && (
                   <div className="space-y-2">
                     {entries.map((entry, index) => (
-                      <div key={entry.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl">
+                      <div
+                        key={entry.id}
+                        className={`flex items-start gap-3 p-3 rounded-xl ${editingEntryId === entry.id ? 'bg-indigo-50 ring-2 ring-indigo-200' : 'bg-slate-50'}`}
+                      >
                         {entry.image_urls?.[0] && (
                           <img src={entry.image_urls[0]} className="w-14 h-14 rounded-lg object-cover shrink-0" alt="" />
                         )}
@@ -707,8 +782,10 @@ export default function ProgramManagement() {
                           {entry.description && (
                             <p className="text-[10px] text-slate-500 line-clamp-2 mt-0.5">{entry.description}</p>
                           )}
-                          {entry.image_urls?.length > 1 && (
-                            <p className="text-[9px] font-bold text-indigo-500 mt-0.5">{entry.image_urls.length} photos</p>
+                          {entry.image_urls?.length > 0 ? (
+                            <p className="text-[9px] font-bold text-indigo-500 mt-0.5">{entry.image_urls.length} photo{entry.image_urls.length > 1 ? 's' : ''}</p>
+                          ) : (
+                            <p className="text-[9px] font-bold text-amber-500 mt-0.5">No photos yet</p>
                           )}
                         </div>
                         <div className="flex flex-col gap-1 shrink-0">
@@ -719,7 +796,10 @@ export default function ProgramManagement() {
                             <ChevronDown className="w-4 h-4" />
                           </button>
                         </div>
-                        <button type="button" onClick={() => handleDeleteEntry(entry.id)} className="text-slate-300 hover:text-rose-500 shrink-0">
+                        <button type="button" onClick={() => handleEditEntryClick(entry)} className="text-slate-400 hover:text-indigo-600 shrink-0" aria-label={`Edit ${entry.label}`}>
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button type="button" onClick={() => handleDeleteEntry(entry.id)} className="text-slate-300 hover:text-rose-500 shrink-0" aria-label={`Delete ${entry.label}`}>
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -727,21 +807,64 @@ export default function ProgramManagement() {
                   </div>
                 )}
 
-                <div className="p-4 bg-white border-2 border-dashed border-slate-200 rounded-xl space-y-2">
+                <div className={`p-4 bg-white border-2 border-dashed rounded-xl space-y-2 ${editingEntryId ? 'border-indigo-300' : 'border-slate-200'}`}>
+                  {editingEntryId && (
+                    <div className="flex items-center justify-between">
+                      <p className="text-[9px] font-black uppercase text-indigo-500 tracking-widest">Editing entry</p>
+                      <button type="button" onClick={resetEntryForm} className="text-[9px] font-black uppercase text-slate-400 hover:text-slate-600 tracking-widest">
+                        Cancel
+                      </button>
+                    </div>
+                  )}
                   <Input value={entryLabel} onChange={(e) => setEntryLabel(e.target.value)} placeholder='Label, e.g. "Week 1"' className="rounded-lg bg-slate-50 border-none h-10 font-bold px-3 text-xs" />
                   <Textarea value={entryDescription} onChange={(e) => setEntryDescription(e.target.value)} placeholder="Description (optional)" className="h-16 rounded-lg bg-slate-50 border-none p-3 text-xs resize-none" />
                   <Input value={entryCaption} onChange={(e) => setEntryCaption(e.target.value)} placeholder="Caption (optional)" className="rounded-lg bg-slate-50 border-none h-10 font-bold px-3 text-xs" />
                   <div onClick={() => entryFileInputRef.current?.click()} className="h-10 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center px-3 cursor-pointer text-slate-600 text-xs">
                     <Camera className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
                     <span className="truncate flex-1 font-bold">
-                      {entryFiles.length > 0 ? `${entryFiles.length} photo(s) selected` : 'Choose photos...'}
+                      {entryFiles.length > 0
+                        ? `${entryFiles.length} photo(s) selected`
+                        : editingEntryId
+                          ? 'Add more photos...'
+                          : 'Choose photos...'}
                     </span>
                     <input type="file" ref={entryFileInputRef} className="hidden" accept="image/*" multiple onChange={(e) => setEntryFiles(Array.from(e.target.files || []))} />
                   </div>
-                  <Button type="button" onClick={handleAddEntry} disabled={isSavingEntry} variant="outline" className="w-full h-10 rounded-lg font-black uppercase text-[10px]">
-                    {isSavingEntry ? <Loader2 className="animate-spin h-4 w-4 mx-auto" /> : (<><Plus className="w-3.5 h-3.5 mr-2" /> Add Entry</>)}
+                  <Button type="button" onClick={handleSaveEntry} disabled={isSavingEntry} variant="outline" className="w-full h-10 rounded-lg font-black uppercase text-[10px]">
+                    {isSavingEntry ? (
+                      <Loader2 className="animate-spin h-4 w-4 mx-auto" />
+                    ) : editingEntryId ? (
+                      <><Edit className="w-3.5 h-3.5 mr-2" /> Update Entry</>
+                    ) : (
+                      <><Plus className="w-3.5 h-3.5 mr-2" /> Add Entry</>
+                    )}
                   </Button>
                 </div>
+
+                {/* Same rendering component the student's Programs page
+                    uses — not a lookalike, the literal same one, so this
+                    can never drift from what students actually see. */}
+                {entries.length > 0 && (
+                  <div className="pt-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setShowStudentPreview(!showStudentPreview)}
+                      className="w-full h-10 rounded-lg font-black uppercase text-[10px] text-indigo-600 hover:bg-indigo-50"
+                    >
+                      <Eye className="w-3.5 h-3.5 mr-2" />
+                      {showStudentPreview ? 'Hide' : 'Preview as Student Sees It'}
+                    </Button>
+                    {showStudentPreview && (
+                      <div className="mt-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <ProgramEntryTimeline
+                          entries={entries}
+                          onImageClick={(url, title) => setPreviewImage({ url, title })}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
