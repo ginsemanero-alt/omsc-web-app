@@ -170,8 +170,12 @@ if (!resend) {
 // about. Primary is tried once; on any failure, the fallback is tried
 // exactly once — no loops, since failed attempts still burn the daily quota.
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const OPENROUTER_PRIMARY_MODEL = 'google/gemma-4-31b-it:free';
-const OPENROUTER_FALLBACK_MODEL = 'qwen/qwen3.8-27b:free';
+// google/gemma-4-31b-it:free and qwen/qwen3.8-27b:free were both hitting
+// the same congested upstream shared free pool at the same time — swapped
+// primary to nvidia's slug (different upstream provider), confirmed
+// responding correctly, with the old primary kept on as fallback.
+const OPENROUTER_PRIMARY_MODEL = 'nvidia/nemotron-3-super-120b-a12b:free';
+const OPENROUTER_FALLBACK_MODEL = 'google/gemma-4-31b-it:free';
 if (!OPENROUTER_API_KEY) {
     console.warn('⚠️  OPENROUTER_API_KEY not set — the Analytics AI Insight feature is disabled until it is configured.');
 }
