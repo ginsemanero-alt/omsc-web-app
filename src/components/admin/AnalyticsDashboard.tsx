@@ -17,7 +17,6 @@ import {
 
 import {
   Download,
-  FileDown,
   Users,
   GraduationCap,
   BarChart3,
@@ -2024,6 +2023,13 @@ export default function AnalyticsDashboard() {
       ? `${reportStartDate || "Beginning"} to ${reportEndDate || "Present"}`
       : "All-Time";
 
+  // Single combined export — was two separate PDFs/buttons ("Export PDF"
+  // and "Export Report"); merged into one document and one button.
+  // IEC Material Reach (below) already covers what the old exportToPDF's
+  // plainer "IEC Material Analytics" (category + count only) showed, plus
+  // downloads, so that section isn't duplicated here — Recent IEC
+  // Materials is kept since it's the one piece the old Export Report
+  // never had.
   const exportReportPDF = () => {
     setGeneratingReport(true);
 
@@ -2059,7 +2065,30 @@ export default function AnalyticsDashboard() {
 
       let nextY = 46;
 
-      // SECTION 1 — Program Awareness Summary
+      // SECTION 1 — Overview Metrics
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(15);
+      doc.text("Overview Metrics", 14, nextY);
+      nextY += 6;
+
+      autoTable(doc, {
+        startY: nextY,
+        head: [["Metric", "Value"]],
+        body: getReportRows().slice(1),
+        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        styles: { fontSize: 8 },
+      });
+      nextY = (doc.lastAutoTable?.finalY || nextY) + 12;
+
+      if (nextY > 250) {
+        doc.addPage();
+        addHeader();
+        nextY = 46;
+      }
+
+      // SECTION 2 — Program Awareness Summary
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.setTextColor(15);
@@ -2088,7 +2117,13 @@ export default function AnalyticsDashboard() {
         nextY += 10;
       }
 
-      // SECTION 2 — Demographic Breakdown
+      if (nextY > 250) {
+        doc.addPage();
+        addHeader();
+        nextY = 46;
+      }
+
+      // SECTION 3 — Demographic Breakdown
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.text("Demographic Breakdown", 14, nextY);
@@ -2117,7 +2152,7 @@ export default function AnalyticsDashboard() {
         nextY = 46;
       }
 
-      // SECTION 3 — Guidance Service Coverage
+      // SECTION 4 — Guidance Service Coverage
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.text("Guidance Service Coverage", 14, nextY);
@@ -2142,7 +2177,7 @@ export default function AnalyticsDashboard() {
         nextY = 46;
       }
 
-      // SECTION 4 — IEC Material Reach
+      // SECTION 5 — IEC Material Reach
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.text(
@@ -2159,16 +2194,45 @@ export default function AnalyticsDashboard() {
         headStyles: { fillColor: [190, 24, 93], textColor: [255, 255, 255], fontStyle: "bold" },
         styles: { fontSize: 8 },
       });
+      nextY = (doc.lastAutoTable?.finalY || nextY) + (reportMaterialReach.byCategory.length === 0 ? 5 : 12);
 
       if (reportMaterialReach.byCategory.length === 0) {
-        const notesY = (doc.lastAutoTable?.finalY || nextY) + 6;
         doc.setFont("helvetica", "italic");
         doc.setFontSize(8);
         doc.setTextColor(148);
-        doc.text(NO_RECORDS_NOTE, 14, notesY);
+        doc.text(NO_RECORDS_NOTE, 14, nextY);
+        nextY += 10;
       }
 
-      doc.save(`OMSU_Guidance_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+      if (nextY > 250) {
+        doc.addPage();
+        addHeader();
+        nextY = 46;
+      }
+
+      // SECTION 6 — Recent IEC Materials
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(15);
+      doc.text("Recent IEC Materials", 14, nextY);
+      nextY += 6;
+
+      autoTable(doc, {
+        startY: nextY,
+        head: [["Title", "Format", "Category", "Campus", "Downloads", "Created"]],
+        body: tableBodyOrPlaceholder(recentIECMaterials, 6, (material) => [
+          safeString(material.title),
+          safeString(material.format),
+          safeString(material.category),
+          safeString(material.campus),
+          Number(material.downloads || 0),
+          material.created_at ? new Date(material.created_at).toLocaleDateString() : "",
+        ]),
+        headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
+        styles: { fontSize: 8 },
+      });
+
+      doc.save(`OMSU_Guidance_Analytics_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
     } finally {
       setGeneratingReport(false);
     }
@@ -2243,197 +2307,6 @@ export default function AnalyticsDashboard() {
   };
 
   /* =======================================================
-     PDF EXPORT
-  ======================================================= */
-
-  const exportToPDF = () => {
-    const doc = new jsPDF() as any;
-
-    doc.setFont(
-      "helvetica",
-      "bold"
-    );
-
-    doc.setFontSize(18);
-
-    doc.text(
-      "OMSU GUIDANCE ANALYTICS REPORT",
-      14,
-      20
-    );
-
-    doc.setFontSize(9);
-
-    doc.setTextColor(100);
-
-    doc.text(
-      `Generated: ${new Date().toLocaleString()}`,
-      14,
-      28
-    );
-
-    autoTable(doc, {
-      startY: 36,
-
-      head: [
-        [
-          "ANALYTICS METRIC",
-          "VALUE",
-        ],
-      ],
-
-      body:
-        getReportRows().slice(1),
-
-      headStyles: {
-        fillColor: [
-          79,
-          70,
-          229,
-        ],
-        textColor: [
-          255,
-          255,
-          255,
-        ],
-        fontStyle:
-          "bold",
-      },
-
-      alternateRowStyles: {
-        fillColor: [
-          248,
-          250,
-          252,
-        ],
-      },
-    });
-
-    let nextY =
-      (doc.lastAutoTable
-        ?.finalY || 36) + 12;
-
-    /* IEC REPORT */
-
-    doc.setFontSize(13);
-
-    doc.setTextColor(15);
-
-    doc.text(
-      "IEC MATERIAL ANALYTICS",
-      14,
-      nextY
-    );
-
-    nextY += 6;
-
-    autoTable(doc, {
-      startY: nextY,
-
-      head: [
-        [
-          "CATEGORY",
-          "COUNT",
-        ],
-      ],
-
-      body:
-        iecCategoryAnalytics.map(
-          (row) => [
-            row.category,
-            row.count,
-          ]
-        ),
-
-      headStyles: {
-        fillColor: [
-          5,
-          150,
-          105,
-        ],
-        textColor: [
-          255,
-          255,
-          255,
-        ],
-      },
-    });
-
-    nextY =
-      (doc.lastAutoTable
-        ?.finalY || nextY) + 12;
-
-    doc.setFontSize(13);
-
-    doc.text(
-      "RECENT IEC MATERIALS",
-      14,
-      nextY
-    );
-
-    autoTable(doc, {
-      startY: nextY + 6,
-
-      head: [
-        [
-          "TITLE",
-          "FORMAT",
-          "CATEGORY",
-          "CAMPUS",
-          "DOWNLOADS",
-          "CREATED",
-        ],
-      ],
-
-      body:
-        recentIECMaterials.map(
-          (material) => [
-            safeString(
-              material.title
-            ),
-            safeString(
-              material.format
-            ),
-            safeString(
-              material.category
-            ),
-            safeString(
-              material.campus
-            ),
-            Number(
-              material.downloads ||
-                0
-            ),
-            material.created_at
-              ? new Date(
-                  material.created_at
-                ).toLocaleDateString()
-              : "",
-          ]
-        ),
-
-      headStyles: {
-        fillColor: [
-          79,
-          70,
-          229,
-        ],
-        textColor: [
-          255,
-          255,
-          255,
-        ],
-      },
-    });
-
-    doc.save(
-      `OMSU_Guidance_Analytics_${new Date()
-        .toISOString()
-        .slice(0, 10)}.pdf`
-    );
-  };
-
-  /* =======================================================
      LOADING
   ======================================================= */
 
@@ -2490,24 +2363,16 @@ export default function AnalyticsDashboard() {
 
             <div className="flex flex-wrap gap-3">
               <Button
-                onClick={exportToPDF}
-                className="h-12 rounded-xl px-5 bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Export PDF
-              </Button>
-
-              <Button
                 onClick={exportReportPDF}
                 disabled={generatingReport}
-                className="h-12 rounded-xl px-5 bg-rose-600 hover:bg-rose-700 text-white font-black uppercase text-[10px] tracking-widest"
+                className="h-12 rounded-xl px-5 bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
               >
                 {generatingReport ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
-                  <FileDown className="w-4 h-4 mr-2" />
+                  <Download className="w-4 h-4 mr-2" />
                 )}
-                Export Report
+                Export PDF
               </Button>
 
               <Button
@@ -2579,7 +2444,7 @@ export default function AnalyticsDashboard() {
         )}
 
         {/* =================================================
-            EXPORT REPORT — DATE RANGE
+            EXPORT PDF — DATE RANGE
             (ported from the retired ReportsCenter screen)
         ================================================= */}
 
@@ -2611,7 +2476,7 @@ export default function AnalyticsDashboard() {
             </div>
 
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Export Report Period: <span className="text-slate-700">{reportRangeLabel}</span>
+              Report Period: <span className="text-slate-700">{reportRangeLabel}</span>
             </p>
           </div>
         </Card>
