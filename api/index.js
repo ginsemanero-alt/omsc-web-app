@@ -248,6 +248,7 @@ async function callOpenRouter(model, metrics, sectionLabel) {
         'Write a few short paragraphs in plain, everyday language — detailed and specific, not a one-line summary.',
         'Only ever refer to numbers that literally appear in the JSON data you are given. Never invent, estimate, or round a number that is not present in that data.',
         'If a figure is missing or zero, say so plainly instead of guessing.',
+        'Write in plain prose only — no markdown at all. Do not use asterisks for bold or italics, no # headers, no bullet points or numbered lists, no backticks. Flowing paragraphs only, separated by blank lines.',
     ].join(' ');
 
     const userPrompt = `Section: ${sectionLabel}\n\nAggregated data (JSON):\n${JSON.stringify(metrics, null, 2)}\n\nExplain in detail what this data means for the guidance office.`;
@@ -298,7 +299,21 @@ async function callOpenRouter(model, metrics, sectionLabel) {
         throw new Error(`OpenRouter (${model}) returned no explanation text`);
     }
 
-    return text;
+    return stripMarkdown(text);
+}
+
+// Free models don't reliably follow a "no markdown" instruction on their
+// own — this is the safety net so **bold**, headers, and bullet markers
+// never reach the admin's screen as literal asterisks/hashes even when a
+// model ignores the system prompt.
+function stripMarkdown(text) {
+    return text
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g, '$1')
+        .replace(/^#{1,6}\s+/gm, '')
+        .replace(/^\s*[-*+]\s+/gm, '')
+        .replace(/^\s*\d+\.\s+/gm, '')
+        .replace(/`([^`]+)`/g, '$1');
 }
 
 // --- ROUTES ---
