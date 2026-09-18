@@ -1,4 +1,5 @@
-import React, { useEffect, useState, Suspense, lazy } from "react";
+import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -8,23 +9,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
-// Lazy: pdfjs-dist is a large library (~500KB+) — this is a public page
-// (eagerly loaded, unlike the admin/student dashboards), so importing it
-// statically would ship that weight on every homepage visit even when no
-// one ever opens a PDF preview.
-const PdfPreview = lazy(() => import("../components/shared/PdfPreview"));
-import ZoomableImage from "../components/shared/ZoomableImage";
 import {
   FileText,
   Video,
   Image as ImageIcon,
   Music,
   Link as LinkIcon,
-  ExternalLink,
-  Eye,
+  LogIn,
   Loader2,
   Search,
-  HardDrive,
 } from "lucide-react";
 import { Input } from "../components/ui/input";
 import {
@@ -41,15 +34,24 @@ import { IEC_CATEGORIES } from "../lib/iecCategories";
 
 const MATERIALS_PAGE_SIZE = 9;
 
+// A generic stand-in cover — used whenever a material has no decorative
+// thumbnail of its own, and always for Image-type materials specifically:
+// their "cover" and their actual file are the same upload (see
+// MaterialLibrary.tsx), so showing it here would be exactly the leak this
+// page exists to close.
+const GENERIC_COVER = "https://i.ibb.co/2YNYzpwt/OMSC.png";
+
+// This is a public, logged-out-reachable page — the file itself (file_url)
+// is deliberately never fetched, let alone rendered. A visitor sees enough
+// to know real content exists; opening it requires signing in, which is
+// what IECMaterials.tsx (the authenticated screen) is for.
 interface Material {
   id: number;
   title: string;
   type: string;
   description: string;
-  thumbnail: string;
-  url: string;
-  downloads?: number;
   category?: string | null;
+  image_url?: string | null;
 }
 
 const MaterialsPage: React.FC = () => {
@@ -57,8 +59,7 @@ const MaterialsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [previewItem, setPreviewItem] = useState<Material | null>(null);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [signInPromptTitle, setSignInPromptTitle] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchMaterials = async () => {
@@ -70,27 +71,19 @@ const MaterialsPage: React.FC = () => {
         // this general public library — excluding them here keeps them
         // from leaking in miscategorized (e.g. an image handout showing
         // up as an infographic).
+        //
+        // Column list is deliberate and exhaustive: file_url is never
+        // selected, so it can't end up in this page's state, props, or
+        // markup no matter how the page is inspected.
         const { data: sbMaterials, error } = await supabase
           .from('materials')
-          .select('*')
+          .select('id, title, type, description, category, image_url')
           .is('program_id', null)
           .is('archived_at', null)
           .order('id', { ascending: false });
 
         if (!error && sbMaterials) {
-          // I-map ang database format kung iba man ang columns mo (e.g., file_url -> url)
-          const mappedMaterials = sbMaterials.map((m: any) => ({
-            id: m.id,
-            title: m.title || m.name || "Untitled Resource",
-            type: m.type || m.file_type || "document",
-            description: m.description || "No description provided.",
-            thumbnail: m.thumbnail || m.preview_url || "",
-            url: m.url || m.file_url || "#",
-            downloads: m.downloads || m.view_count || 0,
-            category: m.category || null,
-          }));
-
-          setMaterials(mappedMaterials);
+          setMaterials(sbMaterials as Material[]);
         } else if (error) {
           console.error("Error fetching materials from Supabase:", error.message);
         }
@@ -103,27 +96,6 @@ const MaterialsPage: React.FC = () => {
 
     fetchMaterials();
   }, []);
-
-  // Warms up pdfjs's worker in the background as soon as this list has a
-  // PDF to show, well before anyone opens a preview. Profiled against a
-  // throttled CPU (standing in for a mid/low-range Android phone): the
-  // "Loading PDF..." delay wasn't the network — it was the browser
-  // parsing and initializing pdfjs's ~1.2MB worker script itself, which
-  // only used to start after someone opened a preview. A visitor spends
-  // at least a few seconds browsing this list first, so doing that
-  // parsing now instead means the browser already has it compiled by the
-  // time they click Preview.
-  useEffect(() => {
-    const hasPdf = materials.some(
-      (m) => m.type?.toLowerCase() === 'pdf' || m.url?.toLowerCase().split('?')[0].endsWith('.pdf')
-    );
-    if (!hasPdf) return;
-
-    const timer = window.setTimeout(() => {
-      import("../components/shared/PdfPreview").then((mod) => mod.warmPdfWorker());
-    }, 1500);
-    return () => window.clearTimeout(timer);
-  }, [materials]);
 
   const getTypeIcon = (type: string) => {
     switch (type.toLowerCase()) {
@@ -149,37 +121,12 @@ const MaterialsPage: React.FC = () => {
     }
   };
 
-  const getYouTubeEmbedUrl = (url: string) => {
-    if (!url) return '';
-    let videoId = '';
-    if (url.includes('v=')) {
-      videoId = url.split('v=')[1]?.split('&')[0];
-    } else if (url.includes('youtu.be/')) {
-      videoId = url.split('youtu.be/')[1]?.split('?')[0];
-    }
-    return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
-  };
-
-  const isVideo = (m: Material) =>
-    m.type?.toLowerCase() === 'video' || m.url?.includes('youtube') || m.url?.includes('youtu.be');
-  const isYouTube = (m: Material) =>
-    !!m.url?.includes('youtube') || !!m.url?.includes('youtu.be');
-  const isImage = (m: Material) =>
-    m.type?.toLowerCase() === 'image' || /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(m.url || '');
-  const isAudio = (m: Material) =>
-    m.type?.toLowerCase() === 'audio' || /\.(mp3|wav|ogg|m4a)(\?.*)?$/i.test(m.url || '');
-  const isLink = (m: Material) => m.type?.toLowerCase() === 'link';
-  const isPdf = (m: Material) =>
-    m.type?.toLowerCase() === 'pdf' || m.url?.toLowerCase().split('?')[0].endsWith('.pdf');
-
-  const handlePreview = (item: Material) => {
-    if (isLink(item)) {
-      window.open(item.url, '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    setPreviewItem(item);
-    setIsPreviewOpen(true);
+  const getCoverImage = (material: Material) => {
+    // Image-type materials have no cover distinct from the file itself —
+    // always show the generic placeholder for those, real thumbnail
+    // otherwise (falling back to the same placeholder if none was set).
+    if (material.type?.toLowerCase() === 'image') return GENERIC_COVER;
+    return material.image_url || GENERIC_COVER;
   };
 
   const filteredMaterials = materials.filter(m =>
@@ -213,7 +160,7 @@ const MaterialsPage: React.FC = () => {
               IEC <br className="hidden md:block" /> Materials
             </h1>
             <p className="text-slate-500 font-medium max-w-md mx-auto md:mx-0 text-sm leading-relaxed">
-              Access educational and information materials for your personal development and guidance support.
+              Educational and guidance materials are available to OMSU students. Sign in to open them.
             </p>
           </div>
 
@@ -254,8 +201,6 @@ const MaterialsPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
             {pagedMaterials.map((material) => {
               const TypeIcon = getTypeIcon(material.type);
-              const image = isImage(material);
-              const audio = isAudio(material);
 
               return (
                 <Card
@@ -263,24 +208,12 @@ const MaterialsPage: React.FC = () => {
                   className="overflow-hidden bg-white rounded-[2rem] md:rounded-[2.5rem] border-none shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-2 h-full flex flex-col border border-slate-100/60"
                 >
                   <div className="relative h-48 md:h-52 overflow-hidden bg-slate-50">
-                    {image ? (
-                      // object-contain, not -cover: infographics are tall
-                      // and information-dense, so cropping to fill this box
-                      // was cutting off real content instead of just margin.
-                      <img
-                        src={material.url}
-                        alt={material.title}
-                        className="w-full h-full object-contain"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <img
-                        src={material.thumbnail || "https://i.ibb.co/2YNYzpwt/OMSC.png"}
-                        alt={material.title}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
-                    )}
+                    <img
+                      src={getCoverImage(material)}
+                      alt={material.title}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
                     <div className="absolute top-3 right-3 md:top-4 md:right-4">
                       <Badge className={`border-none font-black uppercase text-[8px] md:text-[9px] px-2.5 py-1 rounded-lg shadow-sm flex items-center ${getTypeBadgeClass(material.type)}`}>
                         <TypeIcon className="h-3 w-3 mr-1" strokeWidth={3} />
@@ -300,22 +233,14 @@ const MaterialsPage: React.FC = () => {
                       {material.description}
                     </p>
 
-                    {audio ? (
-                      <audio src={material.url} controls className="w-full h-10 mt-2" />
-                    ) : (
-                      <div className="pt-5 mt-auto border-t border-slate-50 flex items-center justify-end">
-                        <Button
-                          onClick={() => handlePreview(material)}
-                          className="h-11 px-6 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs text-white"
-                        >
-                          {isLink(material) ? (
-                            <>Open Resource <ExternalLink className="h-3.5 w-3.5 ml-2" /></>
-                          ) : (
-                            <>Preview <Eye className="h-3.5 w-3.5 ml-2" /></>
-                          )}
-                        </Button>
-                      </div>
-                    )}
+                    <div className="pt-5 mt-auto border-t border-slate-50 flex items-center justify-end">
+                      <Button
+                        onClick={() => setSignInPromptTitle(material.title)}
+                        className="h-11 px-6 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs text-white"
+                      >
+                        Sign In to Open <LogIn className="h-3.5 w-3.5 ml-2" />
+                      </Button>
+                    </div>
                   </div>
                 </Card>
               );
@@ -339,65 +264,37 @@ const MaterialsPage: React.FC = () => {
         )}
       </div>
 
-      {/* --- PREVIEW MODAL --- */}
-      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="max-w-5xl w-[95vw] h-[90vh] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl flex flex-col">
-          <DialogHeader className="p-6 bg-white border-b border-slate-100 shrink-0">
-            <DialogTitle className="font-black uppercase tracking-tighter text-xl text-slate-900">
-              {previewItem?.title}
+      {/* --- SIGN-IN PROMPT — never renders file content or a file URL,
+          just a plain nudge to log in. --- */}
+      <Dialog open={!!signInPromptTitle} onOpenChange={(open) => !open && setSignInPromptTitle(null)}>
+        <DialogContent className="max-w-sm rounded-3xl p-8 text-center">
+          <div className="mx-auto w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <LogIn className="w-6 h-6" />
+          </div>
+
+          <DialogHeader className="mt-4">
+            <DialogTitle className="text-xl font-black uppercase tracking-tight text-slate-900 text-center">
+              Sign In Required
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex-1 w-full bg-slate-900/50 flex items-center justify-center overflow-hidden relative">
-            {previewItem && isVideo(previewItem) && isYouTube(previewItem) ? (
-              <iframe
-                src={getYouTubeEmbedUrl(previewItem.url)}
-                className="w-full aspect-video max-w-4xl rounded-2xl shadow-2xl border-none"
-                allowFullScreen
-                title="Video Preview"
-              />
-            ) : previewItem && isVideo(previewItem) ? (
-              // Self-hosted upload, not YouTube — native <video> controls
-              // already include a fullscreen button on every browser.
-              <video
-                src={previewItem.url}
-                controls
-                autoPlay
-                playsInline
-                className="w-full max-h-full max-w-4xl rounded-2xl shadow-2xl"
-              />
-            ) : previewItem && isPdf(previewItem) ? (
-              <Suspense
-                fallback={
-                  <div className="flex flex-col items-center justify-center gap-3">
-                    <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                      Loading PDF...
-                    </p>
-                  </div>
-                }
-              >
-                <PdfPreview url={previewItem.url} />
-              </Suspense>
-            ) : previewItem && isImage(previewItem) ? (
-              <ZoomableImage src={previewItem.url} alt={previewItem.title} className="p-4" />
-            ) : previewItem && isAudio(previewItem) ? (
-              <div className="p-8 w-full max-w-xl flex flex-col items-center gap-6">
-                <div className="w-24 h-24 rounded-3xl bg-purple-500/10 flex items-center justify-center">
-                  <Music className="w-12 h-12 text-purple-400" />
-                </div>
-                <audio src={previewItem.url} controls className="w-full" />
-              </div>
-            ) : (
-              <div className="text-center">
-                <HardDrive className="w-16 h-16 text-slate-700 mx-auto" />
-                <p className="font-bold text-slate-500 mt-4 uppercase text-xs">Format not supported for preview</p>
-              </div>
-            )}
-          </div>
+          <p className="text-sm text-slate-500 font-medium mt-1">
+            This material is available to OMSU students. Sign in to open it.
+          </p>
 
-          <div className="p-4 bg-white border-t border-slate-100 flex justify-end gap-3 shrink-0">
-            <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="rounded-xl font-bold uppercase text-[10px]">Close</Button>
+          <div className="flex gap-3 mt-6">
+            <Button
+              variant="ghost"
+              onClick={() => setSignInPromptTitle(null)}
+              className="flex-1 rounded-xl font-black uppercase text-[10px]"
+            >
+              Cancel
+            </Button>
+            <Link to="/login" className="flex-1">
+              <Button className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px]">
+                Sign In
+              </Button>
+            </Link>
           </div>
         </DialogContent>
       </Dialog>
