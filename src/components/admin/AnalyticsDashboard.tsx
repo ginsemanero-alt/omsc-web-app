@@ -108,6 +108,7 @@ interface Survey {
   title: string;
   status?: string | null;
   type?: string | null;
+  iec_category?: string | null;
   questions_data?: any[];
   created_at?: string | null;
 }
@@ -127,10 +128,25 @@ interface SurveyResponse {
 // Bridges survey_responses.user_id (a bigint FK to users.id) to
 // profiles (keyed on the auth uuid): users.id -> users.student_id ->
 // profiles.student_id. Neither users.id nor profiles.id can be
-// compared directly to each other.
+// compared directly to each other. `email` and `is_test_account` are
+// here for the Material Exposure panel below: activity_logs rows are
+// keyed by actor_email (not user_id), and seeded/load-test accounts
+// must never count toward that comparison.
 interface UserBridge {
   id: string | number;
   student_id?: string | null;
+  email?: string | null;
+  is_test_account?: boolean | null;
+}
+
+// One row per material-view event (see IECMaterials.tsx's logMaterialView).
+// entity_id is text and shared across every entity_type activity_logs
+// tracks — for entity_type='material' rows it's always a stringified
+// numeric material id, but the column itself carries UUIDs for other
+// rows (surveys), so it's never assumed numeric without checking first.
+interface MaterialViewLog {
+  actor_email: string | null;
+  entity_id: string | null;
 }
 
 /* =========================================================
@@ -393,6 +409,7 @@ export default function AnalyticsDashboard() {
     SurveyResponse[]
   >([]);
   const [userBridge, setUserBridge] = useState<UserBridge[]>([]);
+  const [materialViewLogs, setMaterialViewLogs] = useState<MaterialViewLog[]>([]);
 
   /* MATERIALS */
 
@@ -440,6 +457,7 @@ export default function AnalyticsDashboard() {
         responsesResult,
         materialsResult,
         userBridgeResult,
+        materialViewLogsResult,
       ] = await Promise.all([
         supabase.from("profiles").select("*"),
 
@@ -470,12 +488,23 @@ export default function AnalyticsDashboard() {
           .is("archived_at", null)
           .order("created_at", { ascending: false }),
 
-        // Only the columns needed to bridge survey_responses.user_id to
-        // profiles via student_id (see UserBridge above). Archived users
-        // are excluded — their historical responses still count (that
-        // table isn't touched by archiving), but they shouldn't resolve
-        // to a live student identity here.
-        supabase.from("users").select("id, student_id").is("archived_at", null),
+        // Bridges survey_responses.user_id to profiles via student_id
+        // (see UserBridge above). email is also needed here: the
+        // Material Exposure panel joins activity_logs, which is keyed
+        // by actor_email, not user_id. Archived users are excluded —
+        // their historical responses still count (that table isn't
+        // touched by archiving), but they shouldn't resolve to a live
+        // student identity here.
+        supabase.from("users").select("id, student_id, email, is_test_account").is("archived_at", null),
+
+        // Material Exposure panel — every recorded "opened a material"
+        // event. Scoped to action='view'/entity_type='material' only
+        // (not the whole table) since that's all this needs.
+        supabase
+          .from("activity_logs")
+          .select("actor_email, entity_id")
+          .eq("action", "view")
+          .eq("entity_type", "material"),
       ]);
 
       if (profilesResult.error) {
@@ -502,6 +531,10 @@ export default function AnalyticsDashboard() {
         console.error("Users bridge:", userBridgeResult.error);
       }
 
+      if (materialViewLogsResult.error) {
+        console.error("Material view logs:", materialViewLogsResult.error);
+      }
+
       setProfiles((profilesResult.data || []) as Profile[]);
       setPrograms((programsResult.data || []) as GuidanceProgram[]);
       setSurveys((surveysResult.data || []) as Survey[]);
@@ -511,6 +544,7 @@ export default function AnalyticsDashboard() {
 
       setMaterials((materialsResult.data || []) as Material[]);
       setUserBridge((userBridgeResult.data || []) as UserBridge[]);
+      setMaterialViewLogs((materialViewLogsResult.data || []) as MaterialViewLog[]);
     } catch (error) {
       console.error("Analytics loading error:", error);
     } finally {
@@ -1354,6 +1388,116 @@ export default function AnalyticsDashboard() {
   }, [filteredSurveyResponses, surveys, userIdToStudentId, profileByStudentId]);
 
   /* =======================================================
+     AWARENESS BY MATERIAL EXPOSURE
+
+     The core comparison the rest of Knowledge Awareness never made:
+     did students who actually opened an IEC material score higher on
+     the related knowledge assessment than students who didn't? The
+     join runs activity_logs.actor_email -> users.email ->
+     users.student_id -> profiles.student_id (activity_logs has no
+     user_id column at all, only actor_email), then
+     activity_logs.entity_id -> materials.id -> materials.category,
+     matched against survey_responses.survey_id -> surveys.iec_category.
+  ======================================================= */
+
+  // Second bridge alongside userIdToStudentId above — activity_logs is
+  // keyed by actor_email, not user_id, so this can't reuse that map.
+  // Test/seed accounts are excluded here so a seeded batch's view
+  // history never counts toward this comparison.
+  const emailToStudentId = useMemo(() => {
+    const map: Record<string, string> = {};
+    userBridge.forEach((user) => {
+      if (user.is_test_account) return;
+      const email = normalize(user.email);
+      const studentId = safeString(user.student_id);
+      if (email && studentId) map[email] = studentId;
+    });
+    return map;
+  }, [userBridge]);
+
+  // survey_responses has no is_test_account column of its own — a test
+  // account's response is excluded by checking the student_id it
+  // resolves to against this set, not by filtering the bridge above
+  // (userIdToStudentId is shared with every other panel on this page
+  // and must not change for them).
+  const testAccountStudentIds = useMemo(() => {
+    const set = new Set<string>();
+    userBridge.forEach((user) => {
+      if (user.is_test_account) {
+        const studentId = safeString(user.student_id);
+        if (studentId) set.add(studentId);
+      }
+    });
+    return set;
+  }, [userBridge]);
+
+  const materialIdToCategory = useMemo(() => {
+    const map: Record<string, string> = {};
+    materials.forEach((material) => {
+      map[safeString(material.id)] = safeString(material.category) || "Uncategorized";
+    });
+    return map;
+  }, [materials]);
+
+  // student_id -> set of IEC categories they've opened at least one
+  // material from. entity_id is text and shared with every other
+  // entity_type activity_logs tracks (surveys use UUIDs there) — only
+  // a purely-numeric id is ever treated as a material id.
+  const studentOpenedCategories = useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+
+    materialViewLogs.forEach((log) => {
+      const entityId = safeString(log.entity_id);
+      if (!/^\d+$/.test(entityId)) return;
+
+      const studentId = emailToStudentId[normalize(log.actor_email)];
+      if (!studentId) return;
+
+      const category = materialIdToCategory[entityId];
+      if (!category) return;
+
+      if (!map[studentId]) map[studentId] = new Set();
+      map[studentId].add(category);
+    });
+
+    return map;
+  }, [materialViewLogs, emailToStudentId, materialIdToCategory]);
+
+  const materialExposureAwareness = useMemo(() => {
+    const buckets: Record<string, { opened: number[]; notOpened: number[] }> = {};
+
+    scoredSurveyResponses.forEach((response) => {
+      const survey = surveys.find((s) => safeString(s.id) === safeString(response.survey_id));
+      const category = safeString(survey?.iec_category);
+      if (!category) return;
+
+      const studentId = userIdToStudentId[safeString(response.user_id)];
+      if (!studentId || testAccountStudentIds.has(studentId)) return;
+
+      const opened = studentOpenedCategories[studentId]?.has(category) ?? false;
+
+      if (!buckets[category]) buckets[category] = { opened: [], notOpened: [] };
+      (opened ? buckets[category].opened : buckets[category].notOpened).push(response.percentage || 0);
+    });
+
+    return Object.entries(buckets)
+      .map(([category, { opened, notOpened }]) => {
+        const openedAvg = average(opened);
+        const notOpenedAvg = average(notOpened);
+        return {
+          category,
+          openedAvg,
+          notOpenedAvg,
+          difference: openedAvg !== null && notOpenedAvg !== null ? openedAvg - notOpenedAvg : null,
+          openedCount: opened.length,
+          notOpenedCount: notOpened.length,
+          totalRespondents: opened.length + notOpened.length,
+        };
+      })
+      .sort((a, b) => b.totalRespondents - a.totalRespondents);
+  }, [scoredSurveyResponses, surveys, userIdToStudentId, testAccountStudentIds, studentOpenedCategories]);
+
+  /* =======================================================
      CAMPUS
   ======================================================= */
 
@@ -2177,7 +2321,43 @@ export default function AnalyticsDashboard() {
         nextY = 46;
       }
 
-      // SECTION 5 — IEC Material Reach
+      // SECTION 5 — Awareness by Material Exposure
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(15);
+      doc.text("Awareness by Material Exposure", 14, nextY);
+      nextY += 6;
+
+      autoTable(doc, {
+        startY: nextY,
+        head: [["IEC Category", "Opened", "Did Not Open", "Difference", "Respondents"]],
+        body: tableBodyOrPlaceholder(materialExposureAwareness, 5, (row) => [
+          row.category,
+          row.openedAvg !== null ? `${row.openedAvg}% (${row.openedCount})` : "No data",
+          row.notOpenedAvg !== null ? `${row.notOpenedAvg}% (${row.notOpenedCount})` : "No data",
+          row.difference !== null ? `${row.difference >= 0 ? "+" : ""}${row.difference}pp` : "No data",
+          row.totalRespondents,
+        ]),
+        headStyles: { fillColor: [8, 145, 178], textColor: [255, 255, 255], fontStyle: "bold" },
+        styles: { fontSize: 8 },
+      });
+      nextY = (doc.lastAutoTable?.finalY || nextY) + (materialExposureAwareness.length === 0 ? 5 : 12);
+
+      if (materialExposureAwareness.length === 0) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(8);
+        doc.setTextColor(148);
+        doc.text("No responses have been recorded yet.", 14, nextY);
+        nextY += 10;
+      }
+
+      if (nextY > 250) {
+        doc.addPage();
+        addHeader();
+        nextY = 46;
+      }
+
+      // SECTION 6 — IEC Material Reach
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.text(
@@ -2210,7 +2390,7 @@ export default function AnalyticsDashboard() {
         nextY = 46;
       }
 
-      // SECTION 6 — Recent IEC Materials
+      // SECTION 7 — Recent IEC Materials
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.setTextColor(15);
@@ -2277,6 +2457,7 @@ export default function AnalyticsDashboard() {
       byIpStatus: awarenessAnalytics.byIp,
       guidanceServiceCoverage,
       programParticipationByCourse,
+      awarenessByMaterialExposure: materialExposureAwareness,
     },
     demographics: {
       byCourse: courseAnalytics,
@@ -3422,6 +3603,88 @@ export default function AnalyticsDashboard() {
                 </tbody>
               </table>
             </div>
+          </Card>
+
+          {/* AWARENESS BY MATERIAL EXPOSURE — the intervention-outcome
+              comparison: did opening an IEC material actually correlate
+              with a higher knowledge score on that category? Rendered
+              (headers + em dashes) even with zero scored responses,
+              never hidden. */}
+          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+            <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
+              Awareness by Material Exposure
+            </h3>
+
+            <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
+              Average knowledge score for students who opened an IEC material in
+              that category vs. students who did not
+            </p>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                    <th className="pb-3 pr-4">IEC Category</th>
+                    <th className="pb-3 pr-4">Opened</th>
+                    <th className="pb-3 pr-4">Did Not Open</th>
+                    <th className="pb-3 pr-4">Difference</th>
+                    <th className="pb-3">Respondents</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {materialExposureAwareness.length === 0 ? (
+                    <tr>
+                      <td className="py-3 pr-4 text-xs font-bold text-slate-300">&mdash;</td>
+                      <td className="py-3 pr-4 text-xs font-bold text-slate-300">&mdash;</td>
+                      <td className="py-3 pr-4 text-xs font-bold text-slate-300">&mdash;</td>
+                      <td className="py-3 pr-4 text-xs font-bold text-slate-300">&mdash;</td>
+                      <td className="py-3 text-xs font-bold text-slate-300">&mdash;</td>
+                    </tr>
+                  ) : (
+                    materialExposureAwareness.map((row) => (
+                      <tr key={row.category} className="border-b border-slate-50 last:border-none">
+                        <td className="py-3 pr-4 text-xs font-bold text-slate-700">
+                          {row.category}
+                        </td>
+                        <td className="py-3 pr-4 text-xs font-black">
+                          {row.openedAvg !== null ? (
+                            <span className="text-indigo-600">{row.openedAvg}% <span className="text-slate-400 font-medium">({row.openedCount})</span></span>
+                          ) : (
+                            <span className="text-slate-300 font-bold">No data</span>
+                          )}
+                        </td>
+                        <td className="py-3 pr-4 text-xs font-black">
+                          {row.notOpenedAvg !== null ? (
+                            <span className="text-slate-700">{row.notOpenedAvg}% <span className="text-slate-400 font-medium">({row.notOpenedCount})</span></span>
+                          ) : (
+                            <span className="text-slate-300 font-bold">No data</span>
+                          )}
+                        </td>
+                        <td className="py-3 pr-4 text-xs font-black">
+                          {row.difference !== null ? (
+                            <span className={row.difference >= 0 ? "text-emerald-600" : "text-rose-500"}>
+                              {row.difference >= 0 ? "+" : ""}
+                              {row.difference}pp
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-bold">No data</span>
+                          )}
+                        </td>
+                        <td className="py-3 text-xs font-black text-slate-900">
+                          {row.totalRespondents}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {materialExposureAwareness.length === 0 && (
+              <p className="text-center text-[10px] font-bold text-slate-400 mt-4">
+                No responses have been recorded yet.
+              </p>
+            )}
           </Card>
 
           {/* PROGRAM PARTICIPATION BY COURSE */}
