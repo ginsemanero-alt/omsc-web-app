@@ -801,3 +801,16 @@ ALTER TABLE analytics_insights ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS analytics_insights_select_admin ON analytics_insights;
 CREATE POLICY analytics_insights_select_admin ON analytics_insights
   FOR SELECT USING (is_admin());
+
+-- ------------------------------------------------------------
+-- PHASE 19 — Mark test/seed accounts apart from real students
+--
+-- Needed before seeding real research-participant accounts
+-- (scripts/seed-omsu-students.cjs) alongside any load-test/fake
+-- accounts, so the two are never confused. Defaults to false —
+-- every existing row (all real, today) stays correctly marked
+-- with no backfill needed; any fake/load-test batch must set this
+-- to true explicitly.
+-- ------------------------------------------------------------
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_test_account boolean NOT NULL DEFAULT false;

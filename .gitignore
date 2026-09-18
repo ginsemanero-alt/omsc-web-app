@@ -26,3 +26,9 @@ dist-ssr
 *.sw?
 
 .env
+
+# Real research participant data and generated login credentials — never
+# committed. See the seed script's own header comment for how to obtain
+# the source roster.
+scripts/seed-data/omsu-students.csv
+scripts/seed-data/omsu-credentials.csv
