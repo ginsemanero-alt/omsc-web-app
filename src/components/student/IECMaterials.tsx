@@ -32,6 +32,7 @@ import {
   Link as LinkIcon,
   ExternalLink,
   Loader2,
+  Play,
 } from 'lucide-react';
 
 export default function IECMaterials() {
@@ -208,6 +209,25 @@ export default function IECMaterials() {
     return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
   };
 
+  // A thumbnail to show before the video plays: prefer the admin-uploaded
+  // cover (image_url), then fall back to YouTube's own thumbnail for a
+  // YouTube link, since YouTube always has one — a self-hosted upload
+  // with no cover has no fallback and shows the plain icon instead.
+  const getVideoThumbnail = (item: any) => {
+    if (item.image_url) return item.image_url as string;
+    const url = item.file_url || '';
+    if (url.includes('youtube.com') || url.includes('youtu.be')) {
+      let videoId = '';
+      if (url.includes('v=')) {
+        videoId = url.split('v=')[1]?.split('&')[0];
+      } else if (url.includes('youtu.be/')) {
+        videoId = url.split('youtu.be/')[1]?.split('?')[0];
+      }
+      if (videoId) return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+    }
+    return null;
+  };
+
   return (
     <div className="space-y-8 p-6 max-w-7xl mx-auto animate-in fade-in duration-700">
       {/* Header Section */}
@@ -370,25 +390,43 @@ export default function IECMaterials() {
             {/* VIDEOS TAB */}
             <TabsContent value="videos" className="outline-none">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {videos.length > 0 ? pagedVideos.map((item) => (
-                <Card key={item.id} className="p-8 bg-white dark:bg-slate-900 border-none shadow-sm rounded-[2.5rem] group">
-                  <div className="flex items-center gap-6">
-                    <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center">
-                      <Youtube className="w-10 h-10 text-red-600" />
-                    </div>
-                    <div className="flex-1">
-                      <MaterialCategoryBadge category={item.category} />
-                      <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 uppercase mb-1">{item.title}</h3>
-                      {item.description && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">{item.description}</p>
-                      )}
-                      <Button onClick={() => handlePreview(item)} className="bg-red-600 hover:bg-red-700 h-12 px-8 rounded-2xl font-black uppercase text-xs shadow-lg shadow-red-100 text-white">
-                        Watch Now
-                      </Button>
+              {videos.length > 0 ? pagedVideos.map((item) => {
+                const thumbnail = getVideoThumbnail(item);
+                return (
+                <Card key={item.id} className="overflow-hidden bg-white dark:bg-slate-900 border-none shadow-sm rounded-[2.5rem] group hover:shadow-2xl transition-all duration-500">
+                  <div
+                    className="relative h-52 bg-slate-900 overflow-hidden cursor-pointer"
+                    onClick={() => handlePreview(item)}
+                  >
+                    {thumbnail ? (
+                      <img src={thumbnail} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                    ) : (
+                      <div className="w-full h-full bg-red-50 flex items-center justify-center">
+                        <Youtube className="w-12 h-12 text-red-600" />
+                      </div>
+                    )}
+                    {/* Play button overlay — the whole thumbnail is clickable
+                        regardless, this is just the visible affordance that
+                        it isn't a static image. */}
+                    <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                      <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                        <Play className="w-7 h-7 text-red-600 ml-1" fill="currentColor" />
+                      </div>
                     </div>
                   </div>
+                  <div className="p-6">
+                    <MaterialCategoryBadge category={item.category} />
+                    <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 uppercase mb-1">{item.title}</h3>
+                    {item.description && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">{item.description}</p>
+                    )}
+                    <Button onClick={() => handlePreview(item)} className="bg-red-600 hover:bg-red-700 h-12 px-8 rounded-2xl font-black uppercase text-xs shadow-lg shadow-red-100 text-white">
+                      Watch Now
+                    </Button>
+                  </div>
                 </Card>
-              )) : <EmptyState message="No videos found" />}
+                );
+              }) : <EmptyState message="No videos found" />}
             </div>
             <PaginationControls page={videosPage} totalPages={videosTotalPages} totalItems={videos.length} pageSize={MATERIALS_PAGE_SIZE} onPageChange={setVideosPage} className="mt-6" />
             </TabsContent>
@@ -471,11 +509,14 @@ export default function IECMaterials() {
               />
             ) : previewItem?.type === 'Video' && previewItem?.file_url ? (
               // Self-hosted upload, not YouTube — native <video> controls
-              // already include a fullscreen button on every browser.
+              // already include a fullscreen button on every browser. No
+              // autoPlay: the poster (admin-uploaded cover, same image_url
+              // shown on the card) stays visible until the student presses
+              // play themselves.
               <video
                 src={previewItem.file_url}
+                poster={previewItem.image_url || undefined}
                 controls
-                autoPlay
                 playsInline
                 className="w-full max-h-full max-w-4xl rounded-2xl shadow-2xl"
               />
