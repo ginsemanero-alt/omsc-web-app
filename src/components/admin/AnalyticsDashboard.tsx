@@ -425,6 +425,16 @@ export default function AnalyticsDashboard() {
   const [selectedAcademicYear, setSelectedAcademicYear] =
     useState("all");
 
+  // Changing campus resets the course filter — a previously-selected
+  // course almost certainly doesn't belong to the newly-picked campus,
+  // and silently keeping an invisible/mismatched filter active would be
+  // more confusing than just clearing it. Same behavior as
+  // UserManagement.tsx's handleCampusFilterChange.
+  const handleCampusFilterChange = (value: string) => {
+    setSelectedCampus(value);
+    setSelectedProgram("all");
+  };
+
   /* EXPORT REPORT — ported from the retired ReportsCenter screen; its
      own date-range filter, independent of the dropdowns above. */
 
@@ -567,15 +577,26 @@ export default function AnalyticsDashboard() {
     ).sort();
   }, [profiles]);
 
+  // Scoped to the selected campus — same reasoning as UserManagement.tsx's
+  // own programOptions: San Jose's course list has no reason to show a
+  // Labangan-only program. "All Campuses" falls back to every course
+  // across all campuses.
   const programOptions = useMemo(() => {
+    const scoped =
+      selectedCampus === "all"
+        ? profiles
+        : profiles.filter(
+            (p) => normalize(p.campus) === normalize(selectedCampus)
+          );
+
     return Array.from(
       new Set(
-        profiles
+        scoped
           .map((p) => safeString(p.program))
           .filter(Boolean)
       )
     ).sort();
-  }, [profiles]);
+  }, [profiles, selectedCampus]);
 
   const yearLevelOptions = useMemo(() => {
     return Array.from(
@@ -2701,7 +2722,7 @@ export default function AnalyticsDashboard() {
             <Select
               value={selectedCampus}
               onValueChange={
-                setSelectedCampus
+                handleCampusFilterChange
               }
             >
               <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
