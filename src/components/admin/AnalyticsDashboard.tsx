@@ -421,6 +421,7 @@ export default function AnalyticsDashboard() {
   const [selectedProgram, setSelectedProgram] = useState("all");
   const [selectedYearLevel, setSelectedYearLevel] = useState("all");
   const [selectedGender, setSelectedGender] = useState("all");
+  const [selectedAge, setSelectedAge] = useState("all");
   const [selectedAcademicYear, setSelectedAcademicYear] =
     useState("all");
 
@@ -596,6 +597,16 @@ export default function AnalyticsDashboard() {
     ).sort();
   }, [profiles]);
 
+  // Fixed bucket order (not sorted alphabetically) so "Below 18" and
+  // "27+" land at the ends instead of wherever they'd fall as strings —
+  // same buckets ageAnalytics charts, minus "Not Specified" since that
+  // isn't something you can filter down to meaningfully.
+  const ageGroupOptions = useMemo(() => {
+    const order = ["Below 18", "18–20", "21–22", "23–24", "25–26", "27+"];
+    const present = new Set(profiles.map((p) => getAgeGroup(p.age)));
+    return order.filter((group) => present.has(group));
+  }, [profiles]);
+
   const academicYearOptions = useMemo(() => {
     const years = new Set<string>();
 
@@ -645,6 +656,7 @@ export default function AnalyticsDashboard() {
     selectedProgram !== "all" ||
     selectedYearLevel !== "all" ||
     selectedGender !== "all" ||
+    selectedAge !== "all" ||
     selectedAcademicYear !== "all";
 
   /* =======================================================
@@ -673,6 +685,10 @@ export default function AnalyticsDashboard() {
         normalize(profile.gender) ===
           normalize(selectedGender);
 
+      const ageMatch =
+        selectedAge === "all" ||
+        getAgeGroup(profile.age) === selectedAge;
+
       const academicYearMatch =
         selectedAcademicYear === "all" ||
         (profile.created_at &&
@@ -685,6 +701,7 @@ export default function AnalyticsDashboard() {
         programMatch &&
         yearMatch &&
         genderMatch &&
+        ageMatch &&
         academicYearMatch
       );
     });
@@ -694,6 +711,7 @@ export default function AnalyticsDashboard() {
     selectedProgram,
     selectedYearLevel,
     selectedGender,
+    selectedAge,
     selectedAcademicYear,
   ]);
 
@@ -2676,7 +2694,7 @@ export default function AnalyticsDashboard() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
 
             {/* CAMPUS */}
 
@@ -2798,6 +2816,34 @@ export default function AnalyticsDashboard() {
               </SelectContent>
             </Select>
 
+            {/* AGE */}
+
+            <Select
+              value={selectedAge}
+              onValueChange={setSelectedAge}
+            >
+              <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
+                <SelectValue placeholder="Age" />
+              </SelectTrigger>
+
+              <SelectContent>
+                <SelectItem value="all">
+                  All Ages
+                </SelectItem>
+
+                {ageGroupOptions.map(
+                  (group) => (
+                    <SelectItem
+                      key={group}
+                      value={group}
+                    >
+                      {group}
+                    </SelectItem>
+                  )
+                )}
+              </SelectContent>
+            </Select>
+
             {/* YEAR */}
 
             <Select
@@ -2838,6 +2884,7 @@ export default function AnalyticsDashboard() {
                 setSelectedProgram("all");
                 setSelectedYearLevel("all");
                 setSelectedGender("all");
+                setSelectedAge("all");
                 setSelectedAcademicYear("all");
               }}
               className="text-[9px] font-black uppercase tracking-widest text-slate-400"
