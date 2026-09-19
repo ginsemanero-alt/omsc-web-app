@@ -245,13 +245,14 @@ function findPII(value, path = 'metrics') {
 async function callOpenRouter(model, metrics, sectionLabel) {
     const systemPrompt = [
         'You are explaining guidance-office analytics data to a school guidance counselor who is not a developer or data analyst.',
-        'Write a few short paragraphs in plain, everyday language — detailed and specific, not a one-line summary.',
+        'Summarize it as a short, concise bulleted list of the most important findings — not flowing paragraphs.',
+        'Write between 4 and 8 bullet points. Each bullet is one short, plain-language sentence — get straight to the point, no filler, no restating the section title.',
         'Only ever refer to numbers that literally appear in the JSON data you are given. Never invent, estimate, or round a number that is not present in that data.',
-        'If a figure is missing or zero, say so plainly instead of guessing.',
-        'Write in plain prose only — no markdown at all. Do not use asterisks for bold or italics, no # headers, no bullet points or numbered lists, no backticks. Flowing paragraphs only, separated by blank lines.',
+        'If a figure is missing or zero, say so plainly in its own bullet instead of guessing.',
+        'Start every bullet on its own line with a dash and a space, like "- your point here". Do not use any other markdown — no asterisks for bold or italics, no # headers, no numbered lists, no backticks.',
     ].join(' ');
 
-    const userPrompt = `Section: ${sectionLabel}\n\nAggregated data (JSON):\n${JSON.stringify(metrics, null, 2)}\n\nExplain in detail what this data means for the guidance office.`;
+    const userPrompt = `Section: ${sectionLabel}\n\nAggregated data (JSON):\n${JSON.stringify(metrics, null, 2)}\n\nSummarize what this data means for the guidance office.`;
 
     // A hung provider (no response, ever) is worse than a fast error — it
     // would stall this request indefinitely instead of moving on to the
@@ -302,16 +303,22 @@ async function callOpenRouter(model, metrics, sectionLabel) {
     return stripMarkdown(text);
 }
 
-// Free models don't reliably follow a "no markdown" instruction on their
-// own — this is the safety net so **bold**, headers, and bullet markers
-// never reach the admin's screen as literal asterisks/hashes even when a
-// model ignores the system prompt.
+// Free models don't reliably follow the system prompt's formatting
+// instructions on their own — this is the safety net. Bold/italic/header/
+// backtick markers never reach the admin's screen as literal asterisks or
+// hashes even when a model ignores the prompt. Dash/asterisk bullet
+// markers are normalized to "• " rather than stripped bare, since the
+// prompt now asks for a bulleted list and the frontend renders lines
+// starting with "• " as an actual <ul> — stripping them here would flatten
+// the list back into indistinguishable run-on lines. Numbered-list markers
+// are still stripped bare since the prompt explicitly asks for dashes,
+// not numbers.
 function stripMarkdown(text) {
     return text
         .replace(/\*\*(.+?)\*\*/g, '$1')
         .replace(/(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g, '$1')
         .replace(/^#{1,6}\s+/gm, '')
-        .replace(/^\s*[-*+]\s+/gm, '')
+        .replace(/^\s*[-*+]\s+/gm, '• ')
         .replace(/^\s*\d+\.\s+/gm, '')
         .replace(/`([^`]+)`/g, '$1');
 }

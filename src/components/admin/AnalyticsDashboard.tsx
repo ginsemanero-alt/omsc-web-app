@@ -2652,11 +2652,35 @@ export default function AnalyticsDashboard() {
                   {insight.cached ? " · cached" : ""}
                 </p>
                 <div className="space-y-3">
-                  {insight.insight.split(/\n{2,}/).map((paragraph, i) => (
-                    <p key={i} className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
-                      {paragraph}
-                    </p>
-                  ))}
+                  {insight.insight.split(/\n{2,}/).map((block, i) => {
+                    // The model is asked for "• " bullet lines (normalized
+                    // server-side in stripMarkdown) — render those as a
+                    // real list instead of relying on whitespace-pre-line
+                    // to fake one. A block with no bullet lines (an older
+                    // cached insight from before this format, or a model
+                    // that ignored the prompt) still falls back to a
+                    // plain paragraph.
+                    const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
+                    const isList = lines.length > 0 && lines.every((l) => l.startsWith("• "));
+
+                    if (isList) {
+                      return (
+                        <ul key={i} className="list-disc pl-5 space-y-1.5">
+                          {lines.map((line, j) => (
+                            <li key={j} className="text-sm text-slate-600 leading-relaxed">
+                              {line.replace(/^•\s*/, "")}
+                            </li>
+                          ))}
+                        </ul>
+                      );
+                    }
+
+                    return (
+                      <p key={i} className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                        {block}
+                      </p>
+                    );
+                  })}
                 </div>
               </>
             ) : null}
