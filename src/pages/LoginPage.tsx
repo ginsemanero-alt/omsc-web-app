@@ -510,34 +510,34 @@ export default function LoginPage({
   };
 
   return (
-    <div className="relative min-h-screen w-full bg-slate-50 overflow-hidden flex items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
-      {/* Decorative only — same soft gradient-blob treatment as the other
-          public pages (AboutPage's contact section, HomePage's hero),
-          so this page stops looking like a bare leftover form. */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 bg-indigo-200/40 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-blue-200/40 rounded-full blur-[100px] pointer-events-none" />
+    <div className="relative min-h-screen w-full bg-[#09090b] text-zinc-100 overflow-hidden flex items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
+      {/* Decorative only — laravel.com-style dark backdrop: a faded grid
+          plus OMSU-blue glows behind the card. */}
+      <div className="login-grid absolute inset-0 pointer-events-none" />
+      <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[640px] max-w-[120vw] h-[420px] bg-[#0059b8]/40 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute -bottom-40 -right-24 w-96 h-96 bg-sky-500/15 rounded-full blur-[120px] pointer-events-none" />
 
       {/* FORGOT PASSWORD MODAL */}
       {showForgotPassword && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200"
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
             onClick={() => setShowForgotPassword(false)}
           />
 
-          <Card className="relative z-10 w-full max-w-md bg-white rounded-[2rem] sm:rounded-[3rem] shadow-2xl border-none overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <Card className="relative z-10 w-full max-w-md bg-[#0f0f12] text-zinc-100 rounded-2xl sm:rounded-3xl shadow-2xl border border-white/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6 sm:p-8 md:p-10">
               <div className="flex items-start justify-between gap-4 mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
-                    <KeyRound className="w-6 h-6 text-indigo-600" />
+                  <div className="w-11 h-11 rounded-xl bg-[#0059b8]/15 border border-[#0059b8]/30 flex items-center justify-center shrink-0">
+                    <KeyRound className="w-6 h-6 text-sky-400" />
                   </div>
 
                   <div>
-                    <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-slate-900">
+                    <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
                       Reset Password
                     </h2>
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mt-1">
                       OMSU Guidance System
                     </p>
                   </div>
@@ -546,7 +546,7 @@ export default function LoginPage({
                 <button
                   type="button"
                   onClick={() => setShowForgotPassword(false)}
-                  className="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors shrink-0"
+                  className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-zinc-400 hover:text-white transition-colors shrink-0"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -554,17 +554,17 @@ export default function LoginPage({
 
               {resetEmailSent ? (
                 <div className="text-center py-4">
-                  <div className="mx-auto w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center mb-4">
-                    <CheckCircle2 className="w-7 h-7 text-emerald-600" />
+                  <div className="mx-auto w-14 h-14 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mb-4">
+                    <CheckCircle2 className="w-7 h-7 text-emerald-400" />
                   </div>
 
-                  <h3 className="text-lg font-black text-slate-900">
+                  <h3 className="text-lg font-black text-white">
                     Check Your Email
                   </h3>
 
-                  <p className="mt-2 text-sm text-slate-500 leading-relaxed">
+                  <p className="mt-2 text-sm text-zinc-400 leading-relaxed">
                     If an account exists for{' '}
-                    <strong className="text-slate-700">{resetEmail}</strong>,
+                    <strong className="text-zinc-200">{resetEmail}</strong>,
                     a password reset link has been sent. Open it from the same
                     device/browser to set a new password.
                   </p>
@@ -572,14 +572,14 @@ export default function LoginPage({
                   <Button
                     type="button"
                     onClick={() => setShowForgotPassword(false)}
-                    className="w-full h-12 mt-6 bg-slate-900 hover:bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs tracking-wider"
+                    className="login-btn w-full h-12 mt-6 rounded-xl font-black uppercase text-xs tracking-wider"
                   >
                     Back to Sign In
                   </Button>
                 </div>
               ) : (
                 <form onSubmit={handleSendResetEmail} className="space-y-5">
-                  <p className="text-sm text-slate-500 leading-relaxed">
+                  <p className="text-sm text-zinc-400 leading-relaxed">
                     Enter your institutional email and we'll send you a link
                     to reset your password.
                   </p>
@@ -603,7 +603,7 @@ export default function LoginPage({
                   <Button
                     type="submit"
                     disabled={sendingReset}
-                    className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-xs tracking-wider"
+                    className="login-btn w-full h-12 rounded-xl font-black uppercase text-xs tracking-wider"
                   >
                     {sendingReset ? (
                       <>
@@ -628,23 +628,23 @@ export default function LoginPage({
       {showTerms && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200"
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
             onClick={() => setShowTerms(false)}
           />
 
-          <Card className="relative z-10 w-full max-w-lg bg-white rounded-[2rem] sm:rounded-[3rem] shadow-2xl border-none overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <Card className="relative z-10 w-full max-w-lg bg-[#0f0f12] text-zinc-100 rounded-2xl sm:rounded-3xl shadow-2xl border border-white/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6 sm:p-8 md:p-10">
               <div className="flex items-start justify-between gap-4 mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
-                    <ShieldCheck className="w-6 h-6 text-indigo-600" />
+                  <div className="w-11 h-11 rounded-xl bg-[#0059b8]/15 border border-[#0059b8]/30 flex items-center justify-center shrink-0">
+                    <ShieldCheck className="w-6 h-6 text-sky-400" />
                   </div>
 
                   <div>
-                    <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-slate-900">
+                    <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
                       Privacy & Terms
                     </h2>
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mt-1">
                       OMSU Guidance System
                     </p>
                   </div>
@@ -653,7 +653,7 @@ export default function LoginPage({
                 <button
                   type="button"
                   onClick={() => setShowTerms(false)}
-                  className="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors shrink-0"
+                  className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-zinc-400 hover:text-white transition-colors shrink-0"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -661,20 +661,20 @@ export default function LoginPage({
 
               <div className="space-y-5 max-h-[55vh] overflow-y-auto pr-2 custom-scrollbar">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-sky-400 mb-1">
                     01. Information Accuracy
                   </p>
-                  <p className="text-sm leading-relaxed text-slate-500 font-medium">
+                  <p className="text-sm leading-relaxed text-zinc-400 font-medium">
                     You certify that the information you provide
                     during registration is true and accurate.
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-sky-400 mb-1">
                     02. Purpose of Data Collection
                   </p>
-                  <p className="text-sm leading-relaxed text-slate-500 font-medium">
+                  <p className="text-sm leading-relaxed text-zinc-400 font-medium">
                     Student information may be used for account
                     management, guidance program dissemination,
                     survey administration, and aggregated system
@@ -683,10 +683,10 @@ export default function LoginPage({
                 </div>
 
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-sky-400 mb-1">
                     03. Analytics
                   </p>
-                  <p className="text-sm leading-relaxed text-slate-500 font-medium">
+                  <p className="text-sm leading-relaxed text-zinc-400 font-medium">
                     Demographic information such as program, year
                     level, age, gender, PWD status, and IP status
                     may be used to generate aggregated awareness
@@ -695,10 +695,10 @@ export default function LoginPage({
                 </div>
 
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-sky-400 mb-1">
                     04. Confidentiality
                   </p>
-                  <p className="text-sm leading-relaxed text-slate-500 font-medium">
+                  <p className="text-sm leading-relaxed text-zinc-400 font-medium">
                     Individual student information and survey
                     responses should be handled confidentially and
                     should not be unnecessarily exposed in public
@@ -707,10 +707,10 @@ export default function LoginPage({
                 </div>
 
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-sky-400 mb-1">
                     05. Account Security
                   </p>
-                  <p className="text-sm leading-relaxed text-slate-500 font-medium">
+                  <p className="text-sm leading-relaxed text-zinc-400 font-medium">
                     Students are responsible for keeping their
                     account credentials secure.
                   </p>
@@ -723,7 +723,7 @@ export default function LoginPage({
                   setAgreed(true);
                   setShowTerms(false);
                 }}
-                className="w-full h-14 mt-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-xs tracking-wider"
+                className="login-btn w-full h-14 mt-8 rounded-xl font-black uppercase text-xs tracking-wider"
               >
                 <Check className="w-4 h-4 mr-2" />
                 I Agree to Terms & Privacy Policy
@@ -733,20 +733,23 @@ export default function LoginPage({
         </div>
       )}
 
-      <Card className="relative z-10 w-full max-w-2xl bg-white border-none shadow-2xl rounded-[2rem] sm:rounded-[3rem] overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <Card className="relative z-10 w-full max-w-2xl bg-[#0f0f12]/80 backdrop-blur-xl text-zinc-100 border border-white/10 shadow-[0_0_90px_-20px_rgba(0,89,184,0.55)] rounded-2xl sm:rounded-3xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+        {/* Thin glowing accent line along the card's top edge */}
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-400/70 to-transparent" />
+
         {/* HEADER */}
         <div className="relative px-6 pt-6 sm:px-8 sm:pt-8">
           <button
             type="button"
             onClick={onBackToHome}
-            className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-slate-400 hover:text-indigo-600 transition-colors"
+            className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-zinc-500 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Home
           </button>
 
           <div className="flex flex-col items-center text-center mt-8 sm:mt-6">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-indigo-600 to-blue-600 rounded-[1.5rem] sm:rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-200">
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center bg-[#0059b8] ring-1 ring-white/15 shadow-[0_0_40px_-4px_rgba(0,102,204,0.8)]">
               {isRegister ? (
                 <UserPlus key="register-icon" className="w-8 h-8 sm:w-10 sm:h-10 text-white animate-in zoom-in-50 spin-in-6 duration-300" />
               ) : (
@@ -754,18 +757,24 @@ export default function LoginPage({
                   key="login-icon"
                   src="/guidance-logo.jpg"
                   alt="OMSU Guidance and Testing Center"
-                  className="w-11 h-11 sm:w-14 sm:h-14 rounded-full object-cover animate-in zoom-in-50 spin-in-6 duration-300"
+                  className="w-full h-full rounded-full object-cover animate-in zoom-in-50 spin-in-6 duration-300"
                 />
               )}
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-slate-900 mt-5">
+            <span className="mt-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_2px_rgba(56,189,248,0.7)] animate-pulse" />
+              OMSU Guidance &amp; Testing Center
+            </span>
+
+            <h1 className="text-3xl sm:text-5xl font-black tracking-tighter text-white mt-4">
               {isRegister
                 ? 'Student Registration'
                 : 'Portal Sign In'}
+              <span className="text-sky-400">.</span>
             </h1>
 
-            <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mt-2 max-w-md">
+            <p className="text-[10px] sm:text-xs font-medium text-zinc-400 tracking-wide mt-3 max-w-md">
               {isRegister
                 ? 'Create your Higher Education student account'
                 : 'Unified access for students & administrators'}
@@ -875,7 +884,7 @@ export default function LoginPage({
                         <SelectValue placeholder="Select campus" />
                       </SelectTrigger>
 
-                      <SelectContent className="rounded-2xl">
+                      <SelectContent className="login-select rounded-xl">
                         {CAMPUSES.map((item) => (
                           <SelectItem key={item} value={item}>
                             {item}
@@ -899,7 +908,7 @@ export default function LoginPage({
                         <SelectValue placeholder="Select year" />
                       </SelectTrigger>
 
-                      <SelectContent className="rounded-2xl">
+                      <SelectContent className="login-select rounded-xl">
                         <SelectItem value="1">
                           1st Year
                         </SelectItem>
@@ -931,7 +940,7 @@ export default function LoginPage({
                           <SelectValue placeholder="Select your academic program" />
                         </SelectTrigger>
 
-                        <SelectContent className="rounded-2xl max-h-72">
+                        <SelectContent className="login-select rounded-xl max-h-72">
                           {(PROGRAMS_BY_CAMPUS[campus] || []).map((item) => (
                             <SelectItem
                               key={item}
@@ -990,7 +999,7 @@ export default function LoginPage({
                         <SelectValue />
                       </SelectTrigger>
 
-                      <SelectContent className="rounded-2xl">
+                      <SelectContent className="login-select rounded-xl">
                         <SelectItem value="Male">
                           Male
                         </SelectItem>
@@ -1023,7 +1032,7 @@ export default function LoginPage({
                         <SelectValue />
                       </SelectTrigger>
 
-                      <SelectContent className="rounded-2xl">
+                      <SelectContent className="login-select rounded-xl">
                         <SelectItem value="Yes">
                           Yes
                         </SelectItem>
@@ -1053,7 +1062,7 @@ export default function LoginPage({
                         <SelectValue />
                       </SelectTrigger>
 
-                      <SelectContent className="rounded-2xl">
+                      <SelectContent className="login-select rounded-xl">
                         <SelectItem value="Yes">
                           Yes
                         </SelectItem>
@@ -1068,10 +1077,10 @@ export default function LoginPage({
                   </FieldWrapper>
                 </div>
 
-                <div className="mt-4 flex gap-3 p-4 bg-indigo-50/70 border border-indigo-100 rounded-2xl">
-                  <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+                <div className="mt-4 flex gap-3 p-4 bg-[#0059b8]/10 border border-[#0059b8]/30 rounded-xl">
+                  <ShieldCheck className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
 
-                  <p className="text-[10px] leading-relaxed font-medium text-indigo-700">
+                  <p className="text-[10px] leading-relaxed font-medium text-sky-200/80">
                     These demographic details are collected to
                     support aggregated system analytics requested
                     for the study. They should not be unnecessarily
@@ -1115,7 +1124,7 @@ export default function LoginPage({
                         onClick={() =>
                           setShowPassword(!showPassword)
                         }
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-sky-400"
                       >
                         {showPassword ? (
                           <EyeOff className="w-4 h-4" />
@@ -1156,7 +1165,7 @@ export default function LoginPage({
                             !showConfirmPassword
                           )
                         }
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-sky-400"
                       >
                         {showConfirmPassword ? (
                           <EyeOff className="w-4 h-4" />
@@ -1170,7 +1179,7 @@ export default function LoginPage({
 
                 {/* PASSWORD CHECKLIST */}
                 {password.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4 p-4 bg-slate-50 rounded-2xl">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4 p-4 bg-white/[0.03] border border-white/10 rounded-xl">
                     <PasswordCheck
                       valid={passwordChecks.length}
                       text="At least 8 characters"
@@ -1238,7 +1247,7 @@ export default function LoginPage({
                     onClick={() =>
                       setShowPassword(!showPassword)
                     }
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-sky-400"
                   >
                     {showPassword ? (
                       <EyeOff className="w-5 h-5" />
@@ -1253,7 +1262,7 @@ export default function LoginPage({
                 <button
                   type="button"
                   onClick={handleOpenForgotPassword}
-                  className="text-[10px] font-black uppercase tracking-wider text-indigo-600 hover:underline"
+                  className="text-[10px] font-black uppercase tracking-wider text-sky-400 hover:text-sky-300 hover:underline"
                 >
                   Forgot Password?
                 </button>
@@ -1265,10 +1274,10 @@ export default function LoginPage({
           {isRegister && (
           <div className="mt-7">
             <div
-              className={`flex items-start gap-3 p-4 rounded-2xl border transition-all ${
+              className={`flex items-start gap-3 p-4 rounded-xl border transition-all ${
                 agreed
-                  ? 'bg-emerald-50 border-emerald-100'
-                  : 'bg-slate-50 border-slate-100'
+                  ? 'bg-emerald-500/10 border-emerald-500/30'
+                  : 'bg-white/[0.03] border-white/10'
               }`}
             >
               <div className="relative flex items-center shrink-0 mt-0.5">
@@ -1279,7 +1288,7 @@ export default function LoginPage({
                   onChange={(e) =>
                     setAgreed(e.target.checked)
                   }
-                  className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border-2 border-slate-300 bg-white checked:bg-indigo-600 checked:border-indigo-600 transition-all"
+                  className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border-2 border-white/20 bg-transparent checked:bg-[#0059b8] checked:border-[#0059b8] transition-all"
                 />
 
                 <Check className="absolute w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 pointer-events-none top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
@@ -1287,13 +1296,13 @@ export default function LoginPage({
 
               <label
                 htmlFor="terms"
-                className="text-[10px] sm:text-xs leading-relaxed font-bold text-slate-500 cursor-pointer select-none"
+                className="text-[10px] sm:text-xs leading-relaxed font-bold text-zinc-400 cursor-pointer select-none"
               >
                 I agree to the{' '}
                 <button
                   type="button"
                   onClick={() => setShowTerms(true)}
-                  className="text-indigo-600 hover:underline font-black"
+                  className="text-sky-400 hover:text-sky-300 hover:underline font-black"
                 >
                   Guidance Terms & Privacy Policy
                 </button>
@@ -1307,7 +1316,7 @@ export default function LoginPage({
           <Button
             type="submit"
             disabled={isLoading}
-            className="w-full h-14 sm:h-16 mt-4 bg-slate-900 hover:bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] sm:text-xs transition-all shadow-xl shadow-slate-200 hover:shadow-2xl hover:-translate-y-0.5"
+            className="login-btn w-full h-14 sm:h-16 mt-4 rounded-xl font-black uppercase tracking-widest text-[10px] sm:text-xs transition-all hover:-translate-y-0.5"
           >
             {isLoading ? (
               <>
@@ -1330,8 +1339,8 @@ export default function LoginPage({
 
         {/* FOOTER */}
         <div className="px-5 sm:px-8 pb-7 sm:pb-8">
-          <div className="border-t border-slate-100 pt-6 text-center">
-            <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
+          <div className="border-t border-white/10 pt-6 text-center">
+            <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-zinc-500">
               {isRegister
                 ? 'Already have a student account?'
                 : 'New student?'}
@@ -1340,7 +1349,7 @@ export default function LoginPage({
             <button
               type="button"
               onClick={handleToggleMode}
-              className="mt-2 text-indigo-600 hover:text-indigo-700 font-black uppercase text-[10px] tracking-wider hover:underline"
+              className="mt-2 text-sky-400 hover:text-sky-300 font-black uppercase text-[10px] tracking-wider hover:underline"
             >
               {isRegister
                 ? 'Login here'
@@ -1352,38 +1361,69 @@ export default function LoginPage({
 
       {/* SIMPLE LOCAL STYLES */}
       <style>{`
-        .input-style {
-          width: 100%;
-          height: 3rem;
-          border-radius: 1rem;
-          background: rgb(248 250 252);
-          border: 1px solid transparent;
-          font-weight: 700;
-          color: rgb(51 65 85);
-          transition: all 0.2s ease;
+        .login-grid {
+          background-image:
+            linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+          background-size: 48px 48px;
+          -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 20%, transparent 75%);
+          mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black 20%, transparent 75%);
         }
 
-        .input-style:focus {
-          background: white;
-          border-color: rgb(165 180 252);
-          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
-          outline: none;
-        }
-
+        .input-style,
         .select-style {
           width: 100%;
           height: 3rem;
-          border-radius: 1rem;
-          background: rgb(248 250 252);
-          border: 1px solid transparent;
-          font-weight: 700;
-          color: rgb(51 65 85);
+          border-radius: 0.75rem;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          font-weight: 600;
+          color: rgb(244 244 245);
+          transition: all 0.2s ease;
         }
 
+        .input-style::placeholder,
+        .select-style [data-placeholder] {
+          color: rgb(113 113 122);
+        }
+
+        .input-style:hover,
+        .select-style:hover {
+          border-color: rgba(255, 255, 255, 0.18);
+        }
+
+        .input-style:focus,
         .select-style:focus {
-          background: white;
-          border-color: rgb(165 180 252);
-          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
+          background: rgba(255, 255, 255, 0.06);
+          border-color: rgb(56 189 248);
+          box-shadow: 0 0 0 3px rgba(0, 89, 184, 0.35);
+          outline: none;
+        }
+
+        /* Dropdown menus render in a portal outside this page's tree,
+           so they're themed through this class instead. */
+        .login-select.login-select {
+          background: #111114;
+          border-color: rgba(255, 255, 255, 0.1);
+          color: rgb(228 228 231);
+        }
+
+        .login-select [role="option"]:focus,
+        .login-select [role="option"][data-highlighted] {
+          background: rgba(0, 89, 184, 0.35);
+          color: white;
+        }
+
+        .login-btn.login-btn {
+          background: #0059b8;
+          color: white;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          box-shadow: 0 0 40px -10px rgba(0, 102, 204, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        }
+
+        .login-btn.login-btn:hover {
+          background: #0066d6;
+          box-shadow: 0 0 50px -6px rgba(14, 165, 233, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.2);
         }
 
         .custom-scrollbar::-webkit-scrollbar {
@@ -1395,7 +1435,7 @@ export default function LoginPage({
         }
 
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgb(203 213 225);
+          background: rgba(255, 255, 255, 0.15);
           border-radius: 999px;
         }
       `}</style>
@@ -1418,16 +1458,16 @@ function SectionHeader({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">
+      <div className="w-9 h-9 rounded-lg border border-white/10 bg-white/5 text-sky-400 flex items-center justify-center text-[10px] font-mono font-black shrink-0">
         {number}
       </div>
 
       <div>
-        <h2 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-800">
+        <h2 className="text-xs sm:text-sm font-black uppercase tracking-wider text-white">
           {title}
         </h2>
 
-        <p className="text-[9px] sm:text-[10px] text-slate-400 font-medium mt-1">
+        <p className="text-[9px] sm:text-[10px] text-zinc-500 font-medium mt-1">
           {description}
         </p>
       </div>
@@ -1448,9 +1488,9 @@ function FieldWrapper({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="flex items-center gap-1.5 ml-1 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-500">
+      <Label className="flex items-center gap-1.5 ml-1 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-zinc-400">
         {icon && (
-          <span className="text-indigo-500">
+          <span className="text-sky-400">
             {icon}
           </span>
         )}
@@ -1478,8 +1518,8 @@ function PasswordCheck({
     <div
       className={`flex items-center gap-2 text-[9px] font-bold ${
         valid
-          ? 'text-emerald-600'
-          : 'text-slate-400'
+          ? 'text-emerald-400'
+          : 'text-zinc-500'
       }`}
     >
       {valid ? (
