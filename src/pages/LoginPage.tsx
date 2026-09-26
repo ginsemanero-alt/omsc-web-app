@@ -752,7 +752,7 @@ export default function LoginPage({
               ) : (
                 <img
                   key="login-icon"
-                  src="https://guidance.omsc.edu.ph/assets/images/logo.png"
+                  src="/guidance-logo.jpg"
                   alt="OMSU Guidance and Testing Center"
                   className="w-11 h-11 sm:w-14 sm:h-14 rounded-full object-cover animate-in zoom-in-50 spin-in-6 duration-300"
                 />

@@ -108,9 +108,9 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           <div className="flex items-center gap-2 md:gap-3 cursor-pointer group" onClick={() => handleNavigation("home")}>
             <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center shrink-0 group-hover:bg-white/20 transition-colors overflow-hidden">
               <img
-                src="https://guidance.omsc.edu.ph/assets/images/logo.png"
+                src="/guidance-logo.jpg"
                 alt="OMSU Guidance and Testing Center"
-                className="w-full h-full object-cover"
+                className="w-full h-full rounded-full object-cover"
               />
             </div>
             <div>

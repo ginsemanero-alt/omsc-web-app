@@ -37,7 +37,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="max-w-[1440px] mx-auto px-6 h-full flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
             <img
-              src="https://guidance.omsc.edu.ph/assets/images/logo.png"
+              src="/guidance-logo.jpg"
               alt="OMSU Guidance and Testing Center"
               className="w-8 h-8 rounded-full object-cover"
             />
