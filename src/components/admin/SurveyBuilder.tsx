@@ -75,6 +75,10 @@ type Survey = {
   // same one materials.category uses, so a survey can be tied to the
   // materials covering the same topic. Optional — PHASE 13 migration.
   iec_category?: string | null;
+  // Knowledge assessments only: the one program this assessment is the
+  // pre-test/post-test for (PHASE 22). At most one active knowledge
+  // assessment per program, enforced by a unique index.
+  program_id?: number | null;
   type: SurveyType;
   status: "draft" | "active" | "closed";
   questions_data: Question[];
@@ -369,26 +373,46 @@ export default function SurveyBuilder() {
   }
 
   async function updateSurveyInfo(
-    field: "title" | "description" | "category" | "iec_category" | "type",
+    field: "title" | "description" | "category" | "iec_category" | "type" | "program_id",
     value: string
   ) {
     if (!editingSurvey) return;
 
     // iec_category is optional — its CHECK constraint only allows NULL
     // or one of the 8 IEC Categories, not an empty string, so "No IEC
-    // Category" (value === "") has to be stored as null.
-    const storedValue: string | null =
-      field === "iec_category" && value === "" ? null : value;
+    // Category" (value === "") has to be stored as null. program_id is
+    // likewise optional, and numeric.
+    const storedValue: string | number | null =
+      (field === "iec_category" || field === "program_id") && value === ""
+        ? null
+        : field === "program_id"
+          ? Number(value)
+          : value;
+
+    const previous = editingSurvey;
 
     setEditingSurvey({
       ...editingSurvey,
       [field]: storedValue,
     });
 
-    await supabase
+    const { error } = await supabase
       .from("surveys")
       .update({ [field]: storedValue })
       .eq("id", editingSurvey.id);
+
+    if (error) {
+      setEditingSurvey(previous);
+      toast({
+        variant: "destructive",
+        title: "Not Saved",
+        // 23505 = unique violation: surveys_one_knowledge_per_program
+        description:
+          error.code === "23505"
+            ? "That program already has a knowledge assessment. Each program can only have one pre-test/post-test."
+            : error.message,
+      });
+    }
   }
 
   async function toggleSurveyStatus(survey: Survey) {
@@ -796,6 +820,40 @@ export default function SurveyBuilder() {
                   <option value="knowledge">Knowledge Assessment (scored)</option>
                   <option value="opinion">Opinion Survey (unscored)</option>
                 </select>
+
+                {/* Pre-test/post-test link. Students answer a knowledge
+                    assessment twice — once before reading the program's
+                    IEC materials, once after — and Learning Gain in
+                    Analytics pairs the two per program. */}
+                {editingSurvey.type === "knowledge" && (
+                  <>
+                    <label className="text-[9px] font-black uppercase text-indigo-200 mt-5 block">
+                      Pre/Post-Test For Program
+                    </label>
+
+                    <select
+                      value={editingSurvey.program_id ?? ""}
+                      onChange={(e) =>
+                        updateSurveyInfo(
+                          "program_id",
+                          e.target.value
+                        )
+                      }
+                      className="mt-2 w-full h-11 rounded-xl bg-white text-slate-800 px-3 font-bold text-xs outline-none"
+                    >
+                      <option value="">Not linked to a program</option>
+                      {programOptions.map((program) => (
+                        <option key={program.id} value={program.id}>
+                          {program.title}
+                        </option>
+                      ))}
+                    </select>
+
+                    <p className="text-[9px] font-bold text-indigo-200/80 mt-2 leading-relaxed">
+                      Students take this twice: a pre-test, then a post-test after the program's IEC materials.
+                    </p>
+                  </>
+                )}
 
                 <label className="text-[9px] font-black uppercase text-indigo-200 mt-5 block">
                   Survey Category

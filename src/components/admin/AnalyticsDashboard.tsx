@@ -62,6 +62,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { fetchAnalyticsInsight, type AnalyticsInsightResult } from "../../lib/analyticsInsight";
 import { campusLabel } from "../../lib/campuses";
+import LearningGainSection from "./LearningGainSection";
 
 /* =========================================================
    TYPES
@@ -550,8 +551,25 @@ export default function AnalyticsDashboard() {
       setProfiles((profilesResult.data || []) as Profile[]);
       setPrograms((programsResult.data || []) as GuidanceProgram[]);
       setSurveys((surveysResult.data || []) as Survey[]);
+      // Knowledge assessments are now taken twice (pre-test + post-test,
+      // PHASE 22). Every section below predates that and treats one row
+      // as one student's answer, so keep only each student's latest
+      // attempt here: a pre-test drops out once its post-test exists.
+      // Pre vs post is compared separately, in the Learning Gain section.
+      const allResponses = (responsesResult.data || []) as (SurveyResponse & {
+        attempt_type?: "pre" | "post" | null;
+      })[];
+      const hasPost = new Set(
+        allResponses
+          .filter((r) => r.attempt_type === "post")
+          .map((r) => `${r.user_id}|${r.survey_id}`)
+      );
       setSurveyResponses(
-        (responsesResult.data || []) as SurveyResponse[]
+        allResponses.filter(
+          (r) =>
+            r.attempt_type !== "pre" ||
+            !hasPost.has(`${r.user_id}|${r.survey_id}`)
+        ) as SurveyResponse[]
       );
 
       setMaterials((materialsResult.data || []) as Material[]);
@@ -3843,6 +3861,13 @@ export default function AnalyticsDashboard() {
           </Card>
 
         </div>
+
+        {/* =================================================
+            LEARNING GAIN (pre-test vs post-test) — has its own
+            filters and data source (learning_gain_summary RPC).
+        ================================================= */}
+
+        <LearningGainSection />
 
         {/* =================================================
             COURSE + YEAR LEVEL

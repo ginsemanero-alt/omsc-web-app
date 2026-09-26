@@ -50,9 +50,22 @@ interface Survey {
   questions_data?: Question[];
   status?: string;
   type?: 'knowledge' | 'opinion';
+  program_id?: number | null;
   created_at?: string;
   is_completed?: boolean;
+  // Knowledge assessments are taken twice (PHASE 22): a pre-test, then a
+  // post-test after the program's IEC materials. This is the attempt the
+  // student's next submission will become — the database assigns it
+  // (set_attempt_type trigger); this is only for labels.
+  next_attempt?: AttemptType | null;
 }
+
+type AttemptType = 'pre' | 'post';
+
+const ATTEMPT_LABEL: Record<AttemptType, string> = {
+  pre: 'Pre-Test',
+  post: 'Post-Test',
+};
 
 interface SurveyResult {
   id: string | number;
@@ -63,6 +76,7 @@ interface SurveyResult {
   score?: number | null;
   total_scored?: number | null;
   percentage?: number | null;
+  attempt_type?: AttemptType | null;
 }
 
 interface MissedQuestion {
@@ -148,6 +162,11 @@ export default function QuizzesSurveys() {
   const [showReview, setShowReview] = useState(false);
   const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false);
   const [scoreSummary, setScoreSummary] = useState<ScoreSummary | null>(null);
+  // Which attempt the just-submitted response was, captured before the
+  // survey list refetches (after which the survey's next_attempt has
+  // already moved on). A pre-test result must not reveal correct answers,
+  // or the post-test would measure memory of the key, not learning.
+  const [submittedAttempt, setSubmittedAttempt] = useState<AttemptType | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -197,7 +216,7 @@ export default function QuizzesSurveys() {
 
       const { data: responsesData, error: responsesError } = await supabase
         .from('survey_responses')
-        .select('id, survey_id, created_at, score, total_scored, percentage')
+        .select('id, survey_id, created_at, score, total_scored, percentage, attempt_type')
         .eq('user_id', dbUserId)
         .order('created_at', { ascending: false });
 
@@ -237,6 +256,7 @@ export default function QuizzesSurveys() {
           score: response.score,
           total_scored: response.total_scored,
           percentage: response.percentage,
+          attempt_type: response.attempt_type ?? null,
         };
       });
 
@@ -272,21 +292,40 @@ export default function QuizzesSurveys() {
 
       const { data: responsesData, error: responsesError } = await supabase
         .from('survey_responses')
-        .select('survey_id')
+        .select('survey_id, attempt_type')
         .eq('user_id', dbUserId);
 
       if (responsesError) {
         console.warn('Unable to fetch completed surveys:', responsesError);
       }
 
-      const completedIds =
-        responsesData?.map((response) => String(response.survey_id)) || [];
+      // survey id -> the attempts this student has already submitted
+      const attemptsBySurvey: Record<string, Set<string>> = {};
+      for (const response of responsesData || []) {
+        const key = String(response.survey_id);
+        (attemptsBySurvey[key] ||= new Set()).add(
+          response.attempt_type || 'single'
+        );
+      }
 
       const formattedSurveys: Survey[] =
-        (surveysData || []).map((survey: any) => ({
-          ...survey,
-          is_completed: completedIds.includes(String(survey.id)),
-        })) || [];
+        (surveysData || []).map((survey: any) => {
+          const attempts = attemptsBySurvey[String(survey.id)];
+
+          // Opinion survey: one response and it's done. Knowledge
+          // assessment: done only once both pre-test and post-test exist.
+          if (survey.type !== 'knowledge') {
+            return { ...survey, is_completed: Boolean(attempts), next_attempt: null };
+          }
+
+          const next_attempt: AttemptType | null = !attempts?.has('pre')
+            ? 'pre'
+            : !attempts.has('post')
+              ? 'post'
+              : null;
+
+          return { ...survey, is_completed: next_attempt === null, next_attempt };
+        }) || [];
 
       setSurveys(formattedSurveys);
     } catch (error: any) {
@@ -551,6 +590,7 @@ export default function QuizzesSurveys() {
 
     const isKnowledge = activeSurvey.type === 'knowledge';
     const summary = isKnowledge ? computeScoreSummary(questions, answers) : null;
+    const attempt = isKnowledge ? activeSurvey.next_attempt ?? null : null;
 
     try {
       setSubmitting(true);
@@ -580,12 +620,15 @@ export default function QuizzesSurveys() {
         // Knowledge assessment with scored questions — show the results
         // screen instead of closing, so a missed question can point the
         // student back to the program/material it covers.
+        setSubmittedAttempt(attempt);
         setScoreSummary(summary);
       } else {
         toast({
-          title: 'Assessment Submitted',
+          title: attempt ? `${ATTEMPT_LABEL[attempt]} Submitted` : 'Assessment Submitted',
           description:
-            'Your response has been successfully recorded. Thank you for participating!',
+            attempt === 'pre'
+              ? 'Read the program\'s IEC materials, then come back for the Post-Test.'
+              : 'Your response has been successfully recorded. Thank you for participating!',
         });
 
         setActiveSurveyId(null);
@@ -989,6 +1032,17 @@ export default function QuizzesSurveys() {
                     {result.title}
                   </h3>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                    {result.attempt_type && (
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                          result.attempt_type === 'pre'
+                            ? 'bg-cyan-50 text-cyan-700'
+                            : 'bg-indigo-50 text-indigo-600'
+                        }`}
+                      >
+                        {ATTEMPT_LABEL[result.attempt_type]}
+                      </span>
+                    )}
                     {result.category && (
                       <span className="text-[10px] font-black uppercase tracking-wider text-violet-500">
                         {result.category}
@@ -1112,7 +1166,11 @@ export default function QuizzesSurveys() {
                           <PlayCircle className="w-3.5 h-3.5" />
                         )}
 
-                        {survey.is_completed ? 'Completed' : 'Available'}
+                        {survey.is_completed
+                          ? 'Completed'
+                          : survey.next_attempt === 'post'
+                            ? 'Post-Test Ready'
+                            : 'Available'}
                       </span>
 
                       <span
@@ -1170,7 +1228,11 @@ export default function QuizzesSurveys() {
                   >
                     {survey.is_completed
                       ? 'Already Submitted'
-                      : 'Start Assessment'}
+                      : survey.next_attempt === 'pre'
+                        ? 'Start Pre-Test'
+                        : survey.next_attempt === 'post'
+                          ? 'Take Post-Test'
+                          : 'Start Assessment'}
                   </Button>
                 </Card>
               ))}
@@ -1268,7 +1330,9 @@ export default function QuizzesSurveys() {
                 </div>
 
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-2">
-                  Before You Begin
+                  {activeSurvey?.next_attempt
+                    ? `${ATTEMPT_LABEL[activeSurvey.next_attempt]} · Before You Begin`
+                    : 'Before You Begin'}
                 </p>
 
                 <h3 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-tight">
@@ -1601,7 +1665,7 @@ export default function QuizzesSurveys() {
                   </div>
 
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-2">
-                    Assessment Complete
+                    {submittedAttempt ? `${ATTEMPT_LABEL[submittedAttempt]} Complete` : 'Assessment Complete'}
                   </p>
 
                   <h3 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">
@@ -1613,13 +1677,48 @@ export default function QuizzesSurveys() {
                   </p>
 
                   <p className="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
-                    {scoreSummary.missed.length === 0
-                      ? 'Perfect score! You answered every knowledge question correctly.'
-                      : "Here's what to review — each item below links to where you can learn more."}
+                    {submittedAttempt === 'pre'
+                      ? 'This was your Pre-Test. Correct answers are shown after your Post-Test.'
+                      : scoreSummary.missed.length === 0
+                        ? 'Perfect score! You answered every knowledge question correctly.'
+                        : "Here's what to review — each item below links to where you can learn more."}
                   </p>
                 </div>
 
-                {scoreSummary.missed.length > 0 && (
+                {/* Pre-test: no answer key — point the student to the
+                    materials, then back here for the post-test. */}
+                {submittedAttempt === 'pre' && (
+                  <div className="mt-8 p-5 sm:p-6 rounded-2xl bg-indigo-50 border border-indigo-100">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">
+                      Next Step
+                    </p>
+                    <p className="mt-2 text-sm sm:text-base font-semibold text-slate-700 leading-relaxed">
+                      Read the program's IEC materials, then return to Quizzes &amp; Surveys to take the Post-Test.
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button
+                        onClick={() => navigate('/student/materials')}
+                        variant="outline"
+                        className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
+                      >
+                        <BookOpen className="w-3.5 h-3.5" />
+                        IEC Materials
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button
+                        onClick={() => navigate('/student/programs')}
+                        variant="outline"
+                        className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
+                      >
+                        <Calendar className="w-3.5 h-3.5" />
+                        Programs
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {submittedAttempt !== 'pre' && scoreSummary.missed.length > 0 && (
                   <div className="mt-8 space-y-4">
                     {scoreSummary.missed.map(({ question, studentAnswer }) => (
                       <div
