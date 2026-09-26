@@ -825,3 +825,30 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS is_test_account boolean NOT NULL DEFA
 -- ------------------------------------------------------------
 
 ALTER TABLE programs ADD COLUMN IF NOT EXISTS gallery_urls text[];
+
+-- ------------------------------------------------------------
+-- PHASE 21 — Campus-scoped programs and IEC materials (optional)
+--
+-- OMSU has three campuses (San Jose, Labangan, Murtha). campus is
+-- optional on both tables: NULL = university-wide, visible to every
+-- campus; a campus name = only that campus's students see it
+-- (filtered client-side in the student views; public pages show
+-- everything). programs had no campus column at all. materials had
+-- one defaulting to 'San Jose Campus' that no form ever set, so every
+-- existing material was San Jose-only by accident — reset to NULL.
+-- ------------------------------------------------------------
+
+ALTER TABLE programs ADD COLUMN IF NOT EXISTS campus text;
+
+ALTER TABLE materials ALTER COLUMN campus DROP DEFAULT;
+
+-- ONE-TIME backfill: unlike the rest of this file, do NOT re-run this
+-- line once admins have started assigning campuses on purpose.
+UPDATE materials SET campus = NULL WHERE campus IS NOT NULL;
+
+ALTER TABLE programs DROP CONSTRAINT IF EXISTS programs_campus_check;
+ALTER TABLE programs ADD CONSTRAINT programs_campus_check
+  CHECK (campus IS NULL OR campus IN ('San Jose Campus', 'Labangan Campus', 'Murtha Campus'));
+ALTER TABLE materials DROP CONSTRAINT IF EXISTS materials_campus_check;
+ALTER TABLE materials ADD CONSTRAINT materials_campus_check
+  CHECK (campus IS NULL OR campus IN ('San Jose Campus', 'Labangan Campus', 'Murtha Campus'));

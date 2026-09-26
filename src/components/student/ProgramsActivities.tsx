@@ -12,6 +12,7 @@ import {
 import { formatProgramDate } from '../../lib/formatProgramDate';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
 import { logActivity } from '../../lib/activityLog';
+import { fetchViewerCampus, campusVisibilityFilter } from '../../lib/campuses';
 import { useAuth } from '../../hooks/useAuth';
 import { usePagination } from '../../hooks/usePagination';
 import { PaginationControls } from '../../components/ui/pagination-controls';
@@ -117,11 +118,15 @@ export default function ProgramsActivities() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: programsData, error: programsError } = await supabase
+      let query = supabase
         .from('programs')
         .select('*, materials(id, title, file_url), program_entries(id, label, description, caption, image_urls, sort_order)')
-        .is('archived_at', null)
-        .order('date', { ascending: true });
+        .is('archived_at', null);
+
+      const campus = await fetchViewerCampus();
+      if (campus) query = query.or(campusVisibilityFilter(campus));
+
+      const { data: programsData, error: programsError } = await query.order('date', { ascending: true });
 
       if (programsError) throw programsError;
       if (programsData) setPrograms(programsData);

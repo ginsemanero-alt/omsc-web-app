@@ -4,6 +4,7 @@ import { compressImageFile } from '../../lib/imageCompress';
 import { logActivity } from '../../lib/activityLog';
 import { notifyStudents } from '../../lib/notifyStudents';
 import { formatProgramDate } from '../../lib/formatProgramDate';
+import { CAMPUSES, ALL_CAMPUSES_LABEL, campusLabel } from '../../lib/campuses';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
 import ZoomableImage from '../shared/ZoomableImage';
 import ProgramEntryTimeline from '../shared/ProgramEntryTimeline';
@@ -72,7 +73,8 @@ export default function ProgramManagement() {
     capacity: 0,
     status: 'upcoming',
     image_url: '',
-    content: ''
+    content: '',
+    campus: ''
   });
 
   // Entries (timeline) for whichever program is currently open in the
@@ -172,7 +174,8 @@ export default function ProgramManagement() {
         capacity: program.capacity || 0,
         status: program.status || 'upcoming',
         image_url: program.image_url || '',
-        content: program.content || ''
+        content: program.content || '',
+        campus: program.campus || ''
       });
       setPreviewUrl(program.image_url || '');
       setExistingGalleryUrls(program.gallery_urls || []);
@@ -192,7 +195,7 @@ export default function ProgramManagement() {
       setFormData({
         title: '', date: '', date_display: '', duration_label: '', location: '',
         program_component: 'Group Guidance', guidance_service: 'Career Orientation',
-        capacity: 0, status: 'upcoming', image_url: '', content: ''
+        capacity: 0, status: 'upcoming', image_url: '', content: '', campus: ''
       });
       setPreviewUrl('');
       setExistingGalleryUrls([]);
@@ -252,7 +255,8 @@ export default function ProgramManagement() {
         image_url: finalImageUrl,
         gallery_urls: finalGalleryUrls.length > 0 ? finalGalleryUrls : null,
         content: formData.content,
-        time_range: combinedTime
+        time_range: combinedTime,
+        campus: formData.campus || null
       };
 
       let currentProgramId = editingId;
@@ -537,6 +541,9 @@ export default function ProgramManagement() {
                         <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 font-black uppercase text-[8px] tracking-wider rounded">
                           {program.guidance_service || 'Career Orientation'}
                         </span>
+                        <span className="px-2 py-0.5 bg-slate-100 text-slate-500 font-black uppercase text-[8px] tracking-wider rounded">
+                          {campusLabel(program.campus)}
+                        </span>
                       </div>
                       <h3 className="text-xl md:text-2xl font-black text-slate-800 uppercase tracking-tight mt-1 mb-2 leading-tight">
                         {program.title}
@@ -744,6 +751,16 @@ export default function ProgramManagement() {
                 <span className="truncate flex-1 font-bold">{materialFile ? materialFile.name : 'Choose Handouts...'}</span>
                 <input type="file" ref={materialRef} className="hidden" accept=".pdf,.doc,.docx,image/*" onChange={(e) => setMaterialFile(e.target.files?.[0] || null)} />
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Campus</Label>
+              <select value={formData.campus} onChange={(e) => setFormData({...formData, campus: e.target.value})} className="w-full h-12 rounded-xl bg-slate-50 border-none px-4 font-bold text-xs uppercase text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+                <option value="">{ALL_CAMPUSES_LABEL}</option>
+                {CAMPUSES.map((campus) => (
+                  <option key={campus} value={campus}>{campus} only</option>
+                ))}
+              </select>
             </div>
 
             <div className="space-y-1.5">

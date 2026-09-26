@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
+import { campusLabel, campusVisibilityFilter } from '../../lib/campuses';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Progress } from '../../components/ui/progress';
@@ -32,6 +33,7 @@ export default function DashboardOverview() {
       // 1. Get Auth Session User
       const { data: { session } } = await supabase.auth.getSession();
       const user = session?.user;
+      let viewerCampus: string | null = null;
 
       if (user) {
         // profiles.id is the Supabase Auth user's uuid, unlike users.id
@@ -51,19 +53,25 @@ export default function DashboardOverview() {
 
         if (profile?.campus) {
           setUserCampus(profile.campus);
+          viewerCampus = profile.campus;
         }
       }
 
       // 2. Fetch Real Stats & Data from Database
+      // University-wide rows (campus NULL) plus this student's own campus.
+      const scoped = <T extends { or: (filters: string) => T }>(query: T) =>
+        viewerCampus ? query.or(campusVisibilityFilter(viewerCampus)) : query;
       const [progRes, surveyRes, matRes, latestMatRes] = await Promise.all([
-        supabase.from('programs').select('*', { count: 'exact' }).is('archived_at', null).order('created_at', { ascending: false }).limit(3),
+        scoped(supabase.from('programs').select('*', { count: 'exact' }).is('archived_at', null)).order('created_at', { ascending: false }).limit(3),
         supabase.from('surveys').select('*', { count: 'exact' }).eq('status', 'active').is('archived_at', null).limit(3),
-        supabase.from('materials').select('*', { count: 'exact', head: true }).is('archived_at', null),
-        supabase
-          .from('materials')
-          .select('id, title, file_url, created_at')
-          .not('title', 'ilike', 'CERTIFICATE_TEMPLATE:%')
-          .is('archived_at', null)
+        scoped(supabase.from('materials').select('*', { count: 'exact', head: true }).is('archived_at', null)),
+        scoped(
+          supabase
+            .from('materials')
+            .select('id, title, file_url, created_at')
+            .not('title', 'ilike', 'CERTIFICATE_TEMPLATE:%')
+            .is('archived_at', null)
+        )
           .order('created_at', { ascending: false })
           .limit(3),
       ]);
@@ -206,7 +214,7 @@ export default function DashboardOverview() {
                           {program.created_at ? new Date(program.created_at).toLocaleDateString() : 'N/A'}
                         </span>
                         <span className="hidden sm:inline">•</span>
-                        <span>{program.campus || userCampus}</span>
+                        <span>{campusLabel(program.campus)}</span>
                       </div>
                     </div>
                     <Button onClick={() => navigate('/student/programs')} className="bg-slate-900 text-white hover:bg-indigo-600 rounded-xl h-12 px-6 font-black uppercase text-[10px] tracking-widest w-full sm:w-auto transition-colors">

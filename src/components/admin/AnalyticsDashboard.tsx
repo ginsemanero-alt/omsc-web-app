@@ -61,6 +61,7 @@ import { motion } from "framer-motion";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { fetchAnalyticsInsight, type AnalyticsInsightResult } from "../../lib/analyticsInsight";
+import { campusLabel } from "../../lib/campuses";
 
 /* =========================================================
    TYPES
@@ -811,8 +812,10 @@ export default function AnalyticsDashboard() {
 
       const campus = normalize(material.campus);
 
+      // No campus = university-wide, so it counts under every campus.
       const campusMatch =
         selectedCampus === "all" ||
+        !campus ||
         campus === normalize(selectedCampus) ||
         campus === "universal";
 
@@ -2443,7 +2446,7 @@ export default function AnalyticsDashboard() {
           safeString(material.title),
           safeString(material.format),
           safeString(material.category),
-          safeString(material.campus),
+          campusLabel(safeString(material.campus)),
           Number(material.downloads || 0),
           material.created_at ? new Date(material.created_at).toLocaleDateString() : "",
         ]),
@@ -3456,10 +3459,9 @@ export default function AnalyticsDashboard() {
                           </span>
 
                           <span className="text-[8px] font-bold uppercase text-slate-400">
-                            {safeString(
-                              material.campus
-                            ) ||
-                              "Universal"}
+                            {campusLabel(
+                              safeString(material.campus)
+                            )}
                           </span>
 
                         </div>

@@ -10,6 +10,7 @@ import { usePagination } from '../../hooks/usePagination';
 import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
 import { IEC_CATEGORIES } from '../../lib/iecCategories';
+import { fetchViewerCampus, campusVisibilityFilter } from '../../lib/campuses';
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a PDF preview.
 const PdfPreview = lazy(() => import('../shared/PdfPreview'));
@@ -78,12 +79,16 @@ export default function IECMaterials() {
       // program's own details panel — excluding them here is what keeps
       // them from leaking into Articles/Infographics/etc. alongside the
       // real IEC Library.
-      const { data, error } = await supabase
+      let query = supabase
         .from('materials')
         .select('*')
         .is('program_id', null)
-        .is('archived_at', null)
-        .order('created_at', { ascending: false });
+        .is('archived_at', null);
+
+      const campus = await fetchViewerCampus();
+      if (campus) query = query.or(campusVisibilityFilter(campus));
+
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
       setMaterials(data || []);

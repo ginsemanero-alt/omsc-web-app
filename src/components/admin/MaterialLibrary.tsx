@@ -5,6 +5,7 @@ import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
 import { usePagination } from '../../hooks/usePagination';
 import { IEC_CATEGORIES } from '../../lib/iecCategories';
+import { CAMPUSES, ALL_CAMPUSES_LABEL, campusLabel } from '../../lib/campuses';
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a PDF preview.
 const PdfPreview = lazy(() => import('../shared/PdfPreview'));
@@ -72,6 +73,7 @@ interface Material {
   description?: string | null;
   image_url?: string | null;
   file_url?: string | null;
+  campus?: string | null;
   created_at?: string;
 }
 
@@ -83,6 +85,7 @@ interface FormData {
   tags: string;
   description: string;
   file_url: string;
+  campus: string;
 }
 
 const DEFAULT_FORM: FormData = {
@@ -93,6 +96,7 @@ const DEFAULT_FORM: FormData = {
   tags: '',
   description: '',
   file_url: '',
+  campus: '',
 };
 
 export default function IECMaterials() {
@@ -224,6 +228,7 @@ export default function IECMaterials() {
           material.type === 'Video' || material.type === 'Link'
             ? material.file_url || ''
             : '',
+        campus: material.campus || '',
       });
 
       setPreviewImageUrl(material.image_url || '');
@@ -621,6 +626,7 @@ export default function IECMaterials() {
         description: formData.description.trim(),
         image_url: finalImageUrl || null,
         file_url: finalFileUrl || null,
+        campus: formData.campus || null,
         // AnalyticsDashboard.tsx counts "IEC Materials" by checking this
         // field, to tell a general Materials Library item (created here)
         // apart from a program's own handout attachment (created by
@@ -1563,6 +1569,27 @@ export default function IECMaterials() {
               </div>
 
               <div className="space-y-1.5 sm:col-span-2">
+                <Label className="field-label">
+                  Campus
+                </Label>
+
+                <select
+                  value={formData.campus}
+                  onChange={(event) =>
+                    setFormData({ ...formData, campus: event.target.value })
+                  }
+                  className="select-field"
+                >
+                  <option value="">{ALL_CAMPUSES_LABEL}</option>
+                  {CAMPUSES.map((campus) => (
+                    <option key={campus} value={campus}>
+                      {campus} only
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
                 <Label className="field-label flex items-center gap-1">
                   <Tag className="w-3 h-3" />
                   Tags
@@ -2202,6 +2229,10 @@ function MaterialMeta({ item }: { item: Material }) {
           {item.program_component}
         </p>
       )}
+
+      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+        {campusLabel(item.campus)}
+      </p>
 
       {item.tags && item.tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
