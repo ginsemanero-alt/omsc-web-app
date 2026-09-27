@@ -216,6 +216,52 @@ const COLORS = [
    STAT CARD
 ========================================================= */
 
+/* =========================================================
+   TABS
+========================================================= */
+
+type AnalyticsTab = "overview" | "learning" | "awareness" | "iec" | "students";
+
+const ANALYTICS_TABS: { id: AnalyticsTab; label: string; icon: React.ElementType }[] = [
+  { id: "overview", label: "Overview", icon: BarChart3 },
+  { id: "learning", label: "Learning Gain", icon: TrendingUp },
+  { id: "awareness", label: "Knowledge Awareness", icon: Trophy },
+  { id: "iec", label: "IEC Materials", icon: BookOpen },
+  { id: "students", label: "Students & Inclusion", icon: Users },
+];
+
+const AnalyticsTabBar: React.FC<{
+  activeTab: AnalyticsTab;
+  onChange: (tab: AnalyticsTab) => void;
+}> = ({ activeTab, onChange }) => (
+  <div
+    role="tablist"
+    aria-label="Analytics sections"
+    className="flex gap-2 overflow-x-auto p-1.5 rounded-[1.75rem] bg-white shadow-lg shadow-slate-100"
+  >
+    {ANALYTICS_TABS.map(({ id, label, icon: Icon }) => {
+      const active = activeTab === id;
+      return (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          aria-selected={active}
+          onClick={() => onChange(id)}
+          className={`flex items-center gap-2 shrink-0 px-4 md:px-5 h-11 rounded-[1.25rem] text-[10px] font-black uppercase tracking-wider transition-colors ${
+            active
+              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
+              : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+          }`}
+        >
+          <Icon className="w-4 h-4" strokeWidth={2.5} />
+          {label}
+        </button>
+      );
+    })}
+  </div>
+);
+
 const StatCard: React.FC<StatCardProps> = ({
   title,
   value,
@@ -426,6 +472,7 @@ export default function AnalyticsDashboard() {
 
   /* FILTERS */
 
+  const [activeTab, setActiveTab] = useState<AnalyticsTab>("overview");
   const [selectedCampus, setSelectedCampus] = useState("all");
   const [selectedProgram, setSelectedProgram] = useState("all");
   const [selectedYearLevel, setSelectedYearLevel] = useState("all");
@@ -2824,456 +2871,1253 @@ export default function AnalyticsDashboard() {
         </Card>
 
         {/* =================================================
-            FILTERS
+            TABS — the dashboard is split into focused views;
+            header, AI Insight, and Export PDF stay above all
+            of them.
         ================================================= */}
 
-        <Card className="border-none shadow-sm rounded-[1.75rem] p-4 md:p-5 bg-white">
+        <AnalyticsTabBar activeTab={activeTab} onChange={setActiveTab} />
 
-          <div className="flex items-center gap-2 mb-4">
-            <Info className="w-4 h-4 text-indigo-600" />
+        {activeTab !== "learning" && (
+          <>
+          {/* =================================================
+              FILTERS
+          ================================================= */}
 
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">
-              Analytics Filters
-            </p>
-          </div>
+          <Card className="border-none shadow-sm rounded-[1.75rem] p-4 md:p-5 bg-white">
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+            <div className="flex items-center gap-2 mb-4">
+              <Info className="w-4 h-4 text-indigo-600" />
 
-            {/* CAMPUS */}
-
-            <Select
-              value={selectedCampus}
-              onValueChange={
-                handleCampusFilterChange
-              }
-            >
-              <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
-                <SelectValue placeholder="Campus" />
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value="all">
-                  All Campuses
-                </SelectItem>
-
-                {campusOptions.map(
-                  (campus) => (
-                    <SelectItem
-                      key={campus}
-                      value={campus}
-                    >
-                      {campus}
-                    </SelectItem>
-                  )
-                )}
-              </SelectContent>
-            </Select>
-
-            {/* PROGRAM */}
-
-            <Select
-              value={selectedProgram}
-              onValueChange={
-                setSelectedProgram
-              }
-            >
-              <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
-                <SelectValue placeholder="Program" />
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value="all">
-                  All Programs
-                </SelectItem>
-
-                {programOptions.map(
-                  (program) => (
-                    <SelectItem
-                      key={program}
-                      value={program}
-                    >
-                      {program}
-                    </SelectItem>
-                  )
-                )}
-              </SelectContent>
-            </Select>
-
-            {/* YEAR */}
-
-            <Select
-              value={selectedYearLevel}
-              onValueChange={
-                setSelectedYearLevel
-              }
-            >
-              <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
-                <SelectValue placeholder="Year Level" />
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value="all">
-                  All Year Levels
-                </SelectItem>
-
-                {yearLevelOptions.map(
-                  (year) => (
-                    <SelectItem
-                      key={year}
-                      value={year}
-                    >
-                      {year}
-                    </SelectItem>
-                  )
-                )}
-              </SelectContent>
-            </Select>
-
-            {/* GENDER */}
-
-            <Select
-              value={selectedGender}
-              onValueChange={
-                setSelectedGender
-              }
-            >
-              <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
-                <SelectValue placeholder="Gender" />
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value="all">
-                  All Genders
-                </SelectItem>
-
-                {genderOptions.map(
-                  (gender) => (
-                    <SelectItem
-                      key={gender}
-                      value={gender}
-                    >
-                      {gender}
-                    </SelectItem>
-                  )
-                )}
-              </SelectContent>
-            </Select>
-
-            {/* AGE */}
-
-            <Select
-              value={selectedAge}
-              onValueChange={setSelectedAge}
-            >
-              <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
-                <SelectValue placeholder="Age" />
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value="all">
-                  All Ages
-                </SelectItem>
-
-                {ageGroupOptions.map(
-                  (group) => (
-                    <SelectItem
-                      key={group}
-                      value={group}
-                    >
-                      {group}
-                    </SelectItem>
-                  )
-                )}
-              </SelectContent>
-            </Select>
-
-            {/* YEAR */}
-
-            <Select
-              value={selectedAcademicYear}
-              onValueChange={
-                setSelectedAcademicYear
-              }
-            >
-              <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
-                <SelectValue placeholder="Academic Year" />
-              </SelectTrigger>
-
-              <SelectContent>
-                <SelectItem value="all">
-                  All Years
-                </SelectItem>
-
-                {academicYearOptions.map(
-                  (year) => (
-                    <SelectItem
-                      key={year}
-                      value={year}
-                    >
-                      {year}
-                    </SelectItem>
-                  )
-                )}
-              </SelectContent>
-            </Select>
-
-          </div>
-
-          <div className="mt-4 flex justify-end">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setSelectedCampus("all");
-                setSelectedProgram("all");
-                setSelectedYearLevel("all");
-                setSelectedGender("all");
-                setSelectedAge("all");
-                setSelectedAcademicYear("all");
-              }}
-              className="text-[9px] font-black uppercase tracking-widest text-slate-400"
-            >
-              Reset Filters
-            </Button>
-          </div>
-        </Card>
-
-        {/* =================================================
-            GENERAL SUMMARY
-        ================================================= */}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-
-          <StatCard
-            title="Students Covered"
-            value={totalStudents}
-            description="Profiles + survey participants"
-            icon={Users}
-          />
-
-          <StatCard
-            title="Guidance Programs"
-            value={totalGuidancePrograms}
-            description="Programs in the system"
-            icon={GraduationCap}
-          />
-
-          <StatCard
-            title="Survey Responses"
-            value={totalSurveyResponses}
-            description={`${activeSurveys} active survey(s)`}
-            icon={BarChart3}
-          />
-
-          <StatCard
-            title="Total Materials"
-            value={totalMaterials}
-            description="Materials in the library"
-            icon={FileStack}
-          />
-
-        </div>
-
-        {/* =================================================
-            IEC MATERIAL SUMMARY
-        ================================================= */}
-
-        <div className="space-y-4">
-
-          <div>
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-indigo-600" />
-
-              <h2 className="text-xl font-black uppercase tracking-tight text-slate-800">
-                IEC Materials Analytics
-              </h2>
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+                Analytics Filters
+              </p>
             </div>
 
-            <p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">
-              Information, Education and Communication material dissemination
-            </p>
-          </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+
+              {/* CAMPUS */}
+
+              <Select
+                value={selectedCampus}
+                onValueChange={
+                  handleCampusFilterChange
+                }
+              >
+                <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
+                  <SelectValue placeholder="Campus" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value="all">
+                    All Campuses
+                  </SelectItem>
+
+                  {campusOptions.map(
+                    (campus) => (
+                      <SelectItem
+                        key={campus}
+                        value={campus}
+                      >
+                        {campus}
+                      </SelectItem>
+                    )
+                  )}
+                </SelectContent>
+              </Select>
+
+              {/* PROGRAM */}
+
+              <Select
+                value={selectedProgram}
+                onValueChange={
+                  setSelectedProgram
+                }
+              >
+                <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
+                  <SelectValue placeholder="Program" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value="all">
+                    All Programs
+                  </SelectItem>
+
+                  {programOptions.map(
+                    (program) => (
+                      <SelectItem
+                        key={program}
+                        value={program}
+                      >
+                        {program}
+                      </SelectItem>
+                    )
+                  )}
+                </SelectContent>
+              </Select>
+
+              {/* YEAR */}
+
+              <Select
+                value={selectedYearLevel}
+                onValueChange={
+                  setSelectedYearLevel
+                }
+              >
+                <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
+                  <SelectValue placeholder="Year Level" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value="all">
+                    All Year Levels
+                  </SelectItem>
+
+                  {yearLevelOptions.map(
+                    (year) => (
+                      <SelectItem
+                        key={year}
+                        value={year}
+                      >
+                        {year}
+                      </SelectItem>
+                    )
+                  )}
+                </SelectContent>
+              </Select>
+
+              {/* GENDER */}
+
+              <Select
+                value={selectedGender}
+                onValueChange={
+                  setSelectedGender
+                }
+              >
+                <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
+                  <SelectValue placeholder="Gender" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value="all">
+                    All Genders
+                  </SelectItem>
+
+                  {genderOptions.map(
+                    (gender) => (
+                      <SelectItem
+                        key={gender}
+                        value={gender}
+                      >
+                        {gender}
+                      </SelectItem>
+                    )
+                  )}
+                </SelectContent>
+              </Select>
+
+              {/* AGE */}
+
+              <Select
+                value={selectedAge}
+                onValueChange={setSelectedAge}
+              >
+                <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
+                  <SelectValue placeholder="Age" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value="all">
+                    All Ages
+                  </SelectItem>
+
+                  {ageGroupOptions.map(
+                    (group) => (
+                      <SelectItem
+                        key={group}
+                        value={group}
+                      >
+                        {group}
+                      </SelectItem>
+                    )
+                  )}
+                </SelectContent>
+              </Select>
+
+              {/* YEAR */}
+
+              <Select
+                value={selectedAcademicYear}
+                onValueChange={
+                  setSelectedAcademicYear
+                }
+              >
+                <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
+                  <SelectValue placeholder="Academic Year" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value="all">
+                    All Years
+                  </SelectItem>
+
+                  {academicYearOptions.map(
+                    (year) => (
+                      <SelectItem
+                        key={year}
+                        value={year}
+                      >
+                        {year}
+                      </SelectItem>
+                    )
+                  )}
+                </SelectContent>
+              </Select>
+
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setSelectedCampus("all");
+                  setSelectedProgram("all");
+                  setSelectedYearLevel("all");
+                  setSelectedGender("all");
+                  setSelectedAge("all");
+                  setSelectedAcademicYear("all");
+                }}
+                className="text-[9px] font-black uppercase tracking-widest text-slate-400"
+              >
+                Reset Filters
+              </Button>
+            </div>
+          </Card>
+
+          </>
+        )}
+
+        {activeTab === "overview" && (
+          <div className="space-y-6">
+          {/* =================================================
+              GENERAL SUMMARY
+          ================================================= */}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
-            {/* MAIN CARD */}
-
-            <motion.div
-              whileHover={{ y: -4 }}
-              className="h-full"
-            >
-              <Card className="relative overflow-hidden border-none rounded-[1.75rem] bg-indigo-600 text-white shadow-xl p-6 h-full">
-
-                <div className="absolute -right-10 -top-10 w-32 h-32 rounded-full bg-white/10" />
-
-                <div className="relative">
-                  <div className="flex items-center justify-between">
-                    <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center">
-                      <CalendarDays className="w-6 h-6" />
-                    </div>
-
-                    <span className="text-[8px] font-black uppercase tracking-widest bg-white/10 px-3 py-2 rounded-full">
-                      Current Month
-                    </span>
-                  </div>
-
-                  <p className="mt-6 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-100">
-                    IEC Materials Created
-                  </p>
-
-                  <p className="mt-1 text-5xl font-black tracking-tighter">
-                    {iecMaterialsThisMonth}
-                  </p>
-
-                  <p className="mt-2 text-[9px] font-bold uppercase tracking-wide text-indigo-100">
-                    New IEC materials this month
-                  </p>
-                </div>
-
-              </Card>
-            </motion.div>
-
             <StatCard
-              title="Total IEC Materials"
-              value={totalIECMaterials}
-              description="All IEC materials"
-              icon={BookOpen}
+              title="Students Covered"
+              value={totalStudents}
+              description="Profiles + survey participants"
+              icon={Users}
             />
 
             <StatCard
-              title="IEC Downloads"
-              value={totalIECDowloads}
-              description="Total material downloads"
-              icon={Download}
+              title="Guidance Programs"
+              value={totalGuidancePrograms}
+              description="Programs in the system"
+              icon={GraduationCap}
             />
 
             <StatCard
-              title="Downloads (This Month's Uploads)"
-              value={downloadsThisMonth}
-              description="Lifetime downloads of materials uploaded this month"
-              icon={TrendingUp}
+              title="Survey Responses"
+              value={totalSurveyResponses}
+              description={`${activeSurveys} active survey(s)`}
+              icon={BarChart3}
+            />
+
+            <StatCard
+              title="Total Materials"
+              value={totalMaterials}
+              description="Materials in the library"
+              icon={FileStack}
             />
 
           </div>
 
-        </div>
-
-        {/* =================================================
-            IEC CREATION TREND
-        ================================================= */}
-
-        <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-
-            <div>
-              <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
-                IEC Material Creation Trend
-              </h2>
-
-              <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
-                Number of IEC materials created per month — current year
-              </p>
-            </div>
-
-            <div className="px-4 py-3 rounded-xl bg-indigo-50 text-indigo-700">
-              <p className="text-[8px] uppercase font-black tracking-widest">
-                This Month
-              </p>
-
-              <p className="text-xl font-black">
-                {iecMaterialsThisMonth}
-              </p>
-            </div>
-
-          </div>
-
-          <ResponsiveContainer
-            width="100%"
-            height={330}
-          >
-            <LineChart
-              data={iecMonthlyTrend}
-              margin={{
-                top: 10,
-                right: 15,
-                left: 0,
-                bottom: 10,
-              }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                vertical={false}
-              />
-
-              <XAxis
-                dataKey="month"
-                tick={{
-                  fontSize: 9,
-                  fontWeight: 700,
-                }}
-              />
-
-              <YAxis
-                allowDecimals={false}
-                tick={{
-                  fontSize: 9,
-                }}
-              />
-
-              <Tooltip />
-
-              <Line
-                type="monotone"
-                dataKey="materials"
-                name="IEC Materials"
-                stroke="#4f46e5"
-                strokeWidth={4}
-                dot={{
-                  r: 5,
-                }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-
-        </Card>
-
-        {/* =================================================
-            IEC CATEGORY + MATERIAL TYPE
-        ================================================= */}
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-          {/* CATEGORY */}
+          {/* =================================================
+              SURVEY HUB
+          ================================================= */}
 
           <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
 
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+
+              <div className="flex items-start gap-3">
+
+                <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                  <ClipboardList className="w-5 h-5" />
+                </div>
+
+                <div>
+                  <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
+                    Survey & Program Awareness
+                  </h2>
+
+                  <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+                    Student evaluation and awareness dissemination
+                  </p>
+                </div>
+
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+
+                <div className="bg-slate-50 rounded-xl px-4 py-3">
+                  <p className="text-[8px] uppercase font-black text-slate-400">
+                    Surveys
+                  </p>
+
+                  <p className="text-xl font-black text-slate-800">
+                    {surveys.length}
+                  </p>
+                </div>
+
+                <div className="bg-indigo-50 rounded-xl px-4 py-3">
+                  <p className="text-[8px] uppercase font-black text-indigo-400">
+                    Participants
+                  </p>
+
+                  <p className="text-xl font-black text-indigo-700">
+                    {
+                      surveyParticipants
+                    }
+                  </p>
+                </div>
+
+                <div className="bg-emerald-50 rounded-xl px-4 py-3">
+                  <p className="text-[8px] uppercase font-black text-emerald-400">
+                    Responses
+                  </p>
+
+                  <p className="text-xl font-black text-emerald-700">
+                    {
+                      totalSurveyResponses
+                    }
+                  </p>
+                </div>
+
+              </div>
+
+            </div>
+
+          </Card>
+
+          </div>
+        )}
+
+        {activeTab === "learning" && (
+          <div className="space-y-6">
+          {/* =================================================
+              LEARNING GAIN (pre-test vs post-test) — has its own
+              filters and data source (learning_gain_summary RPC).
+          ================================================= */}
+
+          <LearningGainSection />
+
+          </div>
+        )}
+
+        {activeTab === "awareness" && (
+          <div className="space-y-6">
+          {/* =================================================
+              KNOWLEDGE AWARENESS
+          ================================================= */}
+
+          <div className="space-y-6">
+
+            <div className="flex items-center gap-3">
+              <Trophy className="w-5 h-5 text-indigo-600" />
+              <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
+                Knowledge Awareness
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <StatCard
+                title="Overall Average Score"
+                value={
+                  awarenessAnalytics.overall !== null
+                    ? `${awarenessAnalytics.overall}%`
+                    : "No data"
+                }
+                description="Across all knowledge assessments"
+                icon={Trophy}
+              />
+
+              <StatCard
+                title="Scored Assessment Responses"
+                value={awarenessAnalytics.totalResponses}
+                description="Knowledge Assessment submissions counted"
+                icon={Target}
+              />
+            </div>
+
+            {/* PER PROGRAM */}
+            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
+                <div>
+                  <h3 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
+                    Awareness by Program
+                  </h3>
+
+                  <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+                    Average score on questions linked to each program
+                  </p>
+                </div>
+
+                <div className="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase">
+                  {programAwarenessAnalytics.length} Programs With Data
+                </div>
+              </div>
+
+              {programAwarenessAnalytics.length === 0 ? (
+                <div className="h-64 flex items-center justify-center text-slate-400 text-xs font-bold text-center px-6">
+                  No program-linked knowledge questions have been answered yet.
+                  Link a question to a program in the Survey Builder to see it here.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={350}>
+                  <BarChart
+                    data={programAwarenessAnalytics}
+                    margin={{ top: 10, right: 10, left: 0, bottom: 60 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+
+                    <XAxis
+                      dataKey="name"
+                      angle={-30}
+                      textAnchor="end"
+                      interval={0}
+                      height={90}
+                      tick={{ fontSize: 9, fontWeight: 700 }}
+                    />
+
+                    <YAxis
+                      domain={[0, 100]}
+                      tick={{ fontSize: 9 }}
+                      unit="%"
+                    />
+
+                    <Tooltip formatter={(value: number) => `${value}%`} />
+
+                    <Bar
+                      dataKey="average"
+                      name="Avg. Score"
+                      fill="#4f46e5"
+                      radius={[8, 8, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </Card>
+
+            {/* DEMOGRAPHIC BREAKDOWNS */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {[
+                { title: "By Year Level", data: awarenessAnalytics.byYearLevel },
+                { title: "By Gender", data: awarenessAnalytics.byGender },
+                { title: "By PWD Status", data: awarenessAnalytics.byPwd },
+                { title: "By IP Status", data: awarenessAnalytics.byIp },
+              ].map(({ title, data }) => (
+                <Card
+                  key={title}
+                  className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white"
+                >
+                  <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
+                    {title}
+                  </h3>
+
+                  <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
+                    Average knowledge score
+                  </p>
+
+                  {data.length === 0 ? (
+                    <div className="h-40 flex items-center justify-center text-slate-400 text-xs font-bold">
+                      No scored responses yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {data.map((row) => (
+                        <div key={row.label}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-bold text-slate-600">
+                              {row.label}
+                              <span className="text-slate-400 font-medium">
+                                {" "}
+                                ({row.count})
+                              </span>
+                            </span>
+                            <span className="text-xs font-black text-indigo-600">
+                              {row.average}%
+                            </span>
+                          </div>
+                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-indigo-600 rounded-full"
+                              style={{ width: `${row.average}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              ))}
+            </div>
+
+            {/* GUIDANCE SERVICE COVERAGE */}
+            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+              <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
+                Guidance Service Coverage
+              </h3>
+
+              <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
+                Program count and average awareness score per guidance service
+              </p>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                      <th className="pb-3 pr-4">Guidance Service</th>
+                      <th className="pb-3 pr-4">Programs</th>
+                      <th className="pb-3">Avg. Awareness Score</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {guidanceServiceCoverage.map((row) => (
+                      <tr key={row.service} className="border-b border-slate-50 last:border-none">
+                        <td className="py-3 pr-4 text-xs font-bold text-slate-700">
+                          {row.service}
+                        </td>
+                        <td className="py-3 pr-4 text-xs font-black text-slate-900">
+                          {row.programCount}
+                        </td>
+                        <td className="py-3 text-xs font-black">
+                          {row.averageScore !== null ? (
+                            <span className="text-indigo-600">{row.averageScore}%</span>
+                          ) : (
+                            <span className="text-slate-300 font-bold">No data</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+
+            {/* AWARENESS BY MATERIAL EXPOSURE — the intervention-outcome
+                comparison: did opening an IEC material actually correlate
+                with a higher knowledge score on that category? Rendered
+                (headers + em dashes) even with zero scored responses,
+                never hidden. */}
+            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+              <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
+                Awareness by Material Exposure
+              </h3>
+
+              <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
+                Average knowledge score for students who opened an IEC material in
+                that category vs. students who did not
+              </p>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                      <th className="pb-3 pr-4">IEC Category</th>
+                      <th className="pb-3 pr-4">Opened</th>
+                      <th className="pb-3 pr-4">Did Not Open</th>
+                      <th className="pb-3 pr-4">Difference</th>
+                      <th className="pb-3">Respondents</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {materialExposureAwareness.length === 0 ? (
+                      <tr>
+                        <td className="py-3 pr-4 text-xs font-bold text-slate-300">&mdash;</td>
+                        <td className="py-3 pr-4 text-xs font-bold text-slate-300">&mdash;</td>
+                        <td className="py-3 pr-4 text-xs font-bold text-slate-300">&mdash;</td>
+                        <td className="py-3 pr-4 text-xs font-bold text-slate-300">&mdash;</td>
+                        <td className="py-3 text-xs font-bold text-slate-300">&mdash;</td>
+                      </tr>
+                    ) : (
+                      materialExposureAwareness.map((row) => (
+                        <tr key={row.category} className="border-b border-slate-50 last:border-none">
+                          <td className="py-3 pr-4 text-xs font-bold text-slate-700">
+                            {row.category}
+                          </td>
+                          <td className="py-3 pr-4 text-xs font-black">
+                            {row.openedAvg !== null ? (
+                              <span className="text-indigo-600">{row.openedAvg}% <span className="text-slate-400 font-medium">({row.openedCount})</span></span>
+                            ) : (
+                              <span className="text-slate-300 font-bold">No data</span>
+                            )}
+                          </td>
+                          <td className="py-3 pr-4 text-xs font-black">
+                            {row.notOpenedAvg !== null ? (
+                              <span className="text-slate-700">{row.notOpenedAvg}% <span className="text-slate-400 font-medium">({row.notOpenedCount})</span></span>
+                            ) : (
+                              <span className="text-slate-300 font-bold">No data</span>
+                            )}
+                          </td>
+                          <td className="py-3 pr-4 text-xs font-black">
+                            {row.difference !== null ? (
+                              <span className={row.difference >= 0 ? "text-emerald-600" : "text-rose-500"}>
+                                {row.difference >= 0 ? "+" : ""}
+                                {row.difference}pp
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 font-bold">No data</span>
+                            )}
+                          </td>
+                          <td className="py-3 text-xs font-black text-slate-900">
+                            {row.totalRespondents}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {materialExposureAwareness.length === 0 && (
+                <p className="text-center text-[10px] font-bold text-slate-400 mt-4">
+                  No responses have been recorded yet.
+                </p>
+              )}
+            </Card>
+
+            {/* PROGRAM PARTICIPATION BY COURSE */}
+            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+              <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
+                Program Participation by Course
+              </h3>
+
+              <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
+                Share of respondents per academic course who reported joining at
+                least one linked guidance program
+              </p>
+
+              {programParticipationByCourse.length === 0 ? (
+                <div className="h-40 flex items-center justify-center text-slate-400 text-xs font-bold text-center px-6">
+                  No data yet. Add a "Checkbox (Multiple Answers)" question with
+                  its options linked to Programs (e.g. "Which of these programs
+                  have you participated in?") to a survey to see this report.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                        <th className="pb-3 pr-4">Course</th>
+                        <th className="pb-3 pr-4">Reached</th>
+                        <th className="pb-3 pr-4">Not Reached</th>
+                        <th className="pb-3 pr-4">Respondents</th>
+                        <th className="pb-3">% Reached</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {programParticipationByCourse.map((row) => (
+                        <tr key={row.course} className="border-b border-slate-50 last:border-none">
+                          <td className="py-3 pr-4 text-xs font-bold text-slate-700">
+                            {row.course}
+                          </td>
+                          <td className="py-3 pr-4 text-xs font-black text-emerald-600">
+                            {row.reached}
+                          </td>
+                          <td className="py-3 pr-4 text-xs font-black text-rose-500">
+                            {row.notReached}
+                          </td>
+                          <td className="py-3 pr-4 text-xs font-black text-slate-900">
+                            {row.total}
+                          </td>
+                          <td className="py-3 text-xs font-black">
+                            <span
+                              className={
+                                row.reachedPct < 50 ? "text-rose-500" : "text-indigo-600"
+                              }
+                            >
+                              {row.reachedPct}%
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+
+          </div>
+
+          </div>
+        )}
+
+        {activeTab === "iec" && (
+          <div className="space-y-6">
+          {/* =================================================
+              IEC MATERIAL SUMMARY
+          ================================================= */}
+
+          <div className="space-y-4">
+
+            <div>
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-indigo-600" />
+
+                <h2 className="text-xl font-black uppercase tracking-tight text-slate-800">
+                  IEC Materials Analytics
+                </h2>
+              </div>
+
+              <p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">
+                Information, Education and Communication material dissemination
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+              {/* MAIN CARD */}
+
+              <motion.div
+                whileHover={{ y: -4 }}
+                className="h-full"
+              >
+                <Card className="relative overflow-hidden border-none rounded-[1.75rem] bg-indigo-600 text-white shadow-xl p-6 h-full">
+
+                  <div className="absolute -right-10 -top-10 w-32 h-32 rounded-full bg-white/10" />
+
+                  <div className="relative">
+                    <div className="flex items-center justify-between">
+                      <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center">
+                        <CalendarDays className="w-6 h-6" />
+                      </div>
+
+                      <span className="text-[8px] font-black uppercase tracking-widest bg-white/10 px-3 py-2 rounded-full">
+                        Current Month
+                      </span>
+                    </div>
+
+                    <p className="mt-6 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-100">
+                      IEC Materials Created
+                    </p>
+
+                    <p className="mt-1 text-5xl font-black tracking-tighter">
+                      {iecMaterialsThisMonth}
+                    </p>
+
+                    <p className="mt-2 text-[9px] font-bold uppercase tracking-wide text-indigo-100">
+                      New IEC materials this month
+                    </p>
+                  </div>
+
+                </Card>
+              </motion.div>
+
+              <StatCard
+                title="Total IEC Materials"
+                value={totalIECMaterials}
+                description="All IEC materials"
+                icon={BookOpen}
+              />
+
+              <StatCard
+                title="IEC Downloads"
+                value={totalIECDowloads}
+                description="Total material downloads"
+                icon={Download}
+              />
+
+              <StatCard
+                title="Downloads (This Month's Uploads)"
+                value={downloadsThisMonth}
+                description="Lifetime downloads of materials uploaded this month"
+                icon={TrendingUp}
+              />
+
+            </div>
+
+          </div>
+
+          {/* =================================================
+              IEC CREATION TREND
+          ================================================= */}
+
+          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+
               <div>
-                <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-                  IEC by Category
+                <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
+                  IEC Material Creation Trend
                 </h2>
 
                 <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
-                  Distribution of IEC materials by category
+                  Number of IEC materials created per month — current year
                 </p>
               </div>
 
-              <BookOpen className="w-5 h-5 text-indigo-500" />
+              <div className="px-4 py-3 rounded-xl bg-indigo-50 text-indigo-700">
+                <p className="text-[8px] uppercase font-black tracking-widest">
+                  This Year
+                </p>
+
+                <p className="text-xl font-black">
+                  {iecMaterialsThisYear}
+                </p>
+              </div>
+
             </div>
 
-            {iecCategoryAnalytics.length === 0 ? (
-              <div className="h-64 flex items-center justify-center text-xs font-bold text-slate-400">
-                No IEC material data available.
+            <ResponsiveContainer
+              width="100%"
+              height={330}
+            >
+              <LineChart
+                data={iecMonthlyTrend}
+                margin={{
+                  top: 10,
+                  right: 15,
+                  left: 0,
+                  bottom: 10,
+                }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                />
+
+                <XAxis
+                  dataKey="month"
+                  tick={{
+                    fontSize: 9,
+                    fontWeight: 700,
+                  }}
+                />
+
+                <YAxis
+                  allowDecimals={false}
+                  tick={{
+                    fontSize: 9,
+                  }}
+                />
+
+                <Tooltip />
+
+                <Line
+                  type="monotone"
+                  dataKey="materials"
+                  name="IEC Materials"
+                  stroke="#4f46e5"
+                  strokeWidth={4}
+                  dot={{
+                    r: 5,
+                  }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+
+          </Card>
+
+          {/* =================================================
+              IEC CATEGORY + MATERIAL TYPE
+          ================================================= */}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            {/* CATEGORY */}
+
+            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
+                    IEC by Category
+                  </h2>
+
+                  <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+                    Distribution of IEC materials by category
+                  </p>
+                </div>
+
+                <BookOpen className="w-5 h-5 text-indigo-500" />
               </div>
-            ) : (
+
+              {iecCategoryAnalytics.length === 0 ? (
+                <div className="h-64 flex items-center justify-center text-xs font-bold text-slate-400">
+                  No IEC material data available.
+                </div>
+              ) : (
+                <ResponsiveContainer
+                  width="100%"
+                  height={320}
+                >
+                  <BarChart
+                    data={
+                      iecCategoryAnalytics
+                    }
+                    margin={{
+                      bottom: 60,
+                    }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                    />
+
+                    <XAxis
+                      dataKey="category"
+                      angle={-30}
+                      textAnchor="end"
+                      interval={0}
+                      height={90}
+                      tick={{
+                        fontSize: 8,
+                        fontWeight: 700,
+                      }}
+                    />
+
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{
+                        fontSize: 9,
+                      }}
+                    />
+
+                    <Tooltip />
+
+                    <Bar
+                      dataKey="count"
+                      name="IEC Materials"
+                      fill="#4f46e5"
+                      radius={[
+                        8,
+                        8,
+                        0,
+                        0,
+                      ]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+
+            </Card>
+
+            {/* MATERIAL TYPE */}
+
+            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+
+              <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
+                Materials by Type
+              </h2>
+
+              <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+                IEC and other material classifications
+              </p>
+
+              <div className="h-72 mt-4">
+
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
+                >
+                  <PieChart>
+
+                    <Pie
+                      data={
+                        materialTypeAnalytics
+                      }
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={90}
+                      innerRadius={50}
+                      paddingAngle={4}
+                    >
+                      {materialTypeAnalytics.map(
+                        (_, index) => (
+                          <Cell
+                            key={index}
+                            fill={
+                              COLORS[
+                                index %
+                                  COLORS.length
+                              ]
+                            }
+                          />
+                        )
+                      )}
+                    </Pie>
+
+                    <Tooltip />
+
+                    <Legend />
+
+                  </PieChart>
+                </ResponsiveContainer>
+
+              </div>
+
+            </Card>
+
+          </div>
+
+          {/* =================================================
+              MATERIAL FORMAT
+          ================================================= */}
+          {/* Campus breakdown was dropped here — every IEC material in
+              practice gets the same default campus on upload, so a
+              distribution-by-campus chart was always one full pie slice,
+              not an actual breakdown. */}
+
+          <div className="grid grid-cols-1 gap-6">
+
+            {/* FORMAT */}
+
+            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white max-w-2xl">
+
+              <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
+                Materials by Format
+              </h2>
+
+              <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1 mb-5">
+                PDF, PNG, JPG, MP4 and other formats
+              </p>
+
               <ResponsiveContainer
                 width="100%"
-                height={320}
+                height={300}
               >
                 <BarChart
                   data={
-                    iecCategoryAnalytics
+                    materialFormatAnalytics
                   }
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    vertical={false}
+                  />
+
+                  <XAxis
+                    dataKey="format"
+                    tick={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                    }}
+                  />
+
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{
+                      fontSize: 9,
+                    }}
+                  />
+
+                  <Tooltip />
+
+                  <Bar
+                    dataKey="count"
+                    name="Materials"
+                    fill="#7c3aed"
+                    radius={[
+                      8,
+                      8,
+                      0,
+                      0,
+                    ]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+
+            </Card>
+
+          </div>
+
+          {/* =================================================
+              RECENT IEC MATERIALS
+          ================================================= */}
+
+          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+
+              <div>
+                <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
+                  Recent IEC Materials
+                </h2>
+
+                <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+                  Latest IEC materials added to the system
+                </p>
+              </div>
+
+              <div className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-[9px] font-black uppercase">
+                {iecMaterialsThisMonth} Created This Month
+              </div>
+
+            </div>
+
+            {recentIECMaterials.length === 0 ? (
+              <div className="py-16 text-center text-slate-400">
+                <FileStack className="w-10 h-10 mx-auto mb-3 opacity-40" />
+
+                <p className="text-xs font-bold">
+                  No IEC materials available.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+
+                {recentIECMaterials.map(
+                  (material) => (
+                    <div
+                      key={String(
+                        material.id
+                      )}
+                      className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 hover:bg-indigo-50/50 transition"
+                    >
+
+                      <div className="flex items-center gap-3 min-w-0">
+
+                        <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center text-indigo-600 shadow-sm shrink-0">
+
+                          {(() => {
+                            // `format` is never actually populated on
+                            // uploads — the real value lives in `type`
+                            // ("PDF"/"Image"/"Video"/...). Falling back to
+                            // it here is what materialFormatAnalytics
+                            // already does; this render just hadn't.
+                            const displayFormat = normalize(
+                              safeString(material.format) ||
+                                safeString(material.type)
+                            );
+                            if (displayFormat === "pdf") {
+                              return <FileText className="w-5 h-5" />;
+                            }
+                            if (
+                              displayFormat === "png" ||
+                              displayFormat === "jpg" ||
+                              displayFormat === "jpeg" ||
+                              displayFormat === "image"
+                            ) {
+                              return <ImageIcon className="w-5 h-5" />;
+                            }
+                            if (displayFormat === "mp4" || displayFormat === "video") {
+                              return <Video className="w-5 h-5" />;
+                            }
+                            return <File className="w-5 h-5" />;
+                          })()}
+
+                        </div>
+
+                        <div className="min-w-0">
+
+                          <p className="font-black text-sm text-slate-800 truncate">
+                            {safeString(
+                              material.title
+                            ) ||
+                              "Untitled Material"}
+                          </p>
+
+                          <div className="flex flex-wrap gap-2 mt-1">
+
+                            <span className="text-[8px] font-black uppercase text-indigo-600">
+                              {safeString(
+                                material.category
+                              ) ||
+                                "Uncategorized"}
+                            </span>
+
+                            <span className="text-[8px] font-bold uppercase text-slate-400">
+                              {safeString(material.format) ||
+                                safeString(material.type) ||
+                                "Unknown Format"}
+                            </span>
+
+                            <span className="text-[8px] font-bold uppercase text-slate-400">
+                              {campusLabel(
+                                safeString(material.campus)
+                              )}
+                            </span>
+
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                      <div className="flex items-center gap-5 md:shrink-0">
+
+                        <div className="text-right">
+                          <p className="text-[8px] uppercase font-black text-slate-400">
+                            Downloads
+                          </p>
+
+                          <p className="text-sm font-black text-slate-800">
+                            {Number(
+                              material.downloads ||
+                                0
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="text-right">
+                          <p className="text-[8px] uppercase font-black text-slate-400">
+                            Created
+                          </p>
+
+                          <p className="text-xs font-bold text-slate-600">
+                            {material.created_at
+                              ? new Date(
+                                  material.created_at
+                                ).toLocaleDateString()
+                              : "N/A"}
+                          </p>
+                        </div>
+
+                      </div>
+
+                    </div>
+                  )
+                )}
+
+              </div>
+            )}
+
+          </Card>
+
+          </div>
+        )}
+
+        {activeTab === "students" && (
+          <div className="space-y-6">
+          {/* =================================================
+              COURSE + YEAR LEVEL
+          ================================================= */}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+
+              <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
+                Students by Course
+              </h2>
+
+              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1 mb-5">
+                Demographic distribution by academic program &middot; click a bar to view students in Users
+              </p>
+
+              <ResponsiveContainer
+                width="100%"
+                height={300}
+              >
+                <BarChart
+                  data={courseAnalytics}
                   margin={{
                     bottom: 60,
                   }}
@@ -3284,11 +4128,188 @@ export default function AnalyticsDashboard() {
                   />
 
                   <XAxis
-                    dataKey="category"
+                    dataKey="course"
                     angle={-30}
                     textAnchor="end"
                     interval={0}
-                    height={90}
+                    height={80}
+                    tick={{
+                      fontSize: 9,
+                    }}
+                  />
+
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{
+                      fontSize: 9,
+                    }}
+                  />
+
+                  <Tooltip />
+
+                  <Bar
+                    dataKey="count"
+                    name="Students"
+                    fill="#7c3aed"
+                    radius={[
+                      8,
+                      8,
+                      0,
+                      0,
+                    ]}
+                    cursor="pointer"
+                    onClick={(data: any) => data?.course && navigate(`/admin/users?program=${encodeURIComponent(data.course)}`)}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+
+            </Card>
+
+            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+
+              <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
+                Students by Year Level
+              </h2>
+
+              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1 mb-5">
+                Higher education student distribution
+              </p>
+
+              <ResponsiveContainer
+                width="100%"
+                height={300}
+              >
+                <BarChart
+                  data={
+                    yearLevelAnalytics
+                  }
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    vertical={false}
+                  />
+
+                  <XAxis
+                    dataKey="year"
+                    tick={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                    }}
+                  />
+
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{
+                      fontSize: 9,
+                    }}
+                  />
+
+                  <Tooltip />
+
+                  <Bar
+                    dataKey="count"
+                    name="Students"
+                    fill="#db2777"
+                    radius={[
+                      8,
+                      8,
+                      0,
+                      0,
+                    ]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+
+            </Card>
+
+          </div>
+
+          {/* =================================================
+              GENDER + AGE
+          ================================================= */}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+
+              <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
+                Gender Distribution
+              </h2>
+
+              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">
+                Student demographic analytics
+              </p>
+
+              <div className="h-72 mt-4">
+
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
+                >
+                  <PieChart>
+
+                    <Pie
+                      data={
+                        genderAnalytics
+                      }
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={90}
+                      innerRadius={50}
+                      paddingAngle={4}
+                    >
+                      {genderAnalytics.map(
+                        (_, index) => (
+                          <Cell
+                            key={index}
+                            fill={
+                              COLORS[
+                                index %
+                                  COLORS.length
+                              ]
+                            }
+                          />
+                        )
+                      )}
+                    </Pie>
+
+                    <Tooltip />
+
+                    <Legend />
+
+                  </PieChart>
+                </ResponsiveContainer>
+
+              </div>
+
+            </Card>
+
+            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+
+              <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
+                Age Distribution
+              </h2>
+
+              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1 mb-5">
+                Student age-group analytics
+              </p>
+
+              <ResponsiveContainer
+                width="100%"
+                height={280}
+              >
+                <BarChart
+                  data={ageAnalytics}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    vertical={false}
+                  />
+
+                  <XAxis
+                    dataKey="group"
                     tick={{
                       fontSize: 8,
                       fontWeight: 700,
@@ -3306,8 +4327,8 @@ export default function AnalyticsDashboard() {
 
                   <Bar
                     dataKey="count"
-                    name="IEC Materials"
-                    fill="#4f46e5"
+                    name="Students"
+                    fill="#ea580c"
                     radius={[
                       8,
                       8,
@@ -3317,1297 +4338,243 @@ export default function AnalyticsDashboard() {
                   />
                 </BarChart>
               </ResponsiveContainer>
-            )}
 
-          </Card>
-
-          {/* MATERIAL TYPE */}
-
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-
-            <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-              Materials by Type
-            </h2>
-
-            <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
-              IEC and other material classifications
-            </p>
-
-            <div className="h-72 mt-4">
-
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-              >
-                <PieChart>
-
-                  <Pie
-                    data={
-                      materialTypeAnalytics
-                    }
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={90}
-                    innerRadius={50}
-                    paddingAngle={4}
-                  >
-                    {materialTypeAnalytics.map(
-                      (_, index) => (
-                        <Cell
-                          key={index}
-                          fill={
-                            COLORS[
-                              index %
-                                COLORS.length
-                            ]
-                          }
-                        />
-                      )
-                    )}
-                  </Pie>
-
-                  <Tooltip />
-
-                  <Legend />
-
-                </PieChart>
-              </ResponsiveContainer>
-
-            </div>
-
-          </Card>
-
-        </div>
-
-        {/* =================================================
-            MATERIAL FORMAT
-        ================================================= */}
-        {/* Campus breakdown was dropped here — every IEC material in
-            practice gets the same default campus on upload, so a
-            distribution-by-campus chart was always one full pie slice,
-            not an actual breakdown. */}
-
-        <div className="grid grid-cols-1 gap-6">
-
-          {/* FORMAT */}
-
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white max-w-2xl">
-
-            <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-              Materials by Format
-            </h2>
-
-            <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1 mb-5">
-              PDF, PNG, JPG, MP4 and other formats
-            </p>
-
-            <ResponsiveContainer
-              width="100%"
-              height={300}
-            >
-              <BarChart
-                data={
-                  materialFormatAnalytics
-                }
-              >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                />
-
-                <XAxis
-                  dataKey="format"
-                  tick={{
-                    fontSize: 9,
-                    fontWeight: 700,
-                  }}
-                />
-
-                <YAxis
-                  allowDecimals={false}
-                  tick={{
-                    fontSize: 9,
-                  }}
-                />
-
-                <Tooltip />
-
-                <Bar
-                  dataKey="count"
-                  name="Materials"
-                  fill="#7c3aed"
-                  radius={[
-                    8,
-                    8,
-                    0,
-                    0,
-                  ]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-
-          </Card>
-
-        </div>
-
-        {/* =================================================
-            RECENT IEC MATERIALS
-        ================================================= */}
-
-        <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-
-            <div>
-              <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
-                Recent IEC Materials
-              </h2>
-
-              <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
-                Latest IEC materials added to the system
-              </p>
-            </div>
-
-            <div className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-[9px] font-black uppercase">
-              {iecMaterialsThisMonth} Created This Month
-            </div>
+            </Card>
 
           </div>
 
-          {recentIECMaterials.length === 0 ? (
-            <div className="py-16 text-center text-slate-400">
-              <FileStack className="w-10 h-10 mx-auto mb-3 opacity-40" />
+          {/* =================================================
+              PWD / IP
+          ================================================= */}
 
-              <p className="text-xs font-bold">
-                No IEC materials available.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-              {recentIECMaterials.map(
-                (material) => (
-                  <div
-                    key={String(
-                      material.id
-                    )}
-                    className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 hover:bg-indigo-50/50 transition"
-                  >
+            <Card className="border-none shadow-xl rounded-[2rem] p-6 bg-white">
 
-                    <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center gap-3">
 
-                      <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center text-indigo-600 shadow-sm shrink-0">
+                <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <Accessibility className="w-5 h-5" />
+                </div>
 
-                        {(() => {
-                          // `format` is never actually populated on
-                          // uploads — the real value lives in `type`
-                          // ("PDF"/"Image"/"Video"/...). Falling back to
-                          // it here is what materialFormatAnalytics
-                          // already does; this render just hadn't.
-                          const displayFormat = normalize(
-                            safeString(material.format) ||
-                              safeString(material.type)
-                          );
-                          if (displayFormat === "pdf") {
-                            return <FileText className="w-5 h-5" />;
-                          }
-                          if (
-                            displayFormat === "png" ||
-                            displayFormat === "jpg" ||
-                            displayFormat === "jpeg" ||
-                            displayFormat === "image"
-                          ) {
-                            return <ImageIcon className="w-5 h-5" />;
-                          }
-                          if (displayFormat === "mp4" || displayFormat === "video") {
-                            return <Video className="w-5 h-5" />;
-                          }
-                          return <File className="w-5 h-5" />;
-                        })()}
+                <div>
+                  <h3 className="font-black uppercase text-slate-800">
+                    PWD Representation
+                  </h3>
 
-                      </div>
+                  <p className="text-[9px] uppercase font-bold text-slate-400">
+                    Persons with Disabilities
+                  </p>
+                </div>
 
-                      <div className="min-w-0">
+              </div>
 
-                        <p className="font-black text-sm text-slate-800 truncate">
-                          {safeString(
-                            material.title
-                          ) ||
-                            "Untitled Material"}
-                        </p>
+              <div className="grid grid-cols-2 gap-3 mt-6">
 
-                        <div className="flex flex-wrap gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => inclusionAnalytics.pwd > 0 && navigate('/admin/users?inclusion=pwd')}
+                  disabled={inclusionAnalytics.pwd === 0}
+                  className={`bg-blue-50 rounded-2xl p-4 text-left transition-colors ${inclusionAnalytics.pwd > 0 ? 'hover:bg-blue-100 cursor-pointer' : 'cursor-default'}`}
+                >
+                  <p className="text-[9px] uppercase font-black text-blue-500">
+                    PWD
+                  </p>
 
-                          <span className="text-[8px] font-black uppercase text-indigo-600">
-                            {safeString(
-                              material.category
-                            ) ||
-                              "Uncategorized"}
-                          </span>
+                  <p className="text-3xl font-black text-blue-700 mt-1">
+                    {
+                      inclusionAnalytics.pwd
+                    }
+                  </p>
+                  {inclusionAnalytics.pwd > 0 && (
+                    <p className="text-[8px] uppercase font-black text-blue-400 mt-1 tracking-wider">View in Users &rarr;</p>
+                  )}
+                </button>
 
-                          <span className="text-[8px] font-bold uppercase text-slate-400">
-                            {safeString(material.format) ||
-                              safeString(material.type) ||
-                              "Unknown Format"}
-                          </span>
+                <div className="bg-slate-50 rounded-2xl p-4">
+                  <p className="text-[9px] uppercase font-black text-slate-400">
+                    Non-PWD
+                  </p>
 
-                          <span className="text-[8px] font-bold uppercase text-slate-400">
-                            {campusLabel(
-                              safeString(material.campus)
-                            )}
-                          </span>
+                  <p className="text-3xl font-black text-slate-700 mt-1">
+                    {
+                      inclusionAnalytics.nonPwd
+                    }
+                  </p>
+                </div>
 
-                        </div>
+              </div>
 
-                      </div>
-
-                    </div>
-
-                    <div className="flex items-center gap-5 md:shrink-0">
-
-                      <div className="text-right">
-                        <p className="text-[8px] uppercase font-black text-slate-400">
-                          Downloads
-                        </p>
-
-                        <p className="text-sm font-black text-slate-800">
-                          {Number(
-                            material.downloads ||
-                              0
-                          )}
-                        </p>
-                      </div>
-
-                      <div className="text-right">
-                        <p className="text-[8px] uppercase font-black text-slate-400">
-                          Created
-                        </p>
-
-                        <p className="text-xs font-bold text-slate-600">
-                          {material.created_at
-                            ? new Date(
-                                material.created_at
-                              ).toLocaleDateString()
-                            : "N/A"}
-                        </p>
-                      </div>
-
-                    </div>
-
-                  </div>
-                )
+              {inclusionAnalytics.pwd > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-100">
+                  <InclusionBreakdownList
+                    title="By Campus"
+                    rows={inclusionBreakdown.pwd.byCampus}
+                    accentClassName="bg-blue-50 text-blue-600"
+                  />
+                  <InclusionBreakdownList
+                    title="By Program"
+                    rows={inclusionBreakdown.pwd.byProgram}
+                    accentClassName="bg-blue-50 text-blue-600"
+                  />
+                  <InclusionBreakdownList
+                    title="By Year Level"
+                    rows={inclusionBreakdown.pwd.byYearLevel}
+                    accentClassName="bg-blue-50 text-blue-600"
+                  />
+                </div>
               )}
 
-            </div>
-          )}
+            </Card>
 
-        </Card>
+            <Card className="border-none shadow-xl rounded-[2rem] p-6 bg-white">
 
-        {/* =================================================
-            KNOWLEDGE AWARENESS
-        ================================================= */}
+              <div className="flex items-center gap-3">
 
-        <div className="space-y-6">
+                <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <Globe2 className="w-5 h-5" />
+                </div>
 
-          <div className="flex items-center gap-3">
-            <Trophy className="w-5 h-5 text-indigo-600" />
-            <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
-              Knowledge Awareness
-            </h2>
-          </div>
+                <div>
+                  <h3 className="font-black uppercase text-slate-800">
+                    IP Representation
+                  </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <StatCard
-              title="Overall Average Score"
-              value={
-                awarenessAnalytics.overall !== null
-                  ? `${awarenessAnalytics.overall}%`
-                  : "No data"
-              }
-              description="Across all knowledge assessments"
-              icon={Trophy}
-            />
+                  <p className="text-[9px] uppercase font-bold text-slate-400">
+                    Indigenous Peoples
+                  </p>
+                </div>
 
-            <StatCard
-              title="Scored Assessment Responses"
-              value={awarenessAnalytics.totalResponses}
-              description="Knowledge Assessment submissions counted"
-              icon={Target}
-            />
-          </div>
-
-          {/* PER PROGRAM */}
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
-              <div>
-                <h3 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
-                  Awareness by Program
-                </h3>
-
-                <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
-                  Average score on questions linked to each program
-                </p>
               </div>
 
-              <div className="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase">
-                {programAwarenessAnalytics.length} Programs With Data
-              </div>
-            </div>
+              <div className="grid grid-cols-2 gap-3 mt-6">
 
-            {programAwarenessAnalytics.length === 0 ? (
-              <div className="h-64 flex items-center justify-center text-slate-400 text-xs font-bold text-center px-6">
-                No program-linked knowledge questions have been answered yet.
-                Link a question to a program in the Survey Builder to see it here.
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={350}>
-                <BarChart
-                  data={programAwarenessAnalytics}
-                  margin={{ top: 10, right: 10, left: 0, bottom: 60 }}
+                <button
+                  type="button"
+                  onClick={() => inclusionAnalytics.ip > 0 && navigate('/admin/users?inclusion=ip')}
+                  disabled={inclusionAnalytics.ip === 0}
+                  className={`bg-emerald-50 rounded-2xl p-4 text-left transition-colors ${inclusionAnalytics.ip > 0 ? 'hover:bg-emerald-100 cursor-pointer' : 'cursor-default'}`}
                 >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <p className="text-[9px] uppercase font-black text-emerald-500">
+                    IP
+                  </p>
 
-                  <XAxis
-                    dataKey="name"
-                    angle={-30}
-                    textAnchor="end"
-                    interval={0}
-                    height={90}
-                    tick={{ fontSize: 9, fontWeight: 700 }}
-                  />
-
-                  <YAxis
-                    domain={[0, 100]}
-                    tick={{ fontSize: 9 }}
-                    unit="%"
-                  />
-
-                  <Tooltip formatter={(value: number) => `${value}%`} />
-
-                  <Bar
-                    dataKey="average"
-                    name="Avg. Score"
-                    fill="#4f46e5"
-                    radius={[8, 8, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-
-          {/* DEMOGRAPHIC BREAKDOWNS */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {[
-              { title: "By Year Level", data: awarenessAnalytics.byYearLevel },
-              { title: "By Gender", data: awarenessAnalytics.byGender },
-              { title: "By PWD Status", data: awarenessAnalytics.byPwd },
-              { title: "By IP Status", data: awarenessAnalytics.byIp },
-            ].map(({ title, data }) => (
-              <Card
-                key={title}
-                className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white"
-              >
-                <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
-                  {title}
-                </h3>
-
-                <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
-                  Average knowledge score
-                </p>
-
-                {data.length === 0 ? (
-                  <div className="h-40 flex items-center justify-center text-slate-400 text-xs font-bold">
-                    No scored responses yet.
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {data.map((row) => (
-                      <div key={row.label}>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-bold text-slate-600">
-                            {row.label}
-                            <span className="text-slate-400 font-medium">
-                              {" "}
-                              ({row.count})
-                            </span>
-                          </span>
-                          <span className="text-xs font-black text-indigo-600">
-                            {row.average}%
-                          </span>
-                        </div>
-                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-indigo-600 rounded-full"
-                            style={{ width: `${row.average}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Card>
-            ))}
-          </div>
-
-          {/* GUIDANCE SERVICE COVERAGE */}
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-            <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
-              Guidance Service Coverage
-            </h3>
-
-            <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
-              Program count and average awareness score per guidance service
-            </p>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
-                    <th className="pb-3 pr-4">Guidance Service</th>
-                    <th className="pb-3 pr-4">Programs</th>
-                    <th className="pb-3">Avg. Awareness Score</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {guidanceServiceCoverage.map((row) => (
-                    <tr key={row.service} className="border-b border-slate-50 last:border-none">
-                      <td className="py-3 pr-4 text-xs font-bold text-slate-700">
-                        {row.service}
-                      </td>
-                      <td className="py-3 pr-4 text-xs font-black text-slate-900">
-                        {row.programCount}
-                      </td>
-                      <td className="py-3 text-xs font-black">
-                        {row.averageScore !== null ? (
-                          <span className="text-indigo-600">{row.averageScore}%</span>
-                        ) : (
-                          <span className="text-slate-300 font-bold">No data</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-
-          {/* AWARENESS BY MATERIAL EXPOSURE — the intervention-outcome
-              comparison: did opening an IEC material actually correlate
-              with a higher knowledge score on that category? Rendered
-              (headers + em dashes) even with zero scored responses,
-              never hidden. */}
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-            <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
-              Awareness by Material Exposure
-            </h3>
-
-            <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
-              Average knowledge score for students who opened an IEC material in
-              that category vs. students who did not
-            </p>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
-                    <th className="pb-3 pr-4">IEC Category</th>
-                    <th className="pb-3 pr-4">Opened</th>
-                    <th className="pb-3 pr-4">Did Not Open</th>
-                    <th className="pb-3 pr-4">Difference</th>
-                    <th className="pb-3">Respondents</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {materialExposureAwareness.length === 0 ? (
-                    <tr>
-                      <td className="py-3 pr-4 text-xs font-bold text-slate-300">&mdash;</td>
-                      <td className="py-3 pr-4 text-xs font-bold text-slate-300">&mdash;</td>
-                      <td className="py-3 pr-4 text-xs font-bold text-slate-300">&mdash;</td>
-                      <td className="py-3 pr-4 text-xs font-bold text-slate-300">&mdash;</td>
-                      <td className="py-3 text-xs font-bold text-slate-300">&mdash;</td>
-                    </tr>
-                  ) : (
-                    materialExposureAwareness.map((row) => (
-                      <tr key={row.category} className="border-b border-slate-50 last:border-none">
-                        <td className="py-3 pr-4 text-xs font-bold text-slate-700">
-                          {row.category}
-                        </td>
-                        <td className="py-3 pr-4 text-xs font-black">
-                          {row.openedAvg !== null ? (
-                            <span className="text-indigo-600">{row.openedAvg}% <span className="text-slate-400 font-medium">({row.openedCount})</span></span>
-                          ) : (
-                            <span className="text-slate-300 font-bold">No data</span>
-                          )}
-                        </td>
-                        <td className="py-3 pr-4 text-xs font-black">
-                          {row.notOpenedAvg !== null ? (
-                            <span className="text-slate-700">{row.notOpenedAvg}% <span className="text-slate-400 font-medium">({row.notOpenedCount})</span></span>
-                          ) : (
-                            <span className="text-slate-300 font-bold">No data</span>
-                          )}
-                        </td>
-                        <td className="py-3 pr-4 text-xs font-black">
-                          {row.difference !== null ? (
-                            <span className={row.difference >= 0 ? "text-emerald-600" : "text-rose-500"}>
-                              {row.difference >= 0 ? "+" : ""}
-                              {row.difference}pp
-                            </span>
-                          ) : (
-                            <span className="text-slate-300 font-bold">No data</span>
-                          )}
-                        </td>
-                        <td className="py-3 text-xs font-black text-slate-900">
-                          {row.totalRespondents}
-                        </td>
-                      </tr>
-                    ))
+                  <p className="text-3xl font-black text-emerald-700 mt-1">
+                    {
+                      inclusionAnalytics.ip
+                    }
+                  </p>
+                  {inclusionAnalytics.ip > 0 && (
+                    <p className="text-[8px] uppercase font-black text-emerald-500/70 mt-1 tracking-wider">View in Users &rarr;</p>
                   )}
-                </tbody>
-              </table>
-            </div>
+                </button>
 
-            {materialExposureAwareness.length === 0 && (
-              <p className="text-center text-[10px] font-bold text-slate-400 mt-4">
-                No responses have been recorded yet.
-              </p>
-            )}
-          </Card>
+                <div className="bg-slate-50 rounded-2xl p-4">
+                  <p className="text-[9px] uppercase font-black text-slate-400">
+                    Non-IP
+                  </p>
 
-          {/* PROGRAM PARTICIPATION BY COURSE */}
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-            <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
-              Program Participation by Course
-            </h3>
-
-            <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
-              Share of respondents per academic course who reported joining at
-              least one linked guidance program
-            </p>
-
-            {programParticipationByCourse.length === 0 ? (
-              <div className="h-40 flex items-center justify-center text-slate-400 text-xs font-bold text-center px-6">
-                No data yet. Add a "Checkbox (Multiple Answers)" question with
-                its options linked to Programs (e.g. "Which of these programs
-                have you participated in?") to a survey to see this report.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
-                      <th className="pb-3 pr-4">Course</th>
-                      <th className="pb-3 pr-4">Reached</th>
-                      <th className="pb-3 pr-4">Not Reached</th>
-                      <th className="pb-3 pr-4">Respondents</th>
-                      <th className="pb-3">% Reached</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {programParticipationByCourse.map((row) => (
-                      <tr key={row.course} className="border-b border-slate-50 last:border-none">
-                        <td className="py-3 pr-4 text-xs font-bold text-slate-700">
-                          {row.course}
-                        </td>
-                        <td className="py-3 pr-4 text-xs font-black text-emerald-600">
-                          {row.reached}
-                        </td>
-                        <td className="py-3 pr-4 text-xs font-black text-rose-500">
-                          {row.notReached}
-                        </td>
-                        <td className="py-3 pr-4 text-xs font-black text-slate-900">
-                          {row.total}
-                        </td>
-                        <td className="py-3 text-xs font-black">
-                          <span
-                            className={
-                              row.reachedPct < 50 ? "text-rose-500" : "text-indigo-600"
-                            }
-                          >
-                            {row.reachedPct}%
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
-
-        </div>
-
-        {/* =================================================
-            LEARNING GAIN (pre-test vs post-test) — has its own
-            filters and data source (learning_gain_summary RPC).
-        ================================================= */}
-
-        <LearningGainSection />
-
-        {/* =================================================
-            COURSE + YEAR LEVEL
-        ================================================= */}
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-
-            <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-              Students by Course
-            </h2>
-
-            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1 mb-5">
-              Demographic distribution by academic program &middot; click a bar to view students in Users
-            </p>
-
-            <ResponsiveContainer
-              width="100%"
-              height={300}
-            >
-              <BarChart
-                data={courseAnalytics}
-                margin={{
-                  bottom: 60,
-                }}
-              >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                />
-
-                <XAxis
-                  dataKey="course"
-                  angle={-30}
-                  textAnchor="end"
-                  interval={0}
-                  height={80}
-                  tick={{
-                    fontSize: 9,
-                  }}
-                />
-
-                <YAxis
-                  allowDecimals={false}
-                  tick={{
-                    fontSize: 9,
-                  }}
-                />
-
-                <Tooltip />
-
-                <Bar
-                  dataKey="count"
-                  name="Students"
-                  fill="#7c3aed"
-                  radius={[
-                    8,
-                    8,
-                    0,
-                    0,
-                  ]}
-                  cursor="pointer"
-                  onClick={(data: any) => data?.course && navigate(`/admin/users?program=${encodeURIComponent(data.course)}`)}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-
-          </Card>
-
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-
-            <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-              Students by Year Level
-            </h2>
-
-            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1 mb-5">
-              Higher education student distribution
-            </p>
-
-            <ResponsiveContainer
-              width="100%"
-              height={300}
-            >
-              <BarChart
-                data={
-                  yearLevelAnalytics
-                }
-              >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                />
-
-                <XAxis
-                  dataKey="year"
-                  tick={{
-                    fontSize: 9,
-                    fontWeight: 700,
-                  }}
-                />
-
-                <YAxis
-                  allowDecimals={false}
-                  tick={{
-                    fontSize: 9,
-                  }}
-                />
-
-                <Tooltip />
-
-                <Bar
-                  dataKey="count"
-                  name="Students"
-                  fill="#db2777"
-                  radius={[
-                    8,
-                    8,
-                    0,
-                    0,
-                  ]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-
-          </Card>
-
-        </div>
-
-        {/* =================================================
-            GENDER + AGE
-        ================================================= */}
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-
-            <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-              Gender Distribution
-            </h2>
-
-            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">
-              Student demographic analytics
-            </p>
-
-            <div className="h-72 mt-4">
-
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-              >
-                <PieChart>
-
-                  <Pie
-                    data={
-                      genderAnalytics
+                  <p className="text-3xl font-black text-slate-700 mt-1">
+                    {
+                      inclusionAnalytics.nonIp
                     }
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={90}
-                    innerRadius={50}
-                    paddingAngle={4}
-                  >
-                    {genderAnalytics.map(
-                      (_, index) => (
-                        <Cell
-                          key={index}
-                          fill={
-                            COLORS[
-                              index %
-                                COLORS.length
-                            ]
-                          }
-                        />
-                      )
-                    )}
-                  </Pie>
+                  </p>
+                </div>
 
-                  <Tooltip />
-
-                  <Legend />
-
-                </PieChart>
-              </ResponsiveContainer>
-
-            </div>
-
-          </Card>
-
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-
-            <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-              Age Distribution
-            </h2>
-
-            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1 mb-5">
-              Student age-group analytics
-            </p>
-
-            <ResponsiveContainer
-              width="100%"
-              height={280}
-            >
-              <BarChart
-                data={ageAnalytics}
-              >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                />
-
-                <XAxis
-                  dataKey="group"
-                  tick={{
-                    fontSize: 8,
-                    fontWeight: 700,
-                  }}
-                />
-
-                <YAxis
-                  allowDecimals={false}
-                  tick={{
-                    fontSize: 9,
-                  }}
-                />
-
-                <Tooltip />
-
-                <Bar
-                  dataKey="count"
-                  name="Students"
-                  fill="#ea580c"
-                  radius={[
-                    8,
-                    8,
-                    0,
-                    0,
-                  ]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-
-          </Card>
-
-        </div>
-
-        {/* =================================================
-            PWD / IP
-        ================================================= */}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          <Card className="border-none shadow-xl rounded-[2rem] p-6 bg-white">
-
-            <div className="flex items-center gap-3">
-
-              <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                <Accessibility className="w-5 h-5" />
               </div>
 
-              <div>
-                <h3 className="font-black uppercase text-slate-800">
-                  PWD Representation
-                </h3>
+              {inclusionAnalytics.ip > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-100">
+                  <InclusionBreakdownList
+                    title="By Campus"
+                    rows={inclusionBreakdown.ip.byCampus}
+                    accentClassName="bg-emerald-50 text-emerald-600"
+                  />
+                  <InclusionBreakdownList
+                    title="By Program"
+                    rows={inclusionBreakdown.ip.byProgram}
+                    accentClassName="bg-emerald-50 text-emerald-600"
+                  />
+                  <InclusionBreakdownList
+                    title="By Year Level"
+                    rows={inclusionBreakdown.ip.byYearLevel}
+                    accentClassName="bg-emerald-50 text-emerald-600"
+                  />
+                </div>
+              )}
 
-                <p className="text-[9px] uppercase font-bold text-slate-400">
-                  Persons with Disabilities
-                </p>
-              </div>
-
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 mt-6">
-
-              <button
-                type="button"
-                onClick={() => inclusionAnalytics.pwd > 0 && navigate('/admin/users?inclusion=pwd')}
-                disabled={inclusionAnalytics.pwd === 0}
-                className={`bg-blue-50 rounded-2xl p-4 text-left transition-colors ${inclusionAnalytics.pwd > 0 ? 'hover:bg-blue-100 cursor-pointer' : 'cursor-default'}`}
-              >
-                <p className="text-[9px] uppercase font-black text-blue-500">
-                  PWD
-                </p>
-
-                <p className="text-3xl font-black text-blue-700 mt-1">
-                  {
-                    inclusionAnalytics.pwd
-                  }
-                </p>
-                {inclusionAnalytics.pwd > 0 && (
-                  <p className="text-[8px] uppercase font-black text-blue-400 mt-1 tracking-wider">View in Users &rarr;</p>
-                )}
-              </button>
-
-              <div className="bg-slate-50 rounded-2xl p-4">
-                <p className="text-[9px] uppercase font-black text-slate-400">
-                  Non-PWD
-                </p>
-
-                <p className="text-3xl font-black text-slate-700 mt-1">
-                  {
-                    inclusionAnalytics.nonPwd
-                  }
-                </p>
-              </div>
-
-            </div>
-
-            {inclusionAnalytics.pwd > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-100">
-                <InclusionBreakdownList
-                  title="By Campus"
-                  rows={inclusionBreakdown.pwd.byCampus}
-                  accentClassName="bg-blue-50 text-blue-600"
-                />
-                <InclusionBreakdownList
-                  title="By Program"
-                  rows={inclusionBreakdown.pwd.byProgram}
-                  accentClassName="bg-blue-50 text-blue-600"
-                />
-                <InclusionBreakdownList
-                  title="By Year Level"
-                  rows={inclusionBreakdown.pwd.byYearLevel}
-                  accentClassName="bg-blue-50 text-blue-600"
-                />
-              </div>
-            )}
-
-          </Card>
-
-          <Card className="border-none shadow-xl rounded-[2rem] p-6 bg-white">
-
-            <div className="flex items-center gap-3">
-
-              <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                <Globe2 className="w-5 h-5" />
-              </div>
-
-              <div>
-                <h3 className="font-black uppercase text-slate-800">
-                  IP Representation
-                </h3>
-
-                <p className="text-[9px] uppercase font-bold text-slate-400">
-                  Indigenous Peoples
-                </p>
-              </div>
-
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 mt-6">
-
-              <button
-                type="button"
-                onClick={() => inclusionAnalytics.ip > 0 && navigate('/admin/users?inclusion=ip')}
-                disabled={inclusionAnalytics.ip === 0}
-                className={`bg-emerald-50 rounded-2xl p-4 text-left transition-colors ${inclusionAnalytics.ip > 0 ? 'hover:bg-emerald-100 cursor-pointer' : 'cursor-default'}`}
-              >
-                <p className="text-[9px] uppercase font-black text-emerald-500">
-                  IP
-                </p>
-
-                <p className="text-3xl font-black text-emerald-700 mt-1">
-                  {
-                    inclusionAnalytics.ip
-                  }
-                </p>
-                {inclusionAnalytics.ip > 0 && (
-                  <p className="text-[8px] uppercase font-black text-emerald-500/70 mt-1 tracking-wider">View in Users &rarr;</p>
-                )}
-              </button>
-
-              <div className="bg-slate-50 rounded-2xl p-4">
-                <p className="text-[9px] uppercase font-black text-slate-400">
-                  Non-IP
-                </p>
-
-                <p className="text-3xl font-black text-slate-700 mt-1">
-                  {
-                    inclusionAnalytics.nonIp
-                  }
-                </p>
-              </div>
-
-            </div>
-
-            {inclusionAnalytics.ip > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-100">
-                <InclusionBreakdownList
-                  title="By Campus"
-                  rows={inclusionBreakdown.ip.byCampus}
-                  accentClassName="bg-emerald-50 text-emerald-600"
-                />
-                <InclusionBreakdownList
-                  title="By Program"
-                  rows={inclusionBreakdown.ip.byProgram}
-                  accentClassName="bg-emerald-50 text-emerald-600"
-                />
-                <InclusionBreakdownList
-                  title="By Year Level"
-                  rows={inclusionBreakdown.ip.byYearLevel}
-                  accentClassName="bg-emerald-50 text-emerald-600"
-                />
-              </div>
-            )}
-
-          </Card>
-
-        </div>
-
-        {/* =================================================
-            CAMPUS DISTRIBUTION
-        ================================================= */}
-
-        <div className="grid grid-cols-1 gap-6">
-
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-
-            <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-              Campus Distribution
-            </h2>
-
-            <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
-              Student distribution by campus &middot; click a slice to view students in Users
-            </p>
-
-            <div className="h-72 mt-4">
-
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-              >
-                <PieChart>
-
-                  <Pie
-                    data={
-                      campusAnalytics
-                    }
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={90}
-                    paddingAngle={3}
-                  >
-                    {campusAnalytics.map(
-                      (entry, index) => (
-                        <Cell
-                          key={index}
-                          fill={
-                            COLORS[
-                              index %
-                                COLORS.length
-                            ]
-                          }
-                          cursor="pointer"
-                          onClick={() => navigate(`/admin/users?campus=${encodeURIComponent(entry.name)}`)}
-                        />
-                      )
-                    )}
-                  </Pie>
-
-                  <Tooltip />
-
-                  <Legend />
-
-                </PieChart>
-              </ResponsiveContainer>
-
-            </div>
-
-          </Card>
-
-        </div>
-
-        {/* =================================================
-            SURVEY HUB
-        ================================================= */}
-
-        <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-
-            <div className="flex items-start gap-3">
-
-              <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                <ClipboardList className="w-5 h-5" />
-              </div>
-
-              <div>
-                <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-                  Survey & Program Awareness
-                </h2>
-
-                <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
-                  Student evaluation and awareness dissemination
-                </p>
-              </div>
-
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-
-              <div className="bg-slate-50 rounded-xl px-4 py-3">
-                <p className="text-[8px] uppercase font-black text-slate-400">
-                  Surveys
-                </p>
-
-                <p className="text-xl font-black text-slate-800">
-                  {surveys.length}
-                </p>
-              </div>
-
-              <div className="bg-indigo-50 rounded-xl px-4 py-3">
-                <p className="text-[8px] uppercase font-black text-indigo-400">
-                  Participants
-                </p>
-
-                <p className="text-xl font-black text-indigo-700">
-                  {
-                    surveyParticipants
-                  }
-                </p>
-              </div>
-
-              <div className="bg-emerald-50 rounded-xl px-4 py-3">
-                <p className="text-[8px] uppercase font-black text-emerald-400">
-                  Responses
-                </p>
-
-                <p className="text-xl font-black text-emerald-700">
-                  {
-                    totalSurveyResponses
-                  }
-                </p>
-              </div>
-
-            </div>
+            </Card>
 
           </div>
 
-        </Card>
+          {/* =================================================
+              CAMPUS DISTRIBUTION
+          ================================================= */}
 
-        {/* =================================================
-            MATERIAL DATA SUMMARY
-        ================================================= */}
+          <div className="grid grid-cols-1 gap-6">
 
-        <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
 
-          <div className="flex items-center gap-3 mb-5">
-
-            <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <FileStack className="w-5 h-5" />
-            </div>
-
-            <div>
               <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-                IEC Material Summary
+                Campus Distribution
               </h2>
 
               <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
-                Material production and dissemination overview
-              </p>
-            </div>
-
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-
-            <div className="rounded-2xl bg-indigo-50 p-5">
-              <p className="text-[9px] font-black uppercase tracking-widest text-indigo-400">
-                Total IEC
+                Student distribution by campus &middot; click a slice to view students in Users
               </p>
 
-              <p className="mt-2 text-3xl font-black text-indigo-700">
-                {totalIECMaterials}
-              </p>
+              <div className="h-72 mt-4">
 
-              <p className="mt-1 text-[9px] font-bold text-indigo-400 uppercase">
-                All IEC materials
-              </p>
-            </div>
+                <ResponsiveContainer
+                  width="100%"
+                  height="100%"
+                >
+                  <PieChart>
 
-            <div className="rounded-2xl bg-emerald-50 p-5">
-              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400">
-                This Month
-              </p>
+                    <Pie
+                      data={
+                        campusAnalytics
+                      }
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={90}
+                      paddingAngle={3}
+                    >
+                      {campusAnalytics.map(
+                        (entry, index) => (
+                          <Cell
+                            key={index}
+                            fill={
+                              COLORS[
+                                index %
+                                  COLORS.length
+                              ]
+                            }
+                            cursor="pointer"
+                            onClick={() => navigate(`/admin/users?campus=${encodeURIComponent(entry.name)}`)}
+                          />
+                        )
+                      )}
+                    </Pie>
 
-              <p className="mt-2 text-3xl font-black text-emerald-700">
-                {
-                  iecMaterialsThisMonth
-                }
-              </p>
+                    <Tooltip />
 
-              <p className="mt-1 text-[9px] font-bold text-emerald-400 uppercase">
-                New IEC materials
-              </p>
-            </div>
+                    <Legend />
 
-            <div className="rounded-2xl bg-purple-50 p-5">
-              <p className="text-[9px] font-black uppercase tracking-widest text-purple-400">
-                This Year
-              </p>
-
-              <p className="mt-2 text-3xl font-black text-purple-700">
-                {iecMaterialsThisYear}
-              </p>
-
-              <p className="mt-1 text-[9px] font-bold text-purple-400 uppercase">
-                New IEC materials
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-orange-50 p-5">
-              <p className="text-[9px] font-black uppercase tracking-widest text-orange-400">
-                Downloads
-              </p>
-
-              <p className="mt-2 text-3xl font-black text-orange-700">
-                {totalIECDowloads}
-              </p>
-
-              <p className="mt-1 text-[9px] font-bold text-orange-400 uppercase">
-                Total IEC downloads
-              </p>
-            </div>
-
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-5">
-
-            <div className="flex items-start gap-3">
-
-              <Info className="w-5 h-5 text-indigo-600 mt-0.5 shrink-0" />
-
-              <div>
-
-                <p className="text-xs font-black uppercase text-indigo-900">
-                  IEC Material Production Analytics
-                </p>
-
-                <p className="mt-1 text-xs text-indigo-700 leading-relaxed">
-                  The system automatically counts
-                  IEC materials using the
-                  <strong> material_type </strong>
-                  field from the materials table.
-                  Materials are considered newly
-                  created this month when their
-                  <strong> created_at </strong>
-                  timestamp belongs to the current
-                  month and year.
-                </p>
+                  </PieChart>
+                </ResponsiveContainer>
 
               </div>
 
-            </div>
+            </Card>
 
           </div>
 
-        </Card>
+          </div>
+        )}
 
         {/* =================================================
             ADMIN FOOTER
