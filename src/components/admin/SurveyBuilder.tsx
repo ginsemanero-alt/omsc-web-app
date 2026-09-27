@@ -95,18 +95,6 @@ type MaterialOption = { id: number; title: string };
 // `programs` (see supabase/migrations.sql) and GUIDANCE_SERVICES in
 // AnalyticsDashboard.tsx, so a survey's category always lines up with
 // the program it can be linked to via related_program_id.
-// Readable messages for the database rules on knowledge assessments
-// (PHASE 22/25); anything else falls through as-is.
-function surveyErrorMessage(error: { code?: string; message?: string }): string {
-  if (error?.code === "23505") {
-    return "That program already has a published knowledge assessment. Close or archive it first — each program can have only one active pre-test/post-test.";
-  }
-  if (error?.code === "23514") {
-    return "A knowledge assessment must be linked to a program.";
-  }
-  return error?.message || "Something went wrong.";
-}
-
 const CATEGORIES = [
   "Information Services",
   "Individual Inventory",
@@ -293,24 +281,11 @@ export default function SurveyBuilder() {
       const iecCategoryRaw = String(formData.get("iec_category") || "");
       const iecCategory = iecCategoryRaw === "" ? null : iecCategoryRaw;
       const type = String(formData.get("type") || "opinion") as SurveyType;
-      const programIdRaw = String(formData.get("program_id") || "");
-      const programId = programIdRaw === "" ? null : Number(programIdRaw);
 
       if (!title) {
         toast({
           title: "Survey title required",
           description: "Please provide a title.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // A knowledge assessment is always some program's pre/post-test
-      // (enforced by the surveys_knowledge_requires_program check, PHASE 25).
-      if (type === "knowledge" && programId === null) {
-        toast({
-          title: "Program required",
-          description: "Choose the program this knowledge assessment is the pre-test/post-test for.",
           variant: "destructive",
         });
         return;
@@ -323,7 +298,6 @@ export default function SurveyBuilder() {
           category,
           iec_category: iecCategory,
           type,
-          program_id: programId,
           status: "draft",
           questions_data: [],
         },
@@ -415,19 +389,6 @@ export default function SurveyBuilder() {
           ? Number(value)
           : value;
 
-    // A knowledge assessment must always have its program (PHASE 25).
-    if (
-      (field === "type" && value === "knowledge" && !editingSurvey.program_id) ||
-      (field === "program_id" && storedValue === null && editingSurvey.type === "knowledge")
-    ) {
-      toast({
-        variant: "destructive",
-        title: "Program required",
-        description: "A knowledge assessment must be linked to a program. Choose the program first.",
-      });
-      return;
-    }
-
     const previous = editingSurvey;
 
     setEditingSurvey({
@@ -445,7 +406,11 @@ export default function SurveyBuilder() {
       toast({
         variant: "destructive",
         title: "Not Saved",
-        description: surveyErrorMessage(error),
+        // 23505 = unique violation: surveys_one_knowledge_per_program
+        description:
+          error.code === "23505"
+            ? "That program already has a knowledge assessment. Each program can only have one pre-test/post-test."
+            : error.message,
       });
     }
   }
@@ -493,7 +458,7 @@ export default function SurveyBuilder() {
     } catch (err: any) {
       toast({
         title: "Status Error",
-        description: surveyErrorMessage(err),
+        description: err.message,
         variant: "destructive",
       });
     }
@@ -501,16 +466,12 @@ export default function SurveyBuilder() {
 
   async function duplicateSurvey(survey: Survey) {
     try {
-      // The copy keeps its program (a knowledge assessment must have one);
-      // it starts as a draft, and only one assessment per program can be
-      // published at a time.
       const { data: copy, error } = await supabase.from("surveys").insert([
         {
           title: `${survey.title} - Copy`,
           description: survey.description || "",
           category: survey.category || "Other",
           type: survey.type || "opinion",
-          program_id: survey.program_id ?? null,
           status: "draft",
           questions_data: survey.questions_data || [],
         },
@@ -863,36 +824,36 @@ export default function SurveyBuilder() {
                 {/* Pre-test/post-test link. Students answer a knowledge
                     assessment twice — once before reading the program's
                     IEC materials, once after — and Learning Gain in
-                    Analytics pairs the two per program. Shown for every
-                    survey so a program can be picked BEFORE switching the
-                    type to Knowledge (which requires one, PHASE 25). */}
-                <label className="text-[9px] font-black uppercase text-indigo-200 mt-5 block">
-                  {editingSurvey.type === "knowledge" ? "Pre/Post-Test For Program" : "Program"}
-                </label>
+                    Analytics pairs the two per program. */}
+                {editingSurvey.type === "knowledge" && (
+                  <>
+                    <label className="text-[9px] font-black uppercase text-indigo-200 mt-5 block">
+                      Pre/Post-Test For Program
+                    </label>
 
-                <select
-                  value={editingSurvey.program_id ?? ""}
-                  onChange={(e) =>
-                    updateSurveyInfo(
-                      "program_id",
-                      e.target.value
-                    )
-                  }
-                  className="mt-2 w-full h-11 rounded-xl bg-white text-slate-800 px-3 font-bold text-xs outline-none"
-                >
-                  <option value="">Not linked to a program</option>
-                  {programOptions.map((program) => (
-                    <option key={program.id} value={program.id}>
-                      {program.title}
-                    </option>
-                  ))}
-                </select>
+                    <select
+                      value={editingSurvey.program_id ?? ""}
+                      onChange={(e) =>
+                        updateSurveyInfo(
+                          "program_id",
+                          e.target.value
+                        )
+                      }
+                      className="mt-2 w-full h-11 rounded-xl bg-white text-slate-800 px-3 font-bold text-xs outline-none"
+                    >
+                      <option value="">Not linked to a program</option>
+                      {programOptions.map((program) => (
+                        <option key={program.id} value={program.id}>
+                          {program.title}
+                        </option>
+                      ))}
+                    </select>
 
-                <p className="text-[9px] font-bold text-indigo-200/80 mt-2 leading-relaxed">
-                  {editingSurvey.type === "knowledge"
-                    ? "Required. Students take this twice: a pre-test, then a post-test after the program's IEC materials."
-                    : "Optional for an opinion survey. Required before switching to Knowledge Assessment."}
-                </p>
+                    <p className="text-[9px] font-bold text-indigo-200/80 mt-2 leading-relaxed">
+                      Students take this twice: a pre-test, then a post-test after the program's IEC materials.
+                    </p>
+                  </>
+                )}
 
                 <label className="text-[9px] font-black uppercase text-indigo-200 mt-5 block">
                   Survey Category
@@ -1759,32 +1720,6 @@ export default function SurveyBuilder() {
                     </span>
                   </label>
                 </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-black text-slate-600">
-                  Program
-                  <span className="ml-1 font-bold text-slate-400">
-                    (required for a Knowledge Assessment)
-                  </span>
-                </label>
-
-                <select
-                  name="program_id"
-                  defaultValue=""
-                  className="mt-2 w-full h-12 rounded-xl bg-slate-50 px-4 text-sm font-bold outline-none"
-                >
-                  <option value="">No program</option>
-                  {programOptions.map((program) => (
-                    <option key={program.id} value={program.id}>
-                      {program.title}
-                    </option>
-                  ))}
-                </select>
-
-                <p className="mt-1.5 text-[10px] text-slate-400 font-medium">
-                  A knowledge assessment is that program's pre-test and post-test.
-                </p>
               </div>
 
               <div>

@@ -180,24 +180,6 @@ export default function ArchiveScreen() {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data?.message || 'Failed to delete user.');
       } else {
-        // A program whose knowledge assessment still exists can't be
-        // deleted (surveys.program_id is ON DELETE RESTRICT, PHASE 25 —
-        // it protects pre/post-test data). Checked before anything is
-        // removed, so a blocked delete doesn't leave the program without
-        // its handouts.
-        if (type === 'program') {
-          const { data: linkedSurveys, error: surveyCheckError } = await supabase
-            .from('surveys')
-            .select('title')
-            .eq('program_id', row.id);
-          if (surveyCheckError) throw surveyCheckError;
-          if (linkedSurveys && linkedSurveys.length > 0) {
-            throw new Error(
-              `This program still has a knowledge assessment ("${linkedSurveys.map((s: any) => s.title).join('", "')}"). Permanently delete the assessment first — this protects its pre-test/post-test results.`
-            );
-          }
-        }
-
         // Gather a program's files before its rows disappear.
         const programFiles = type === 'program' ? await collectProgramFiles(row.id) : [];
 

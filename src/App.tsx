@@ -22,6 +22,10 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 const StudentDashboard = lazy(() => import('./pages/StudentDashboard'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 
+// FIX #1: TakeSurvey dapat hiwalay na import — hindi same as SurveysPage.
+// Kung wala ka pang dedicated TakeSurvey page, gawin nating alias muna ng QuizzesSurveys.
+// Palitan mo 'to ng sariling TakeSurvey component mo kapag nagawa mo na.
+const TakeSurvey = lazy(() => import('./components/student/QuizzesSurveys'));
 
 // Sub-pages (Public)
 import ProgramsPage from './pages/ProgramsPage';
@@ -65,18 +69,9 @@ function AppContent() {
           <Route path="/materials" element={<Layout><MaterialsPage /></Layout>} />
           <Route path="/about" element={<Layout><AboutPage /></Layout>} />
 
-          {/* Old share link. Assessments need a signed-in student (they're
-              served by student-only functions, PHASE 24), so this goes
-              through the same login check as /student and lands on the
-              student Survey page. The :id was never read by the page. */}
-          <Route
-            path="/take-survey/:id"
-            element={
-              <ProtectedRoute role="student">
-                <Navigate to="/student/survey" replace />
-              </ProtectedRoute>
-            }
-          />
+          {/* FIX #5: /take-survey/:id now points to the correct TakeSurvey component,
+              not SurveysPage. The :id param will be accessible via useParams() inside it. */}
+          <Route path="/take-survey/:id" element={<Layout><TakeSurvey /></Layout>} />
 
           {/* ─── 2. LOGIN ─── */}
           <Route

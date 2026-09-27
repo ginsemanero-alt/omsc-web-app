@@ -1098,333 +1098,55 @@ REVOKE ALL ON FUNCTION learning_gain_summary(integer, text, text, text, text, in
 GRANT EXECUTE ON FUNCTION learning_gain_summary(integer, text, text, text, text, integer, jsonb) TO authenticated;
 
 -- ------------------------------------------------------------
--- PHASE 24 — Answer key and scoring move to the server
+-- ROLLBACK of PHASE 24–26 (server-side scoring, program_materials,
+-- material_views). The app code for those phases was reverted; this
+-- puts the database back to how PHASE 22–23 left it, so the restored
+-- code works again. Safe to re-run.
 --
--- Before this, every active survey (answer key included, in
--- questions_data[].correct_option) was readable by anyone, even
--- signed out, and the browser computed its own score and inserted
--- it — so a student could read the key or submit any score.
---
--- Now:
--- - Only admins read `surveys` and `survey_responses` directly.
--- - Students go through the functions below, which identify them
---   from their session (never from a client-supplied id):
---     student_list_surveys()          active surveys, NO answer key
---     submit_assessment(id, answers)  scores on the server + inserts
---     student_my_results()            own results; no score for pre-tests
---     get_assessment_review(id)       answer key + pre/post answers,
---                                     only after the student's post-test
--- - attempt_type is still assigned by set_attempt_type() (PHASE 22).
+-- Drops program_materials and material_views, including any links and
+-- view records made since PHASE 24–26 were applied.
 -- ------------------------------------------------------------
 
--- The signed-in user's users.id (bigint). users <-> auth is by email,
--- same as is_admin().
-CREATE OR REPLACE FUNCTION current_user_row_id() RETURNS bigint
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  SELECT id FROM users
-   WHERE lower(email) = lower(auth.jwt() ->> 'email')
-   LIMIT 1;
-$$;
+-- PHASE 26
+DROP FUNCTION IF EXISTS record_material_view(bigint);
+DROP TABLE IF EXISTS material_views;
 
--- questions_data without any correct_option.
-CREATE OR REPLACE FUNCTION strip_answer_key(questions jsonb) RETURNS jsonb
-LANGUAGE sql IMMUTABLE AS $$
-  SELECT CASE
-    WHEN jsonb_typeof(questions) <> 'array' THEN '[]'::jsonb
-    ELSE COALESCE(
-      (SELECT jsonb_agg(item - 'correct_option' ORDER BY position)
-         FROM jsonb_array_elements(questions) WITH ORDINALITY AS q(item, position)),
-      '[]'::jsonb)
-  END;
-$$;
-
-CREATE OR REPLACE FUNCTION student_list_surveys() RETURNS jsonb
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  v_user bigint := current_user_row_id();
-BEGIN
-  IF v_user IS NULL THEN
-    RAISE EXCEPTION 'Please sign in to view assessments.' USING ERRCODE = '42501';
-  END IF;
-
-  RETURN COALESCE((
-    SELECT jsonb_agg(jsonb_build_object(
-      'id',             s.id,
-      'title',          s.title,
-      'description',    s.description,
-      'category',       s.category,
-      'iec_category',   s.iec_category,
-      'type',           s.type,
-      'status',         s.status,
-      'program_id',     s.program_id,
-      'created_at',     s.created_at,
-      'questions_data', strip_answer_key(s.questions_data),
-      'attempts',       COALESCE(a.attempts, '[]'::jsonb)
-    ) ORDER BY s.created_at DESC)
-    FROM surveys s
-    LEFT JOIN LATERAL (
-      SELECT jsonb_agg(COALESCE(r.attempt_type, 'single')) AS attempts
-        FROM survey_responses r
-       WHERE r.survey_id = s.id AND r.user_id = v_user
-    ) a ON true
-    WHERE s.status = 'active' AND s.archived_at IS NULL
-  ), '[]'::jsonb);
-END $$;
-
-CREATE OR REPLACE FUNCTION submit_assessment(p_survey_id uuid, p_answers jsonb) RETURNS jsonb
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  v_user    bigint := current_user_row_id();
-  v_survey  surveys%ROWTYPE;
-  v_total   integer;
-  v_correct integer;
-  v_pct     numeric;
-  v_attempt text;
-  v_pre     numeric;
-BEGIN
-  IF v_user IS NULL THEN
-    RAISE EXCEPTION 'Please sign in to submit.' USING ERRCODE = '42501';
-  END IF;
-  IF p_answers IS NULL OR jsonb_typeof(p_answers) <> 'object' THEN
-    RAISE EXCEPTION 'Answers must be an object keyed by question id.' USING ERRCODE = '22023';
-  END IF;
-
-  SELECT * INTO v_survey FROM surveys
-   WHERE id = p_survey_id AND status = 'active' AND archived_at IS NULL;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'This assessment is not open.' USING ERRCODE = 'P0002';
-  END IF;
-
-  -- Scored items: multiple choice with a correct_option, the same rule
-  -- the browser used before.
-  IF v_survey.type = 'knowledge' THEN
-    SELECT
-      COUNT(*) FILTER (WHERE q->>'type' = 'mcq' AND COALESCE(q->>'correct_option', '') <> ''),
-      COUNT(*) FILTER (WHERE q->>'type' = 'mcq' AND COALESCE(q->>'correct_option', '') <> ''
-                         AND p_answers ->> (q->>'id') = q->>'correct_option')
-      INTO v_total, v_correct
-      FROM jsonb_array_elements(
-        CASE WHEN jsonb_typeof(v_survey.questions_data) = 'array'
-             THEN v_survey.questions_data ELSE '[]'::jsonb END) AS q;
-    v_pct := CASE WHEN v_total > 0 THEN ROUND(v_correct * 100.0 / v_total) END;
-  END IF;
-
-  BEGIN
-    INSERT INTO survey_responses (survey_id, user_id, answers, score, total_scored, percentage)
-    VALUES (
-      p_survey_id, v_user, p_answers,
-      CASE WHEN v_survey.type = 'knowledge' THEN v_correct END,
-      CASE WHEN v_survey.type = 'knowledge' THEN v_total END,
-      v_pct)
-    RETURNING attempt_type INTO v_attempt;
-  EXCEPTION WHEN unique_violation THEN
-    RAISE EXCEPTION 'You have already completed this assessment.' USING ERRCODE = '23505';
-  END;
-
-  -- Pre-test: no score back. Post-test: score plus the pre-test's, for
-  -- showing improvement.
-  IF v_attempt = 'post' THEN
-    SELECT percentage INTO v_pre FROM survey_responses
-     WHERE survey_id = p_survey_id AND user_id = v_user AND attempt_type = 'pre';
-    RETURN jsonb_build_object(
-      'attempt_type', v_attempt, 'score', v_correct, 'total', v_total,
-      'percentage', v_pct, 'pre_percentage', v_pre);
-  END IF;
-
-  RETURN jsonb_build_object('attempt_type', v_attempt);
-END $$;
-
-CREATE OR REPLACE FUNCTION student_my_results() RETURNS jsonb
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  v_user bigint := current_user_row_id();
-BEGIN
-  IF v_user IS NULL THEN
-    RAISE EXCEPTION 'Please sign in to view your results.' USING ERRCODE = '42501';
-  END IF;
-
-  RETURN COALESCE((
-    SELECT jsonb_agg(jsonb_build_object(
-      'id',           r.id,
-      'survey_id',    r.survey_id,
-      'title',        s.title,
-      'category',     s.category,
-      'created_at',   r.created_at,
-      'attempt_type', r.attempt_type,
-      -- A pre-test's score stays hidden from the student.
-      'score',        CASE WHEN r.attempt_type = 'pre' THEN NULL ELSE r.score END,
-      'total_scored', CASE WHEN r.attempt_type = 'pre' THEN NULL ELSE r.total_scored END,
-      'percentage',   CASE WHEN r.attempt_type = 'pre' THEN NULL ELSE r.percentage END
-    ) ORDER BY r.created_at DESC)
-    FROM survey_responses r
-    JOIN surveys s ON s.id = r.survey_id
-    WHERE r.user_id = v_user
-  ), '[]'::jsonb);
-END $$;
-
-CREATE OR REPLACE FUNCTION get_assessment_review(p_survey_id uuid) RETURNS jsonb
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  v_user bigint := current_user_row_id();
-  v_pre  survey_responses%ROWTYPE;
-  v_post survey_responses%ROWTYPE;
-BEGIN
-  IF v_user IS NULL THEN
-    RAISE EXCEPTION 'Please sign in to view your review.' USING ERRCODE = '42501';
-  END IF;
-
-  SELECT * INTO v_post FROM survey_responses
-   WHERE survey_id = p_survey_id AND user_id = v_user AND attempt_type = 'post';
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'The review opens after you submit the post-test.' USING ERRCODE = '42501';
-  END IF;
-
-  SELECT * INTO v_pre FROM survey_responses
-   WHERE survey_id = p_survey_id AND user_id = v_user AND attempt_type = 'pre';
-
-  RETURN (
-    SELECT jsonb_build_object(
-      'survey_id', s.id,
-      'title',     s.title,
-      'questions', s.questions_data,
-      'pre',  CASE WHEN v_pre.id IS NULL THEN NULL ELSE jsonb_build_object(
-                'answers', v_pre.answers, 'score', v_pre.score,
-                'total', v_pre.total_scored, 'percentage', v_pre.percentage,
-                'submitted_at', v_pre.created_at) END,
-      'post', jsonb_build_object(
-                'answers', v_post.answers, 'score', v_post.score,
-                'total', v_post.total_scored, 'percentage', v_post.percentage,
-                'submitted_at', v_post.created_at)
-    )
-    FROM surveys s WHERE s.id = p_survey_id
-  );
-END $$;
-
--- Direct table access: admins only.
-DROP POLICY IF EXISTS surveys_select_published_or_admin ON surveys;
-DROP POLICY IF EXISTS surveys_select_admin ON surveys;
-CREATE POLICY surveys_select_admin ON surveys
-  FOR SELECT USING (is_admin());
-
-DROP POLICY IF EXISTS survey_responses_insert_own ON survey_responses;
-DROP POLICY IF EXISTS survey_responses_select_own_or_admin ON survey_responses;
-DROP POLICY IF EXISTS survey_responses_select_admin ON survey_responses;
-CREATE POLICY survey_responses_select_admin ON survey_responses
-  FOR SELECT USING (is_admin());
-
-REVOKE ALL ON FUNCTION current_user_row_id() FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION student_list_surveys() FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION submit_assessment(uuid, jsonb) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION student_my_results() FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION get_assessment_review(uuid) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION current_user_row_id() TO authenticated;
-GRANT EXECUTE ON FUNCTION student_list_surveys() TO authenticated;
-GRANT EXECUTE ON FUNCTION submit_assessment(uuid, jsonb) TO authenticated;
-GRANT EXECUTE ON FUNCTION student_my_results() TO authenticated;
-GRANT EXECUTE ON FUNCTION get_assessment_review(uuid) TO authenticated;
-
--- ------------------------------------------------------------
--- PHASE 25 — Link IEC materials to programs
---
--- program_materials is the IEC material <-> program link (one material
--- can support several programs). materials.program_id is untouched:
--- it still marks a program's own handouts.
---
--- A knowledge assessment now must name its program. Its FK becomes
--- ON DELETE RESTRICT: a program with an assessment can't be deleted
--- until the assessment is (the old SET NULL would now violate the
--- check, and CASCADE would silently delete pre/post data).
---
--- "One assessment per program" now counts only non-draft ones, so a
--- draft copy (Duplicate in the Survey Builder) can exist; only one per
--- program can be activated.
--- ------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS program_materials (
-  program_id  integer NOT NULL REFERENCES programs(id) ON DELETE CASCADE,
-  material_id bigint  NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
-  created_at  timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (program_id, material_id)
-);
-
-CREATE INDEX IF NOT EXISTS program_materials_material_id_idx
-  ON program_materials (material_id);
-
-ALTER TABLE program_materials ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS program_materials_select_public ON program_materials;
-CREATE POLICY program_materials_select_public ON program_materials
-  FOR SELECT USING (true);
-DROP POLICY IF EXISTS program_materials_insert_admin ON program_materials;
-CREATE POLICY program_materials_insert_admin ON program_materials
-  FOR INSERT WITH CHECK (is_admin());
-DROP POLICY IF EXISTS program_materials_delete_admin ON program_materials;
-CREATE POLICY program_materials_delete_admin ON program_materials
-  FOR DELETE USING (is_admin());
+-- PHASE 25
+DROP TABLE IF EXISTS program_materials;
 
 ALTER TABLE surveys DROP CONSTRAINT IF EXISTS surveys_knowledge_requires_program;
-ALTER TABLE surveys ADD CONSTRAINT surveys_knowledge_requires_program
-  CHECK (type <> 'knowledge' OR program_id IS NOT NULL);
 
 ALTER TABLE surveys DROP CONSTRAINT IF EXISTS surveys_program_id_fkey;
 ALTER TABLE surveys ADD CONSTRAINT surveys_program_id_fkey
-  FOREIGN KEY (program_id) REFERENCES programs(id) ON DELETE RESTRICT;
+  FOREIGN KEY (program_id) REFERENCES programs(id) ON DELETE SET NULL;
 
 DROP INDEX IF EXISTS surveys_one_knowledge_per_program;
 CREATE UNIQUE INDEX surveys_one_knowledge_per_program
   ON surveys (program_id)
-  WHERE type = 'knowledge' AND status <> 'draft' AND archived_at IS NULL;
+  WHERE type = 'knowledge' AND program_id IS NOT NULL AND archived_at IS NULL;
 
--- ------------------------------------------------------------
--- PHASE 26 — Material view tracking
---
--- One row per student per material. first_viewed_at is set once and
--- never changed; last_viewed_at and view_count update on every view.
--- Written only through record_material_view(), which identifies the
--- student from their session. activity_logs keeps its own
--- once-per-session 'view' rows as before.
--- ------------------------------------------------------------
+-- PHASE 24: the original (PHASE 5) policies come back.
+DROP POLICY IF EXISTS surveys_select_admin ON surveys;
+DROP POLICY IF EXISTS surveys_select_published_or_admin ON surveys;
+CREATE POLICY surveys_select_published_or_admin ON surveys
+  FOR SELECT USING (status <> 'draft' OR is_admin());
 
-CREATE TABLE IF NOT EXISTS material_views (
-  user_id         bigint  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  material_id     bigint  NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
-  first_viewed_at timestamptz NOT NULL DEFAULT now(),
-  last_viewed_at  timestamptz NOT NULL DEFAULT now(),
-  view_count      integer NOT NULL DEFAULT 1,
-  PRIMARY KEY (user_id, material_id)
-);
+DROP POLICY IF EXISTS survey_responses_select_admin ON survey_responses;
+DROP POLICY IF EXISTS survey_responses_select_own_or_admin ON survey_responses;
+CREATE POLICY survey_responses_select_own_or_admin ON survey_responses
+  FOR SELECT USING (
+    is_admin() OR
+    user_id IN (SELECT id FROM users WHERE email = (auth.jwt() ->> 'email'))
+  );
+DROP POLICY IF EXISTS survey_responses_insert_own ON survey_responses;
+CREATE POLICY survey_responses_insert_own ON survey_responses
+  FOR INSERT WITH CHECK (
+    user_id IN (SELECT id FROM users WHERE email = (auth.jwt() ->> 'email'))
+  );
 
-CREATE INDEX IF NOT EXISTS material_views_material_id_idx
-  ON material_views (material_id);
-
-ALTER TABLE material_views ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS material_views_select_own_or_admin ON material_views;
-CREATE POLICY material_views_select_own_or_admin ON material_views
-  FOR SELECT USING (is_admin() OR user_id = current_user_row_id());
-
-CREATE OR REPLACE FUNCTION record_material_view(p_material_id bigint) RETURNS void
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  v_user bigint;
-BEGIN
-  -- Students only: an admin previewing a material isn't a student view.
-  SELECT id INTO v_user FROM users
-   WHERE lower(email) = lower(auth.jwt() ->> 'email') AND role = 'student'
-   LIMIT 1;
-  IF v_user IS NULL THEN
-    RETURN;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM materials WHERE id = p_material_id) THEN
-    RETURN;
-  END IF;
-
-  INSERT INTO material_views (user_id, material_id)
-  VALUES (v_user, p_material_id)
-  ON CONFLICT (user_id, material_id) DO UPDATE
-    SET last_viewed_at = now(),
-        view_count     = material_views.view_count + 1;
-END $$;
-
-REVOKE ALL ON FUNCTION record_material_view(bigint) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION record_material_view(bigint) TO authenticated;
+DROP FUNCTION IF EXISTS get_assessment_review(uuid);
+DROP FUNCTION IF EXISTS student_my_results();
+DROP FUNCTION IF EXISTS submit_assessment(uuid, jsonb);
+DROP FUNCTION IF EXISTS student_list_surveys();
+DROP FUNCTION IF EXISTS strip_answer_key(jsonb);
+DROP FUNCTION IF EXISTS current_user_row_id();

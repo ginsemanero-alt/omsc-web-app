@@ -27,7 +27,7 @@ import { Label } from '../../components/ui/label';
 import {
   Plus, Search, Edit, Trash2, Calendar, MapPin,
   Loader2, Camera, FileText, ChevronDown, ChevronUp, Download, Clock, AlertCircle, ZoomIn, Eye, HardDrive,
-  Star, X, BookOpen
+  Star, X
 } from 'lucide-react';
 
 // One photo in the program's cover + gallery list. `file` is set until
@@ -98,16 +98,6 @@ export default function ProgramManagement() {
   const [showStudentPreview, setShowStudentPreview] = useState(false);
   const entryFileInputRef = useRef<HTMLInputElement>(null);
 
-  // IEC materials linked to the open program (program_materials,
-  // PHASE 25) — its reading list between the pre-test and post-test.
-  // Edited locally and saved with the program: only the difference from
-  // what was loaded is written. Handouts (materials.program_id) are a
-  // separate thing and untouched by this.
-  const [iecOptions, setIecOptions] = useState<{ id: number; title: string; category: string | null }[]>([]);
-  const [linkedMaterialIds, setLinkedMaterialIds] = useState<number[]>([]);
-  const [savedLinkedMaterialIds, setSavedLinkedMaterialIds] = useState<number[]>([]);
-  const [linksLoading, setLinksLoading] = useState(false);
-
   const isDateOccupied = programs.some(p =>
     p.date === formData.date &&
     getEffectiveProgramStatus(p) !== 'completed' &&
@@ -147,23 +137,7 @@ export default function ProgramManagement() {
     }
   };
 
-  // The IEC library (not handouts, not archived) that can be linked.
-  const fetchIecOptions = async () => {
-    const { data, error } = await supabase
-      .from('materials')
-      .select('id, title, category')
-      .is('program_id', null)
-      .is('archived_at', null)
-      .not('title', 'ilike', 'CERTIFICATE_TEMPLATE:%')
-      .order('title');
-    if (error) {
-      console.warn('IEC materials for linking:', error.message);
-      return;
-    }
-    setIecOptions((data || []).map((m: any) => ({ id: Number(m.id), title: m.title, category: m.category })));
-  };
-
-  useEffect(() => { fetchPrograms(); fetchIecOptions(); }, []);
+  useEffect(() => { fetchPrograms(); }, []);
 
   // Handouts open in an in-app preview first (see previewHandout below) —
   // this is the actual download action, triggered only when the admin
@@ -198,26 +172,6 @@ export default function ProgramManagement() {
     // Unsaved drafts from a previously abandoned dialog are discarded.
     revokeDraftPreviews(entries);
     coverPhotos.forEach((photo) => photo.file && URL.revokeObjectURL(photo.url));
-
-    setLinkedMaterialIds([]);
-    setSavedLinkedMaterialIds([]);
-    if (program) {
-      setLinksLoading(true);
-      supabase
-        .from('program_materials')
-        .select('material_id')
-        .eq('program_id', program.id)
-        .then(({ data, error }) => {
-          setLinksLoading(false);
-          if (error) {
-            toast({ variant: "destructive", title: "Linked Materials", description: error.message });
-            return;
-          }
-          const ids = (data || []).map((row: any) => Number(row.material_id));
-          setLinkedMaterialIds(ids);
-          setSavedLinkedMaterialIds(ids);
-        });
-    }
 
     if (program) {
       setEditingId(program.id);
@@ -365,14 +319,11 @@ export default function ProgramManagement() {
         logActivity({ actorEmail: user?.email, actorName: userName, action: 'create', entityType: 'program', entityId: currentProgramId, entityLabel: payload.title });
       }
 
-      // Linked IEC materials and draft entries added before the program
-      // existed. Students are notified only after this, so a new program
-      // first appears with its reading list and timeline in place.
+      // Draft entries added before the program existed. Students are
+      // notified only after this, so a new program first appears with
+      // its timeline already in place.
       try {
-        if (currentProgramId) {
-          await syncMaterialLinks(currentProgramId);
-          await saveDraftEntries(currentProgramId, entryList);
-        }
+        if (currentProgramId) await saveDraftEntries(currentProgramId, entryList);
       } finally {
         if (isNewProgram) notifyStudents('program', payload.title, payload.content);
       }
@@ -412,31 +363,6 @@ export default function ProgramManagement() {
   // it's added. For a new program they're drafts (id < 0) until
   // handleSave creates the program and calls saveDraftEntries. A program
   // with zero entries saves exactly as it always has.
-  // Writes only the difference between the linked IEC materials in the
-  // form and what was loaded (program_materials, PHASE 25).
-  const syncMaterialLinks = async (programId: number) => {
-    const toAdd = linkedMaterialIds.filter((id) => !savedLinkedMaterialIds.includes(id));
-    const toRemove = savedLinkedMaterialIds.filter((id) => !linkedMaterialIds.includes(id));
-
-    if (toAdd.length > 0) {
-      const { error } = await supabase
-        .from('program_materials')
-        .insert(toAdd.map((material_id) => ({ program_id: programId, material_id })));
-      if (error) throw new Error(`Program saved, but linking IEC materials failed: ${error.message}`);
-    }
-
-    if (toRemove.length > 0) {
-      const { error } = await supabase
-        .from('program_materials')
-        .delete()
-        .eq('program_id', programId)
-        .in('material_id', toRemove);
-      if (error) throw new Error(`Program saved, but unlinking IEC materials failed: ${error.message}`);
-    }
-
-    setSavedLinkedMaterialIds(linkedMaterialIds);
-  };
-
   const isDraftEntry = (entry: any) => entry.id < 0;
 
   const uploadEntryPhotos = async (files: File[]) => {
@@ -1063,73 +989,6 @@ export default function ProgramManagement() {
                 <span className="truncate flex-1 font-bold">{materialFile ? materialFile.name : 'Choose Handouts...'}</span>
                 <input type="file" ref={materialRef} className="hidden" accept=".pdf,.doc,.docx,image/*" onChange={(e) => setMaterialFile(e.target.files?.[0] || null)} />
               </div>
-            </div>
-
-            {/* LINKED IEC MATERIALS — the program's reading list between
-                the pre-test and post-test (program_materials). One
-                material can be linked to several programs. */}
-            <div className="space-y-2">
-              <div>
-                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Linked IEC Materials</Label>
-                <p className="text-[9px] text-slate-400 ml-1 mt-0.5">
-                  What students read between this program's pre-test and post-test. Saved with the program.
-                </p>
-              </div>
-
-              {linkedMaterialIds.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {linkedMaterialIds.map((id) => {
-                    const material = iecOptions.find((option) => option.id === id);
-                    const isNew = !savedLinkedMaterialIds.includes(id);
-                    return (
-                      <span
-                        key={id}
-                        className="inline-flex items-center gap-1.5 max-w-full pl-3 pr-1 py-1 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-wide"
-                      >
-                        <BookOpen className="w-3 h-3 shrink-0" />
-                        <span className="truncate">{material?.title ?? `Material #${id}`}</span>
-                        {isNew && (
-                          <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-amber-950 text-[7px] shrink-0">New</span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setLinkedMaterialIds((previous) => previous.filter((linkedId) => linkedId !== id))}
-                          className="w-5 h-5 rounded-full hover:bg-indigo-200 flex items-center justify-center shrink-0 transition-colors"
-                          aria-label={`Unlink ${material?.title ?? `material ${id}`}`}
-                          title="Unlink"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-
-              <select
-                value=""
-                disabled={linksLoading}
-                onChange={(e) => {
-                  const id = Number(e.target.value);
-                  if (id) setLinkedMaterialIds((previous) => (previous.includes(id) ? previous : [...previous, id]));
-                }}
-                className="w-full h-12 rounded-xl bg-slate-50 border-none px-4 font-bold text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:opacity-60"
-              >
-                <option value="">
-                  {linksLoading
-                    ? 'Loading linked materials...'
-                    : iecOptions.length === 0
-                      ? 'No IEC materials in the library yet'
-                      : '+ Link an IEC material...'}
-                </option>
-                {iecOptions
-                  .filter((option) => !linkedMaterialIds.includes(option.id))
-                  .map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.title}{option.category ? ` — ${option.category}` : ''}
-                    </option>
-                  ))}
-              </select>
             </div>
 
             <div className="space-y-1.5">

@@ -13,7 +13,6 @@ import { formatProgramDate } from '../../lib/formatProgramDate';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
 import { logActivity } from '../../lib/activityLog';
 import { fetchViewerCampus, campusVisibilityFilter } from '../../lib/campuses';
-import { recordMaterialView } from '../../lib/materialViews';
 import { useAuth } from '../../hooks/useAuth';
 import { usePagination } from '../../hooks/usePagination';
 import { PaginationControls } from '../../components/ui/pagination-controls';
@@ -80,7 +79,7 @@ export default function ProgramsActivities() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [photoViewer, setPhotoViewer] = useState<PhotoViewerState | null>(null);
-  const [previewHandout, setPreviewHandout] = useState<{ id: number; url: string; title: string } | null>(null);
+  const [previewHandout, setPreviewHandout] = useState<{ url: string; title: string } | null>(null);
 
   // Handouts open in an in-app preview first — downloading is a separate,
   // explicit action inside that preview, not the default click behavior.
@@ -306,11 +305,7 @@ export default function ProgramsActivities() {
                           <button
                             key={mat.id}
                             type="button"
-                            onClick={() => {
-                              // Handout views count too (material_views, PHASE 26).
-                              recordMaterialView(mat.id);
-                              setPreviewHandout({ id: mat.id, url: mat.file_url, title: mat.title.replace('HANDOUT: ', '') });
-                            }}
+                            onClick={() => setPreviewHandout({ url: mat.file_url, title: mat.title.replace('HANDOUT: ', '') })}
                             className="w-full flex items-center justify-between p-3.5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 hover:border-indigo-500 rounded-xl transition-all shadow-sm group/handout text-left"
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
@@ -407,11 +402,7 @@ export default function ProgramsActivities() {
           <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 shrink-0">
             <Button variant="ghost" onClick={() => setPreviewHandout(null)} className="rounded-xl font-bold uppercase text-[10px]">Close</Button>
             <Button
-              onClick={() => {
-                if (!previewHandout) return;
-                recordMaterialView(previewHandout.id);
-                downloadHandout(previewHandout.url, previewHandout.title);
-              }}
+              onClick={() => previewHandout && downloadHandout(previewHandout.url, previewHandout.title)}
               className="bg-indigo-600 hover:bg-indigo-700 rounded-xl font-black uppercase text-[10px] px-6 text-white"
             >
               <Download className="w-3.5 h-3.5 mr-2" /> Download
