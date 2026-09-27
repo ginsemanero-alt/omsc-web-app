@@ -11,6 +11,7 @@ import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
 import { IEC_CATEGORIES } from '../../lib/iecCategories';
 import { fetchViewerCampus, campusVisibilityFilter } from '../../lib/campuses';
+import { recordMaterialView } from '../../lib/materialViews';
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a PDF preview.
 const PdfPreview = lazy(() => import('../shared/PdfPreview'));
@@ -109,6 +110,9 @@ export default function IECMaterials() {
   // previews would otherwise never show up here at all), sharing one
   // sessionStorage flag so doing both in one session still logs once.
   const logMaterialView = (item: any) => {
+    // Every open is recorded in material_views (PHASE 26); the
+    // activity_logs row below stays once per session, as before.
+    recordMaterialView(item.id);
     if (!user?.email) return;
     const flagKey = `logged_material_view_${item.id}`;
     if (sessionStorage.getItem(flagKey)) return;
@@ -451,7 +455,7 @@ export default function IECMaterials() {
                       {item.description && (
                         <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3">{item.description}</p>
                       )}
-                      <audio src={item.file_url} controls className="w-full h-10" />
+                      <audio src={item.file_url} controls className="w-full h-10" onPlay={() => logMaterialView(item)} />
                     </div>
                   </div>
                 </Card>
@@ -479,6 +483,7 @@ export default function IECMaterials() {
                         href={item.file_url}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={() => logMaterialView(item)}
                         className="inline-flex items-center gap-2 h-11 px-6 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs text-white transition-colors"
                       >
                         Open Resource <ExternalLink className="w-3.5 h-3.5" />

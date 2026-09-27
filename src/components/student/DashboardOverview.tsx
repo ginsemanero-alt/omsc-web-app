@@ -63,7 +63,9 @@ export default function DashboardOverview() {
         viewerCampus ? query.or(campusVisibilityFilter(viewerCampus)) : query;
       const [progRes, surveyRes, matRes, latestMatRes] = await Promise.all([
         scoped(supabase.from('programs').select('*', { count: 'exact' }).is('archived_at', null)).order('created_at', { ascending: false }).limit(3),
-        supabase.from('surveys').select('*', { count: 'exact' }).eq('status', 'active').is('archived_at', null).limit(3),
+        // Students can't read the surveys table directly (PHASE 24) —
+        // student_list_surveys returns the active ones without answer keys.
+        supabase.rpc('student_list_surveys'),
         scoped(supabase.from('materials').select('*', { count: 'exact', head: true }).is('archived_at', null)),
         scoped(
           supabase
@@ -84,12 +86,13 @@ export default function DashboardOverview() {
       }
 
       if (progRes.data) setPrograms(progRes.data);
-      if (surveyRes.data) setActiveSurveys(surveyRes.data);
+      const activeSurveyList: any[] = Array.isArray(surveyRes.data) ? surveyRes.data : [];
+      setActiveSurveys(activeSurveyList.slice(0, 3));
       if (latestMatRes.data) setLatestMaterials(latestMatRes.data);
 
       setStats([
         { label: 'Programs Available', value: (progRes.count || 0).toString(), icon: Calendar, color: 'text-indigo-600' },
-        { label: 'Surveys Published', value: (surveyRes.count || 0).toString(), icon: ClipboardList, color: 'text-emerald-600' },
+        { label: 'Surveys Published', value: activeSurveyList.length.toString(), icon: ClipboardList, color: 'text-emerald-600' },
         { label: 'Materials Online', value: (matRes.count || 0).toString(), icon: BookOpen, color: 'text-purple-600' },
       ]);
 

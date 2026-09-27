@@ -88,34 +88,30 @@ interface ScoreSummary {
   correct: number;
   total: number;
   percentage: number | null;
+  prePercentage: number | null;
   missed: MissedQuestion[];
 }
 
-function computeScoreSummary(
-  questions: Question[],
-  answers: Record<string, any>
-): ScoreSummary {
-  const scoredQuestions = questions.filter(
-    (question) => question.type === 'mcq' && question.correct_option
-  );
+// Scoring happens on the server (submit_assessment, PHASE 24) — the
+// browser never receives the answer key until the post-test is in. This
+// builds the post-test results screen from get_assessment_review, which
+// only answers after the student's post-test.
+function buildReviewSummary(review: any): ScoreSummary {
+  const questions: Question[] = Array.isArray(review?.questions) ? review.questions : [];
+  const postAnswers: Record<string, any> = review?.post?.answers || {};
 
-  const missed: MissedQuestion[] = [];
-  let correct = 0;
+  const missed = questions
+    .filter((question) => question.type === 'mcq' && question.correct_option)
+    .filter((question) => postAnswers[String(question.id)] !== question.correct_option)
+    .map((question) => ({ question, studentAnswer: postAnswers[String(question.id)] }));
 
-  for (const question of scoredQuestions) {
-    const studentAnswer = answers[String(question.id)];
-
-    if (studentAnswer === question.correct_option) {
-      correct += 1;
-    } else {
-      missed.push({ question, studentAnswer });
-    }
-  }
-
-  const total = scoredQuestions.length;
-  const percentage = total > 0 ? Math.round((correct / total) * 100) : null;
-
-  return { correct, total, percentage, missed };
+  return {
+    correct: Number(review?.post?.score ?? 0),
+    total: Number(review?.post?.total ?? 0),
+    percentage: review?.post?.percentage ?? null,
+    prePercentage: review?.pre?.percentage ?? null,
+    missed,
+  };
 }
 
 export default function QuizzesSurveys() {
@@ -214,51 +210,22 @@ export default function QuizzesSurveys() {
       setResultsLoading(true);
       setResultsLoadFailed(false);
 
-      const { data: responsesData, error: responsesError } = await supabase
-        .from('survey_responses')
-        .select('id, survey_id, created_at, score, total_scored, percentage, attempt_type')
-        .eq('user_id', dbUserId)
-        .order('created_at', { ascending: false });
+      // student_my_results (PHASE 24): only this student's rows, and a
+      // pre-test's score is withheld by the server.
+      const { data, error } = await supabase.rpc('student_my_results');
+      if (error) throw error;
 
-      if (responsesError) throw responsesError;
-
-      const surveyIds = [
-        ...new Set((responsesData || []).map((r) => r.survey_id).filter(Boolean)),
-      ];
-
-      let surveysMap: Record<string, any> = {};
-
-      if (surveyIds.length > 0) {
-        const { data: surveysData, error: surveysError } = await supabase
-          .from('surveys')
-          .select('id, title, category')
-          .in('id', surveyIds);
-
-        if (surveysError) {
-          console.warn('Unable to fetch survey titles:', surveysError);
-        } else {
-          surveysMap = (surveysData || []).reduce((acc: Record<string, any>, s: any) => {
-            acc[String(s.id)] = s;
-            return acc;
-          }, {});
-        }
-      }
-
-      const formattedResults: SurveyResult[] = (responsesData || []).map((response: any) => {
-        const survey = surveysMap[String(response.survey_id)];
-
-        return {
-          id: response.id,
-          survey_id: response.survey_id,
-          title: survey?.title || 'Guidance Survey Response',
-          category: survey?.category || null,
-          created_at: response.created_at,
-          score: response.score,
-          total_scored: response.total_scored,
-          percentage: response.percentage,
-          attempt_type: response.attempt_type ?? null,
-        };
-      });
+      const formattedResults: SurveyResult[] = ((data as any[]) || []).map((response) => ({
+        id: response.id,
+        survey_id: response.survey_id,
+        title: response.title || 'Guidance Survey Response',
+        category: response.category || null,
+        created_at: response.created_at,
+        score: response.score,
+        total_scored: response.total_scored,
+        percentage: response.percentage,
+        attempt_type: response.attempt_type ?? null,
+      }));
 
       setResults(formattedResults);
     } catch (error: any) {
@@ -281,36 +248,17 @@ export default function QuizzesSurveys() {
       setLoading(true);
       setSurveysLoadFailed(false);
 
-      const { data: surveysData, error: surveyError } = await supabase
-        .from('surveys')
-        .select('*')
-        .eq('status', 'active')
-        .is('archived_at', null)
-        .order('created_at', { ascending: false });
+      // student_list_surveys (PHASE 24): active surveys WITHOUT the answer
+      // key, each with the attempts this student has already submitted.
+      // Students can no longer read the surveys table directly.
+      const { data: surveysData, error: surveyError } = await supabase.rpc('student_list_surveys');
 
       if (surveyError) throw surveyError;
 
-      const { data: responsesData, error: responsesError } = await supabase
-        .from('survey_responses')
-        .select('survey_id, attempt_type')
-        .eq('user_id', dbUserId);
-
-      if (responsesError) {
-        console.warn('Unable to fetch completed surveys:', responsesError);
-      }
-
-      // survey id -> the attempts this student has already submitted
-      const attemptsBySurvey: Record<string, Set<string>> = {};
-      for (const response of responsesData || []) {
-        const key = String(response.survey_id);
-        (attemptsBySurvey[key] ||= new Set()).add(
-          response.attempt_type || 'single'
-        );
-      }
-
       const formattedSurveys: Survey[] =
-        (surveysData || []).map((survey: any) => {
-          const attempts = attemptsBySurvey[String(survey.id)];
+        ((surveysData as any[]) || []).map((survey: any) => {
+          const submitted: string[] = Array.isArray(survey.attempts) ? survey.attempts : [];
+          const attempts = submitted.length > 0 ? new Set(submitted) : undefined;
 
           // Opinion survey: one response and it's done. Knowledge
           // assessment: done only once both pre-test and post-test exist.
@@ -588,27 +536,30 @@ export default function QuizzesSurveys() {
       return;
     }
 
-    const isKnowledge = activeSurvey.type === 'knowledge';
-    const summary = isKnowledge ? computeScoreSummary(questions, answers) : null;
-    const attempt = isKnowledge ? activeSurvey.next_attempt ?? null : null;
-
     try {
       setSubmitting(true);
 
-      const responsePayload = {
-        survey_id: activeSurvey.id,
-        user_id: dbUserId,
-        answers: answers,
-        score: summary ? summary.correct : null,
-        total_scored: summary ? summary.total : null,
-        percentage: summary ? summary.percentage : null,
-      };
-
-      const { error } = await supabase
-        .from('survey_responses')
-        .insert([responsePayload]);
+      // submit_assessment (PHASE 24) scores on the server from the stored
+      // answer key and inserts the response; the database decides whether
+      // it's the pre-test or post-test. No score is sent from here.
+      const { data: submitted, error } = await supabase.rpc('submit_assessment', {
+        p_survey_id: activeSurvey.id,
+        p_answers: answers,
+      });
 
       if (error) throw error;
+
+      const attempt: AttemptType | null = (submitted as any)?.attempt_type ?? null;
+
+      // Only after the post-test does the server release the answer key.
+      let summary: ScoreSummary | null = null;
+      if (attempt === 'post') {
+        const { data: review, error: reviewError } = await supabase.rpc('get_assessment_review', {
+          p_survey_id: activeSurvey.id,
+        });
+        if (reviewError) throw reviewError;
+        summary = buildReviewSummary(review);
+      }
 
       await fetchActiveSurveys();
       await fetchMyResults();
@@ -616,19 +567,19 @@ export default function QuizzesSurveys() {
       setShowSubmitConfirmation(false);
       setShowReview(false);
 
-      if (summary && summary.total > 0) {
-        // Knowledge assessment with scored questions — show the results
-        // screen instead of closing, so a missed question can point the
-        // student back to the program/material it covers.
+      if (attempt === 'pre') {
+        // Pre-test: no score and no answer key — just what to do next.
+        setSubmittedAttempt('pre');
+        setScoreSummary({ correct: 0, total: 0, percentage: null, prePercentage: null, missed: [] });
+      } else if (summary && summary.total > 0) {
+        // Post-test with scored questions — show the results screen so a
+        // missed question can point the student back to what covers it.
         setSubmittedAttempt(attempt);
         setScoreSummary(summary);
       } else {
         toast({
           title: attempt ? `${ATTEMPT_LABEL[attempt]} Submitted` : 'Assessment Submitted',
-          description:
-            attempt === 'pre'
-              ? 'Read the program\'s IEC materials, then come back for the Post-Test.'
-              : 'Your response has been successfully recorded. Thank you for participating!',
+          description: 'Your response has been successfully recorded. Thank you for participating!',
         });
 
         setActiveSurveyId(null);
@@ -1668,17 +1619,48 @@ export default function QuizzesSurveys() {
                     {submittedAttempt ? `${ATTEMPT_LABEL[submittedAttempt]} Complete` : 'Assessment Complete'}
                   </p>
 
-                  <h3 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">
-                    {scoreSummary.correct} / {scoreSummary.total} Correct
-                  </h3>
+                  {submittedAttempt === 'pre' ? (
+                    // The server returns no pre-test score; nothing to show.
+                    <h3 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">
+                      Answers Recorded
+                    </h3>
+                  ) : (
+                    <>
+                      <h3 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">
+                        {scoreSummary.correct} / {scoreSummary.total} Correct
+                      </h3>
 
-                  <p className="mt-2 text-lg sm:text-xl font-black text-indigo-600">
-                    {scoreSummary.percentage}% Score
-                  </p>
+                      <p className="mt-2 text-lg sm:text-xl font-black text-indigo-600">
+                        {scoreSummary.percentage}% Score
+                      </p>
+
+                      {scoreSummary.prePercentage !== null && scoreSummary.percentage !== null && (
+                        <div className="mt-4 inline-flex flex-wrap items-center justify-center gap-2">
+                          <span className="px-3 py-1.5 rounded-full bg-cyan-50 text-cyan-700 text-[10px] font-black uppercase tracking-wider">
+                            Pre-Test {scoreSummary.prePercentage}%
+                          </span>
+                          <ArrowRight className="w-4 h-4 text-slate-300" />
+                          <span className="px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-wider">
+                            Post-Test {scoreSummary.percentage}%
+                          </span>
+                          <span
+                            className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                              scoreSummary.percentage - scoreSummary.prePercentage >= 0
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-orange-100 text-orange-700'
+                            }`}
+                          >
+                            {scoreSummary.percentage - scoreSummary.prePercentage >= 0 ? '+' : ''}
+                            {scoreSummary.percentage - scoreSummary.prePercentage} pts
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
 
                   <p className="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
                     {submittedAttempt === 'pre'
-                      ? 'This was your Pre-Test. Correct answers are shown after your Post-Test.'
+                      ? 'This was your Pre-Test. Your score and the correct answers are shown after your Post-Test.'
                       : scoreSummary.missed.length === 0
                         ? 'Perfect score! You answered every knowledge question correctly.'
                         : "Here's what to review — each item below links to where you can learn more."}
