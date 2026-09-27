@@ -346,12 +346,18 @@ app.post('/api/register', registerLimiter, async (req, res) => {
     // public endpoint.
     const finalRole = 'student';
 
-    // The registration form offers "Yes" / "No" / "Prefer not to say", but
-    // profiles.is_ip and profiles.is_pwd are strict booleans (same as the
-    // profile-edit form's plain Yes/No toggle) — anything other than an
-    // explicit "Yes" is treated as false, since Postgres can't cast
-    // "Prefer not to say" to boolean and that would crash the insert.
+    // The registration form requires an explicit answer for gender, PWD,
+    // and IP (no default, no "Prefer not to say") because they feed the
+    // demographic analytics. Enforced here too, not just in the form.
+    // profiles.is_ip / is_pwd are booleans: "Yes" -> true, "No" -> false.
     const toBool = (value) => value === 'Yes';
+
+    if (!['Male', 'Female', 'Other'].includes(gender)) {
+        return res.status(400).json({ message: "Please select your gender." });
+    }
+    if (!['Yes', 'No'].includes(isPwd) || !['Yes', 'No'].includes(isIp)) {
+        return res.status(400).json({ message: "Please answer the PWD and IP status questions." });
+    }
 
     try {
         const { data: existing } = await supabase

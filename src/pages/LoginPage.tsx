@@ -50,8 +50,8 @@ interface LoginPageProps {
   onBackToHome: () => void;
 }
 
-type Gender = 'Male' | 'Female' | 'Other' | 'Prefer not to say';
-type YesNoPrefer = 'Yes' | 'No' | 'Prefer not to say';
+type Gender = 'Male' | 'Female' | 'Other';
+type YesNo = 'Yes' | 'No';
 
 const CAMPUSES = [
   'San Jose Campus',
@@ -144,13 +144,13 @@ export default function LoginPage({
   const [yearLevel, setYearLevel] = useState('1');
 
   const [age, setAge] = useState('');
-  const [gender, setGender] = useState<Gender>('Prefer not to say');
+  const [gender, setGender] = useState<Gender | ''>('');
 
   const [isIp, setIsIp] =
-    useState<YesNoPrefer>('Prefer not to say');
+    useState<YesNo | ''>('');
 
   const [isPwd, setIsPwd] =
-    useState<YesNoPrefer>('Prefer not to say');
+    useState<YesNo | ''>('');
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -204,9 +204,9 @@ export default function LoginPage({
     setProgram('');
     setYearLevel('1');
     setAge('');
-    setGender('Prefer not to say');
-    setIsIp('Prefer not to say');
-    setIsPwd('Prefer not to say');
+    setGender('');
+    setIsIp('');
+    setIsPwd('');
     setAgreed(false);
     setShowPassword(false);
     setShowConfirmPassword(false);
@@ -268,6 +268,36 @@ export default function LoginPage({
         variant: 'destructive',
         title: 'INVALID AGE',
         description: 'Please enter a valid age.',
+      });
+      return false;
+    }
+
+    // No default and no "Prefer not to say": these feed the gender, PWD,
+    // and IP analytics, and a preselected answer was being submitted
+    // untouched by most students.
+    if (!gender) {
+      toast({
+        variant: 'destructive',
+        title: 'GENDER REQUIRED',
+        description: 'Please select your gender.',
+      });
+      return false;
+    }
+
+    if (!isPwd) {
+      toast({
+        variant: 'destructive',
+        title: 'PWD STATUS REQUIRED',
+        description: 'Please indicate whether you are a person with disability (PWD).',
+      });
+      return false;
+    }
+
+    if (!isIp) {
+      toast({
+        variant: 'destructive',
+        title: 'IP STATUS REQUIRED',
+        description: 'Please indicate whether you belong to an Indigenous Peoples (IP) group.',
       });
       return false;
     }
@@ -987,7 +1017,7 @@ export default function LoginPage({
                       }
                     >
                       <SelectTrigger className="select-style pl-11">
-                        <SelectValue />
+                        <SelectValue placeholder="Select gender" />
                       </SelectTrigger>
 
                       <SelectContent className="rounded-2xl">
@@ -999,9 +1029,6 @@ export default function LoginPage({
                         </SelectItem>
                         <SelectItem value="Other">
                           Other
-                        </SelectItem>
-                        <SelectItem value="Prefer not to say">
-                          Prefer not to say
                         </SelectItem>
                       </SelectContent>
                     </Select>
@@ -1016,11 +1043,11 @@ export default function LoginPage({
                     <Select
                       value={isPwd}
                       onValueChange={(value) =>
-                        setIsPwd(value as YesNoPrefer)
+                        setIsPwd(value as YesNo)
                       }
                     >
                       <SelectTrigger className="select-style pl-11">
-                        <SelectValue />
+                        <SelectValue placeholder="Select PWD status" />
                       </SelectTrigger>
 
                       <SelectContent className="rounded-2xl">
@@ -1029,9 +1056,6 @@ export default function LoginPage({
                         </SelectItem>
                         <SelectItem value="No">
                           No
-                        </SelectItem>
-                        <SelectItem value="Prefer not to say">
-                          Prefer not to say
                         </SelectItem>
                       </SelectContent>
                     </Select>
@@ -1046,11 +1070,11 @@ export default function LoginPage({
                     <Select
                       value={isIp}
                       onValueChange={(value) =>
-                        setIsIp(value as YesNoPrefer)
+                        setIsIp(value as YesNo)
                       }
                     >
                       <SelectTrigger className="select-style pl-11">
-                        <SelectValue />
+                        <SelectValue placeholder="Select IP status" />
                       </SelectTrigger>
 
                       <SelectContent className="rounded-2xl">
@@ -1059,9 +1083,6 @@ export default function LoginPage({
                         </SelectItem>
                         <SelectItem value="No">
                           No
-                        </SelectItem>
-                        <SelectItem value="Prefer not to say">
-                          Prefer not to say
                         </SelectItem>
                       </SelectContent>
                     </Select>
