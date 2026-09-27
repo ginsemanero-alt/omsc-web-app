@@ -485,7 +485,7 @@ app.post('/api/admin/create-staff', createStaffLimiter, async (req, res) => {
             return res.status(403).json({ message: "Only admins can create staff accounts" });
         }
 
-        const { name, email, password, campus } = req.body;
+        const { name, email, password, campus, isTestAccount } = req.body;
         const cleanEmail = email?.trim().toLowerCase();
         const cleanName = name?.trim();
 
@@ -528,7 +528,10 @@ app.post('/api/admin/create-staff', createStaffLimiter, async (req, res) => {
                 password: hashedPassword,
                 role: 'admin',
                 campus: campus || null,
-                status: 'active'
+                status: 'active',
+                // Test admins publish without notifying students
+                // (see /api/notify-students).
+                is_test_account: isTestAccount === true
             }])
             .select();
 
@@ -768,12 +771,23 @@ app.post('/api/notify-students', notifyLimiter, async (req, res) => {
 
         const { data: callerRecord } = await supabase
             .from('users')
-            .select('role')
+            .select('role, is_test_account')
             .eq('email', callerAuthUser.email.toLowerCase())
             .maybeSingle();
 
         if (callerRecord?.role !== 'admin') {
             return res.status(403).json({ message: "Only admins can send student notifications" });
+        }
+
+        // A test admin account can publish programs/surveys (e.g. to try
+        // things out or demo) without emailing or notifying any student.
+        if (callerRecord.is_test_account) {
+            return res.status(200).json({
+                notified: 0,
+                emailSent: 0,
+                skipped: true,
+                message: "Test account: student notifications are disabled."
+            });
         }
 
         const { type, title, details, actionPath } = req.body;

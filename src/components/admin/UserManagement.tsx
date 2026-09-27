@@ -40,6 +40,7 @@ export default function UserManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState('');
   const [editCampus, setEditCampus] = useState('');
+  const [editIsTest, setEditIsTest] = useState(false);
 
   // Modal States
   const [modalType, setModalType] = useState<'update' | 'delete' | null>(null);
@@ -51,6 +52,7 @@ export default function UserManagement() {
   const [staffEmail, setStaffEmail] = useState('');
   const [staffPassword, setStaffPassword] = useState('');
   const [staffCampus, setStaffCampus] = useState('');
+  const [staffIsTest, setStaffIsTest] = useState(false);
   const [showStaffPassword, setShowStaffPassword] = useState(false);
   const [creatingStaff, setCreatingStaff] = useState(false);
 
@@ -149,7 +151,7 @@ export default function UserManagement() {
       // visible effect anywhere.
       const { error } = await supabase
         .from('users')
-        .update({ status: editStatus, campus: editCampus })
+        .update({ status: editStatus, campus: editCampus, is_test_account: editIsTest })
         .eq('id', pendingAction.id);
 
       if (error) throw error;
@@ -168,7 +170,7 @@ export default function UserManagement() {
           console.warn('Profile campus sync failed:', profileError);
         }
       }
-      logActivity({ actorEmail: authUser?.email, actorName: authUserName, action: 'update', entityType: 'user', entityId: pendingAction.id, entityLabel: targetUser?.name || targetUser?.email, details: `status: ${editStatus}, campus: ${editCampus}` });
+      logActivity({ actorEmail: authUser?.email, actorName: authUserName, action: 'update', entityType: 'user', entityId: pendingAction.id, entityLabel: targetUser?.name || targetUser?.email, details: `status: ${editStatus}, campus: ${editCampus}, test account: ${editIsTest ? 'yes' : 'no'}` });
 
       toast({
         title: "SUCCESS",
@@ -233,6 +235,7 @@ export default function UserManagement() {
     setStaffEmail('');
     setStaffPassword('');
     setStaffCampus('');
+    setStaffIsTest(false);
     setShowStaffPassword(false);
   };
 
@@ -261,6 +264,7 @@ export default function UserManagement() {
           email: staffEmail.trim(),
           password: staffPassword,
           campus: staffCampus || null,
+          isTestAccount: staffIsTest,
         }),
       });
 
@@ -269,7 +273,7 @@ export default function UserManagement() {
       if (!response.ok) {
         throw new Error(data.message || "Failed to create staff account");
       }
-      logActivity({ actorEmail: authUser?.email, actorName: authUserName, action: 'create', entityType: 'user', entityId: data.userId, entityLabel: staffName.trim(), details: `admin account (${staffEmail.trim()})` });
+      logActivity({ actorEmail: authUser?.email, actorName: authUserName, action: 'create', entityType: 'user', entityId: data.userId, entityLabel: staffName.trim(), details: `${staffIsTest ? 'test ' : ''}admin account (${staffEmail.trim()})` });
 
       toast({
         title: "STAFF ACCOUNT CREATED",
@@ -556,6 +560,12 @@ export default function UserManagement() {
                   </p>
                 </div>
 
+                <TestAccountToggle
+                  checked={staffIsTest}
+                  onChange={setStaffIsTest}
+                  description="Programs and surveys this account publishes won't notify or email students."
+                />
+
                 <Button
                   onClick={handleCreateStaff}
                   disabled={creatingStaff}
@@ -676,6 +686,11 @@ export default function UserManagement() {
                             {user.role === 'admin' ? <Shield className="w-4 h-4" /> : <Users className="w-4 h-4" />}
                           </div>
                           <span className="font-black text-slate-800 text-xs uppercase whitespace-nowrap">{user.name}</span>
+                          {user.is_test_account && (
+                            <span className="text-[8px] font-black uppercase tracking-wider text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-md whitespace-nowrap">
+                              Test
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-500 font-medium whitespace-nowrap">{user.student_id || '—'}</td>
@@ -722,6 +737,7 @@ export default function UserManagement() {
                               setEditingId(user.id);
                               setEditStatus(user.status || 'active');
                               setEditCampus(user.campus || '');
+                              setEditIsTest(Boolean(user.is_test_account));
                             }}
                             aria-label={`Manage ${user.name}`}
                           >
@@ -804,6 +820,16 @@ export default function UserManagement() {
                   </Select>
                 </div>
 
+                <TestAccountToggle
+                  checked={editIsTest}
+                  onChange={setEditIsTest}
+                  description={
+                    targetUser?.role === 'admin'
+                      ? "Programs and surveys this account publishes won't notify or email students."
+                      : 'Excluded from Learning Gain analytics.'
+                  }
+                />
+
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   <Button variant="ghost" className="h-12 rounded-2xl font-black uppercase text-[10px] bg-slate-50" onClick={() => setEditingId(null)}>
                     Cancel
@@ -821,5 +847,39 @@ export default function UserManagement() {
         );
       })()}
     </div>
+  );
+}
+// "Test account" switch — shared by the Add Staff form and the Manage
+// Access modal. For an admin it silences student notifications (enforced
+// server-side in /api/notify-students); for a student it keeps their
+// answers out of Learning Gain analytics.
+function TestAccountToggle({
+  checked,
+  onChange,
+  description,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  description: string;
+}) {
+  return (
+    <label className={`flex items-start gap-3 p-4 rounded-2xl border cursor-pointer transition-colors ${
+      checked ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-transparent'
+    }`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-4 w-4 shrink-0 accent-amber-500 cursor-pointer"
+      />
+      <span>
+        <span className="block text-[10px] font-black uppercase tracking-wider text-slate-700">
+          Test Account
+        </span>
+        <span className="block text-[10px] font-medium text-slate-500 mt-0.5 leading-relaxed">
+          {description}
+        </span>
+      </span>
+    </label>
   );
 }
