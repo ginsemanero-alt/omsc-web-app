@@ -26,8 +26,13 @@ import {
 import { Label } from '../../components/ui/label';
 import {
   Plus, Search, Edit, Trash2, Calendar, MapPin,
-  Loader2, Camera, FileText, ChevronDown, ChevronUp, Download, Clock, AlertCircle, ZoomIn, Eye, HardDrive
+  Loader2, Camera, FileText, ChevronDown, ChevronUp, Download, Clock, AlertCircle, ZoomIn, Eye, HardDrive,
+  Star, X
 } from 'lucide-react';
+
+// One photo in the program's cover + gallery list. `file` is set until
+// it's uploaded; `url` is then a local blob preview.
+type CoverPhoto = { url: string; file?: File };
 
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a handout PDF preview.
@@ -55,9 +60,10 @@ export default function ProgramManagement() {
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [deleteTargetTitle, setDeleteTargetTitle] = useState('');
 
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [previewUrl, setPreviewUrl] = useState('');
-  const [existingGalleryUrls, setExistingGalleryUrls] = useState<string[]>([]);
+  // Cover + gallery, in order: the first photo is the cover shown on
+  // cards everywhere, the rest are the gallery. Adding photos appends;
+  // each can be removed or made the cover individually.
+  const [coverPhotos, setCoverPhotos] = useState<CoverPhoto[]>([]);
   const [materialFile, setMaterialFile] = useState<File | null>(null);
 
   const [startTime, setStartTime] = useState('08:00');
@@ -165,6 +171,7 @@ export default function ProgramManagement() {
   const handleOpenDialog = (program?: any) => {
     // Unsaved drafts from a previously abandoned dialog are discarded.
     revokeDraftPreviews(entries);
+    coverPhotos.forEach((photo) => photo.file && URL.revokeObjectURL(photo.url));
 
     if (program) {
       setEditingId(program.id);
@@ -182,8 +189,11 @@ export default function ProgramManagement() {
         content: program.content || '',
         campus: program.campus || ''
       });
-      setPreviewUrl(program.image_url || '');
-      setExistingGalleryUrls(program.gallery_urls || []);
+      setCoverPhotos(
+        [program.image_url, ...(program.gallery_urls || [])]
+          .filter(Boolean)
+          .map((url: string) => ({ url }))
+      );
       setEntries(
         (program.program_entries || [])
           .slice()
@@ -202,48 +212,73 @@ export default function ProgramManagement() {
         program_component: 'Group Guidance', guidance_service: 'Career Orientation',
         capacity: 0, status: 'upcoming', image_url: '', content: '', campus: ''
       });
-      setPreviewUrl('');
-      setExistingGalleryUrls([]);
+      setCoverPhotos([]);
       setEntries([]);
       setStartTime('08:00');
       setEndTime('17:00');
     }
     setMaterialFile(null);
-    setSelectedFiles([]);
     setShowStudentPreview(false);
     resetEntryForm();
     setIsDialogOpen(true);
   };
 
   const handleSave = async () => {
+    // An entry typed into the entry form but never "Add Entry"-ed used to
+    // be silently dropped on save. Include it instead — or stop if it
+    // can't be (no label) rather than lose it.
+    let entryList = entries;
+    if (isEntryFormDirty()) {
+      if (!entryLabel.trim()) {
+        toast({
+          variant: "destructive",
+          title: "Unfinished Entry",
+          description: "The entry form has content but no label. Add a label (e.g. \"Week 1\") or clear it before saving.",
+        });
+        return;
+      }
+
+      if (entryFormIsDraft()) {
+        entryList = withEntryFormAsDraft(entries);
+        setEntries(entryList);
+        resetEntryForm();
+      } else if (!(await handleSaveEntry())) {
+        return;
+      }
+    }
+
     try {
       setLoading(true);
-      let finalImageUrl = formData.image_url;
-      let finalGalleryUrls = existingGalleryUrls;
 
-      if (selectedFiles.length > 0) {
-        // Posters are displayed in a card a few hundred px wide — resizing
-        // to 1280px max before upload cuts typical camera/screenshot
-        // uploads by 80-90% with no visible quality loss at display size.
-        const uploadedUrls: string[] = [];
-        for (const file of selectedFiles) {
-          const uploadFile = await compressImageFile(file);
-          const path = `posters/${Date.now()}_${uploadFile.name}`;
-          // Path always includes Date.now(), so the same URL can never point
-          // to different content later — safe to cache for a full year
-          // instead of Supabase's 1 hour default.
-          const { error: uploadError } = await supabase.storage.from('program-posters').upload(path, uploadFile, { cacheControl: '31536000' });
-          if (uploadError) throw uploadError;
-          const { data } = supabase.storage.from('program-posters').getPublicUrl(path);
-          uploadedUrls.push(data.publicUrl);
+      // Upload any newly added cover/gallery photos, keeping the order
+      // the admin arranged. Posters are displayed a few hundred px wide —
+      // resizing to 1280px max before upload cuts typical uploads by
+      // 80-90% with no visible quality loss at display size.
+      const savedPhotos: CoverPhoto[] = [];
+      for (const photo of coverPhotos) {
+        if (!photo.file) {
+          savedPhotos.push(photo);
+          continue;
         }
-        // First selected photo is the primary cover shown everywhere
-        // (cards, thumbnails); any additional ones are the gallery —
-        // a fresh selection replaces the whole set, same as how entry
-        // photos work.
-        finalImageUrl = uploadedUrls[0];
-        finalGalleryUrls = uploadedUrls.slice(1);
+        const uploadFile = await compressImageFile(photo.file);
+        const path = `posters/${Date.now()}_${uploadFile.name}`;
+        // Path always includes Date.now(), so the same URL can never point
+        // to different content later — safe to cache for a full year
+        // instead of Supabase's 1 hour default.
+        const { error: uploadError } = await supabase.storage.from('program-posters').upload(path, uploadFile, { cacheControl: '31536000' });
+        if (uploadError) throw uploadError;
+        const { data } = supabase.storage.from('program-posters').getPublicUrl(path);
+        URL.revokeObjectURL(photo.url);
+        savedPhotos.push({ url: data.publicUrl });
       }
+      // Uploaded ones are now plain saved photos, so a retry after a later
+      // failure doesn't upload them again.
+      setCoverPhotos(savedPhotos);
+
+      // First photo is the cover shown everywhere (cards, thumbnails);
+      // the rest are the gallery.
+      const finalImageUrl = savedPhotos[0]?.url ?? null;
+      const finalGalleryUrls = savedPhotos.slice(1).map((photo) => photo.url);
 
       const combinedTime = `${formatTo12h(startTime)} - ${formatTo12h(endTime)}`;
       
@@ -288,7 +323,7 @@ export default function ProgramManagement() {
       // notified only after this, so a new program first appears with
       // its timeline already in place.
       try {
-        if (currentProgramId) await saveDraftEntries(currentProgramId);
+        if (currentProgramId) await saveDraftEntries(currentProgramId, entryList);
       } finally {
         if (isNewProgram) notifyStudents('program', payload.title, payload.content);
       }
@@ -354,10 +389,9 @@ export default function ProgramManagement() {
   // Saves every draft entry, in list order, under programId. Each one is
   // swapped for its saved row as soon as it's written, so a failure part
   // way through leaves only the unsaved ones as drafts for a retry.
-  const saveDraftEntries = async (programId: number) => {
-    let current = entries;
-    for (let index = 0; index < current.length; index++) {
-      const draft = current[index];
+  const saveDraftEntries = async (programId: number, list: any[] = entries) => {
+    for (let index = 0; index < list.length; index++) {
+      const draft = list[index];
       if (!isDraftEntry(draft)) continue;
 
       const imageUrls = await uploadEntryPhotos(draft.pending_files || []);
@@ -376,9 +410,41 @@ export default function ProgramManagement() {
       if (error) throw new Error(`Program saved, but entry "${draft.label}" failed: ${error.message}`);
 
       revokeDraftPreviews([draft]);
-      current = current.map((entry, i) => (i === index ? data[0] : entry));
-      setEntries(current);
+      setEntries((previous) => previous.map((entry) => (entry.id === draft.id ? data[0] : entry)));
     }
+  };
+
+  const isEntryFormDirty = () =>
+    Boolean(entryLabel.trim() || entryDescription.trim() || entryCaption.trim() || entryFiles.length > 0);
+
+  // Removes one photo from an entry. A draft's photos are still local
+  // (image_urls[i] is the preview of pending_files[i]); a saved entry is
+  // updated right away.
+  const handleRemoveEntryPhoto = async (entry: any, photoIndex: number) => {
+    const keep = (_: unknown, i: number) => i !== photoIndex;
+
+    if (isDraftEntry(entry)) {
+      URL.revokeObjectURL(entry.image_urls[photoIndex]);
+      setEntries(entries.map((e) =>
+        e.id === entry.id
+          ? { ...e, image_urls: e.image_urls.filter(keep), pending_files: (e.pending_files || []).filter(keep) }
+          : e
+      ));
+      return;
+    }
+
+    const remaining = (entry.image_urls || []).filter(keep);
+    const { data, error } = await supabase
+      .from('program_entries')
+      .update({ image_urls: remaining.length > 0 ? remaining : null })
+      .eq('id', entry.id)
+      .select();
+
+    if (error) {
+      toast({ variant: "destructive", title: "Photo Not Removed", description: error.message });
+      return;
+    }
+    setEntries(entries.map((e) => (e.id === entry.id ? data[0] : e)));
   };
 
   const resetEntryForm = () => {
@@ -404,8 +470,9 @@ export default function ProgramManagement() {
   };
 
   // Draft (new program, or an entry still waiting to be saved): kept
-  // locally — nothing is uploaded until the program is saved.
-  const saveDraftEntryLocally = () => {
+  // locally — nothing is uploaded until the program is saved. Returns
+  // the entry list with the entry form applied as a draft.
+  const withEntryFormAsDraft = (list: any[]) => {
     const previews = entryFiles.map((file) => URL.createObjectURL(file));
     const fields = {
       label: entryLabel.trim(),
@@ -414,7 +481,7 @@ export default function ProgramManagement() {
     };
 
     if (editingEntryId) {
-      setEntries(entries.map((entry) =>
+      return list.map((entry) =>
         entry.id === editingEntryId
           ? {
               ...entry,
@@ -423,35 +490,41 @@ export default function ProgramManagement() {
               pending_files: [...(entry.pending_files || []), ...entryFiles],
             }
           : entry
-      ));
-      toast({ title: "Entry updated", description: "It will be saved with the program." });
-    } else {
-      setEntries([
-        ...entries,
-        {
-          id: -Date.now(),
-          ...fields,
-          image_urls: previews,
-          pending_files: entryFiles,
-          sort_order: entries.length,
-        },
-      ]);
-      toast({ title: "Entry added", description: "It will be saved with the program." });
+      );
     }
 
-    resetEntryForm();
+    return [
+      ...list,
+      {
+        id: -Date.now(),
+        ...fields,
+        image_urls: previews,
+        pending_files: entryFiles,
+        sort_order: list.length,
+      },
+    ];
   };
 
-  const handleSaveEntry = async () => {
+  const entryFormIsDraft = () => {
+    const editingEntry = entries.find((e) => e.id === editingEntryId);
+    return !editingId || Boolean(editingEntry && isDraftEntry(editingEntry));
+  };
+
+  // Returns whether the entry was saved (or kept as a draft).
+  const handleSaveEntry = async (): Promise<boolean> => {
     if (!entryLabel.trim()) {
       toast({ variant: "destructive", title: "Label required", description: "Give this entry a label, e.g. \"Week 1\"." });
-      return;
+      return false;
     }
 
-    const editingEntry = entries.find((e) => e.id === editingEntryId);
-    if (!editingId || (editingEntry && isDraftEntry(editingEntry))) {
-      saveDraftEntryLocally();
-      return;
+    if (entryFormIsDraft()) {
+      setEntries(withEntryFormAsDraft(entries));
+      toast({
+        title: editingEntryId ? "Entry updated" : "Entry added",
+        description: "It will be saved with the program.",
+      });
+      resetEntryForm();
+      return true;
     }
 
     try {
@@ -498,8 +571,10 @@ export default function ProgramManagement() {
       }
 
       resetEntryForm();
+      return true;
     } catch (err: any) {
       toast({ variant: "destructive", title: "Entry Error", description: err.message });
+      return false;
     } finally {
       setIsSavingEntry(false);
     }
@@ -754,37 +829,83 @@ export default function ProgramManagement() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Poster Cover Asset</Label>
-                  <div onClick={() => fileInputRef.current?.click()} className="aspect-video bg-slate-50 hover:bg-slate-100/70 rounded-xl md:rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden relative transition-colors">
-                    {previewUrl ? (
-                      <img src={previewUrl} className="w-full h-full object-cover" alt="Preview" />
-                    ) : (
+                  <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Poster &amp; Photos</Label>
+                  <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) {
+                      setCoverPhotos((previous) => [
+                        ...previous,
+                        ...files.map((file) => ({ url: URL.createObjectURL(file), file })),
+                      ]);
+                    }
+                    e.target.value = '';
+                  }} />
+
+                  {coverPhotos.length === 0 ? (
+                    <div onClick={() => fileInputRef.current?.click()} className="aspect-video bg-slate-50 hover:bg-slate-100/70 rounded-xl md:rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden relative transition-colors">
                       <div className="text-center p-4">
                         <Camera className="mx-auto text-slate-300 mb-1 w-6 h-6"/>
                         <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest block">Upload Event Poster</span>
                       </div>
-                    )}
-                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={(e) => {
-                      const files = Array.from(e.target.files || []);
-                      if (files.length > 0) {
-                        setSelectedFiles(files);
-                        setPreviewUrl(URL.createObjectURL(files[0]));
-                      }
-                    }} />
-                  </div>
-                  {/* Multiple photos selectable — first one is the cover
-                      shown on cards; the rest become the poster gallery
-                      students see under "View Details". */}
-                  {selectedFiles.length > 1 && (
-                    <p className="text-[9px] font-bold text-indigo-500 ml-1">
-                      +{selectedFiles.length - 1} more photo{selectedFiles.length - 1 > 1 ? 's' : ''} selected for the gallery
-                    </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2">
+                      {coverPhotos.map((photo, index) => (
+                        <div key={photo.url} className={`relative aspect-square rounded-xl overflow-hidden bg-slate-100 ${index === 0 ? 'ring-2 ring-indigo-500' : ''}`}>
+                          <img src={photo.url} className="w-full h-full object-cover" alt="" />
+
+                          {index === 0 ? (
+                            <span className="absolute left-1 top-1 px-1.5 py-0.5 rounded-md bg-indigo-600 text-white text-[8px] font-black uppercase tracking-wider">
+                              Cover
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setCoverPhotos((previous) => [previous[index], ...previous.filter((_, i) => i !== index)])}
+                              className="absolute left-1 top-1 w-6 h-6 rounded-full bg-black/55 hover:bg-indigo-600 text-white flex items-center justify-center transition-colors"
+                              aria-label="Make this the cover"
+                              title="Make cover"
+                            >
+                              <Star className="w-3 h-3" />
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (photo.file) URL.revokeObjectURL(photo.url);
+                              setCoverPhotos((previous) => previous.filter((_, i) => i !== index));
+                            }}
+                            className="absolute right-1 top-1 w-6 h-6 rounded-full bg-black/55 hover:bg-rose-600 text-white flex items-center justify-center transition-colors"
+                            aria-label="Remove photo"
+                            title="Remove"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+
+                          {photo.file && (
+                            <span className="absolute left-1 bottom-1 px-1.5 py-0.5 rounded-md bg-amber-400 text-amber-950 text-[7px] font-black uppercase tracking-wider">
+                              New
+                            </span>
+                          )}
+                        </div>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="aspect-square rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-slate-100 flex flex-col items-center justify-center text-slate-400 transition-colors"
+                      >
+                        <Plus className="w-5 h-5" />
+                        <span className="text-[8px] font-black uppercase tracking-widest mt-1">Add</span>
+                      </button>
+                    </div>
                   )}
-                  {selectedFiles.length === 0 && existingGalleryUrls.length > 0 && (
-                    <p className="text-[9px] font-bold text-slate-400 ml-1">
-                      {existingGalleryUrls.length} additional gallery photo{existingGalleryUrls.length > 1 ? 's' : ''} already saved — choosing new photos replaces all of them.
-                    </p>
-                  )}
+
+                  <p className="text-[9px] font-bold text-slate-400 ml-1 leading-relaxed">
+                    The first photo is the cover shown on cards; the rest are the gallery.
+                    {' '}<Star className="inline w-2.5 h-2.5 -mt-0.5" /> makes a photo the cover. Changes apply when you save.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Activity Title</Label>
@@ -907,9 +1028,6 @@ export default function ProgramManagement() {
                       key={entry.id}
                       className={`flex items-start gap-3 p-3 rounded-xl ${editingEntryId === entry.id ? 'bg-indigo-50 ring-2 ring-indigo-200' : 'bg-slate-50'}`}
                     >
-                      {entry.image_urls?.[0] && (
-                        <img src={entry.image_urls[0]} className="w-14 h-14 rounded-lg object-cover shrink-0" alt="" />
-                      )}
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-black text-slate-800 truncate">
                           {entry.label}
@@ -923,7 +1041,22 @@ export default function ProgramManagement() {
                           <p className="text-[10px] text-slate-500 line-clamp-2 mt-0.5">{entry.description}</p>
                         )}
                         {entry.image_urls?.length > 0 ? (
-                          <p className="text-[9px] font-bold text-indigo-500 mt-0.5">{entry.image_urls.length} photo{entry.image_urls.length > 1 ? 's' : ''}</p>
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {entry.image_urls.map((url: string, photoIndex: number) => (
+                              <div key={`${url}-${photoIndex}`} className="relative w-12 h-12 rounded-lg overflow-hidden bg-slate-200 shrink-0">
+                                <img src={url} className="w-full h-full object-cover" alt="" />
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveEntryPhoto(entry, photoIndex)}
+                                  className="absolute right-0.5 top-0.5 w-4 h-4 rounded-full bg-black/60 hover:bg-rose-600 text-white flex items-center justify-center transition-colors"
+                                  aria-label={`Remove photo ${photoIndex + 1} from ${entry.label}`}
+                                  title="Remove photo"
+                                >
+                                  <X className="w-2.5 h-2.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         ) : (
                           <p className="text-[9px] font-bold text-amber-500 mt-0.5">No photos yet</p>
                         )}
