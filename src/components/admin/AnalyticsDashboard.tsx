@@ -63,6 +63,13 @@ import autoTable from "jspdf-autotable";
 import { fetchAnalyticsInsight, type AnalyticsInsightResult } from "../../lib/analyticsInsight";
 import { campusLabel } from "../../lib/campuses";
 import LearningGainSection from "./LearningGainSection";
+import {
+  AGE_BRACKETS,
+  SMALL_SAMPLE_N,
+  T_TEST_CAUTION_N,
+  pairedTTest,
+  yearLevelLabel,
+} from "../../lib/learningGain";
 
 /* =========================================================
    TYPES
@@ -2528,6 +2535,76 @@ export default function AnalyticsDashboard() {
     },
   });
 
+  // Learning Gain lives in its own section with its own data source
+  // (learning_gain_summary RPC) and filters, so it's fetched here
+  // separately — unfiltered, all dimensions — for the AI Insight. Only
+  // aggregates, same as everything else sent. If it can't be loaded the
+  // insight still generates without it.
+  const fetchLearningGainForInsight = async () => {
+    const { data, error } = await supabase.rpc("learning_gain_summary", {
+      p_age_brackets: AGE_BRACKETS,
+    });
+
+    if (error || !data) {
+      return { unavailable: true };
+    }
+
+    const payload = data as any;
+    const programTitles = new Map<string, string>(
+      (payload.options?.programs || []).map((p: any) => [String(p.id), p.title])
+    );
+    const round = (value: unknown, digits: number) =>
+      value === null || value === undefined ? null : Number(Number(value).toFixed(digits));
+
+    const shape = (row: any) => {
+      const n = Number(row.paired_n) || 0;
+      const test = pairedTTest(
+        n,
+        row.mean_gain === null ? null : Number(row.mean_gain),
+        row.sd_diff === null ? null : Number(row.sd_diff)
+      );
+      const group =
+        row.dimension === "program"
+          ? programTitles.get(String(row.key)) || `Program ${row.key}`
+          : row.dimension === "year_level"
+            ? yearLevelLabel(String(row.key))
+            : String(row.key);
+
+      return {
+        group,
+        pairedStudents: n,
+        incompleteStudents: Number(row.incomplete_n) || 0,
+        meanPreTestPercent: round(row.mean_pre, 1),
+        meanPostTestPercent: round(row.mean_post, 1),
+        meanGainPoints: round(row.mean_gain, 1),
+        normalizedGain: round(row.norm_gain, 2),
+        pairedTTest: test
+          ? { t: round(test.t, 2), df: test.df, p: round(test.p, 4), significantAtP05: test.significant }
+          : null,
+        smallSample: n > 0 && n < SMALL_SAMPLE_N,
+        interpretWithCaution: n > 0 && n < T_TEST_CAUTION_N,
+      };
+    };
+
+    const rows: any[] = Array.isArray(payload.rows) ? payload.rows : [];
+    const byDimension = (dimension: string) =>
+      rows.filter((row) => row.dimension === dimension).map(shape);
+    const overall = rows.find((row) => row.dimension === "overall");
+
+    return {
+      about:
+        "Pre-test vs post-test on each program's knowledge assessment (one-group pretest-posttest). Paired students only; incomplete = pre-test only. Gain is in percentage points; normalizedGain = (post - pre) / (100 - pre). A paired t-test p below 0.05 means the difference is significant. Not affected by the dashboard filters.",
+      overall: overall ? shape(overall) : null,
+      byProgram: byDimension("program"),
+      byCourse: byDimension("course"),
+      byGender: byDimension("gender"),
+      byAgeBracket: byDimension("age_bracket"),
+      byYearLevel: byDimension("year_level"),
+      byPwdStatus: byDimension("pwd"),
+      byIpStatus: byDimension("ip"),
+    };
+  };
+
   const handleGenerateInsight = async (regenerate = false) => {
     setInsightLoading(true);
     setInsightError(null);
@@ -2536,7 +2613,7 @@ export default function AnalyticsDashboard() {
       const result = await fetchAnalyticsInsight(
         "full_dashboard",
         "Full Analytics Dashboard",
-        buildInsightMetrics(),
+        { ...buildInsightMetrics(), learningGain: await fetchLearningGainForInsight() },
         regenerate
       );
       setInsight(result);

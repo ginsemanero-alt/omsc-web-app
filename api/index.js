@@ -249,6 +249,7 @@ async function callOpenRouter(model, metrics, sectionLabel) {
         'Write between 4 and 8 bullet points. Each bullet is one short, plain-language sentence — get straight to the point, no filler, no restating the section title.',
         'Only ever refer to numbers that literally appear in the JSON data you are given. Never invent, estimate, or round a number that is not present in that data.',
         'If a figure is missing or zero, say so plainly in its own bullet instead of guessing.',
+        'If learningGain data is present, state whether scores improved from pre-test to post-test and whether the paired t-test is significant (p below 0.05), and flag any result marked smallSample or interpretWithCaution as based on few students.',
         'Start every bullet on its own line with a dash and a space, like "- your point here". Do not use any other markdown — no asterisks for bold or italics, no # headers, no numbered lists, no backticks.',
     ].join(' ');
 
