@@ -38,7 +38,7 @@ import {
 
 export default function IECMaterials() {
   const { user, userName: authUserName } = useAuth();
-  const [activeTab, setActiveTab] = useState('articles');
+  const [activeTab, setActiveTab] = useState('infographics');
   const [materials, setMaterials] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -77,7 +77,7 @@ export default function IECMaterials() {
       // Program handouts live in this same table (materials.program_id
       // set, uploaded via Program Manager) but belong only to that one
       // program's own details panel — excluding them here is what keeps
-      // them from leaking into Articles/Infographics/etc. alongside the
+      // them from leaking into Infographics/Videos/etc. alongside the
       // real IEC Library.
       let query = supabase
         .from('materials')
@@ -168,10 +168,6 @@ export default function IECMaterials() {
   // The admin now picks an explicit type on upload (PDF / Image / Video /
   // Audio / Link), which is the reliable signal. The extension/URL checks
   // are kept only as a fallback for older rows uploaded before that existed.
-  const articles = filteredData.filter(m =>
-    m.type === 'PDF' || m.type === 'Document' || m.file_url?.toLowerCase().split('?')[0].endsWith('.pdf')
-  );
-
   const infographics = filteredData.filter(m =>
     m.type === 'Image' || /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(m.file_url || '')
   );
@@ -188,14 +184,12 @@ export default function IECMaterials() {
 
   // Each tab paginates independently — switching tabs shows a completely
   // different list.
-  const { page: articlesPage, setPage: setArticlesPage, totalPages: articlesTotalPages, pageItems: pagedArticles } = usePagination(articles, MATERIALS_PAGE_SIZE);
   const { page: infographicsPage, setPage: setInfographicsPage, totalPages: infographicsTotalPages, pageItems: pagedInfographics } = usePagination(infographics, MATERIALS_PAGE_SIZE);
   const { page: videosPage, setPage: setVideosPage, totalPages: videosTotalPages, pageItems: pagedVideos } = usePagination(videos, MATERIALS_PAGE_SIZE);
   const { page: audioPage, setPage: setAudioPage, totalPages: audioTotalPages, pageItems: pagedAudio } = usePagination(audioItems, MATERIALS_PAGE_SIZE);
   const { page: linksPage, setPage: setLinksPage, totalPages: linksTotalPages, pageItems: pagedLinks } = usePagination(links, MATERIALS_PAGE_SIZE);
 
   useEffect(() => {
-    setArticlesPage(1);
     setInfographicsPage(1);
     setVideosPage(1);
     setAudioPage(1);
@@ -273,7 +267,6 @@ export default function IECMaterials() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-slate-100/50 dark:bg-slate-800/50 p-1.5 rounded-2xl mb-8 border border-slate-100 dark:border-slate-800">
-          <TabsTrigger value="articles" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">Articles</TabsTrigger>
           <TabsTrigger value="infographics" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">Infographics</TabsTrigger>
           <TabsTrigger value="videos" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">Videos</TabsTrigger>
           <TabsTrigger value="audio" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">Audio</TabsTrigger>
@@ -303,45 +296,6 @@ export default function IECMaterials() {
           </div>
         ) : (
           <>
-            {/* ARTICLES TAB */}
-            <TabsContent value="articles" className="outline-none">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {articles.length > 0 ? pagedArticles.map((item) => (
-                <Card key={item.id} className="p-6 bg-white dark:bg-slate-900 border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all group">
-                  <div className="flex gap-5">
-                    <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-50 transition-colors">
-                      <FileText className="w-8 h-8 text-indigo-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <MaterialCategoryBadge category={item.category} />
-                      <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 truncate uppercase mb-1">{item.title}</h3>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{item.format || 'Document'}</p>
-                      {item.description && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3">{item.description}</p>
-                      )}
-                      <div className="flex flex-wrap gap-2">
-                        {/* min-w-[90px] + flex-wrap: on a container too
-                            narrow for both at a readable size, they wrap to
-                            full-width stacked buttons instead of getting
-                            squeezed to unreadable slivers (flex-1 alone
-                            can't shrink past a button's own content width
-                            anyway, since Button's whitespace-nowrap base
-                            style gives it an intrinsic min-width). */}
-                        <Button onClick={() => handlePreview(item)} className="flex-1 min-w-[90px] h-11 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs">
-                          <Eye className="w-3 h-3 mr-2 shrink-0" /> Preview
-                        </Button>
-                        <Button onClick={() => { downloadFile(item.file_url, item.title); incrementDownloadCount(item.id); logMaterialView(item); }} variant="outline" className="flex-1 min-w-[90px] h-11 border-slate-200 dark:border-slate-700 rounded-xl font-black uppercase text-xs">
-                          <Download className="w-3 h-3 mr-2 shrink-0" /> Save
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              )) : <EmptyState message="No articles found" />}
-            </div>
-            <PaginationControls page={articlesPage} totalPages={articlesTotalPages} totalItems={articles.length} pageSize={MATERIALS_PAGE_SIZE} onPageChange={setArticlesPage} className="mt-6" />
-            </TabsContent>
-
             {/* INFOGRAPHICS TAB */}
             <TabsContent value="infographics" className="outline-none">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

@@ -90,7 +90,7 @@ interface FormData {
 
 const DEFAULT_FORM: FormData = {
   title: '',
-  type: 'PDF',
+  type: 'Image',
   category: IEC_CATEGORIES[0],
   program_component: PROGRAM_COMPONENTS[0],
   tags: '',
@@ -103,7 +103,7 @@ export default function IECMaterials() {
   const { toast } = useToast();
   const { user, userName } = useAuth();
 
-  const [activeTab, setActiveTab] = useState('articles');
+  const [activeTab, setActiveTab] = useState('infographics');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   // Scoped separately from `loading` (which the materials-list fetch and
@@ -217,7 +217,7 @@ export default function IECMaterials() {
 
       setFormData({
         title: material.title || '',
-        type: material.type || 'PDF',
+        type: material.type || 'Image',
         category: IEC_CATEGORIES.includes(material.category as any)
           ? material.category
           : IEC_CATEGORIES[0],
@@ -912,15 +912,6 @@ export default function IECMaterials() {
     return matchesSearch && matchesCategory && matchesComponent && matchesTag;
   });
 
-  const articles = filteredData.filter(
-    (material) =>
-      material.type === 'PDF' ||
-      material.file_url
-        ?.toLowerCase()
-        .split('?')[0]
-        .endsWith('.pdf')
-  );
-
   const infographics = filteredData.filter(
     (material) =>
       material.type === 'Image' ||
@@ -940,11 +931,6 @@ export default function IECMaterials() {
   // different list, so there's no single "current page" that would make
   // sense shared across all three.
   const {
-    page: articlesPage, setPage: setArticlesPage,
-    totalPages: articlesTotalPages, pageItems: pagedArticles,
-  } = usePagination(articles, MATERIALS_PAGE_SIZE);
-
-  const {
     page: infographicsPage, setPage: setInfographicsPage,
     totalPages: infographicsTotalPages, pageItems: pagedInfographics,
   } = usePagination(infographics, MATERIALS_PAGE_SIZE);
@@ -955,7 +941,6 @@ export default function IECMaterials() {
   } = usePagination(videos, MATERIALS_PAGE_SIZE);
 
   useEffect(() => {
-    setArticlesPage(1);
     setInfographicsPage(1);
     setVideosPage(1);
   }, [normalizedSearch, selectedCategory, selectedComponent, selectedTag]);
@@ -1052,13 +1037,6 @@ export default function IECMaterials() {
         <TabsList className="bg-slate-100/50 p-1.5 rounded-2xl mb-8 border border-slate-100">
 
           <TabsTrigger
-            value="articles"
-            className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs"
-          >
-            Articles
-          </TabsTrigger>
-
-          <TabsTrigger
             value="infographics"
             className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs"
           >
@@ -1084,117 +1062,6 @@ export default function IECMaterials() {
           </div>
         ) : (
           <>
-            {/* =====================================================
-                ARTICLES
-            ====================================================== */}
-
-            <TabsContent
-              value="articles"
-              className="outline-none"
-            >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {articles.length > 0 ? (
-                pagedArticles.map((item) => (
-                  <Card
-                    key={item.id}
-                    className="p-6 bg-white border-none shadow-sm rounded-[2rem] hover:shadow-xl transition-all group relative"
-                  >
-                    <MaterialActions
-                      onEdit={() =>
-                        handleOpenDialog(item)
-                      }
-                      onDelete={() =>
-                        triggerDeleteConfirm(
-                          item.id,
-                          item.title
-                        )
-                      }
-                    />
-
-                    <div className="flex gap-5">
-
-                      <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-50">
-                        <FileText className="w-8 h-8 text-indigo-600" />
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-
-                        <MaterialCategory
-                          category={item.category}
-                        />
-                        <MaterialMeta item={item} />
-
-                        <h3 className="text-xl font-black text-slate-800 truncate uppercase mt-1">
-                          {item.title}
-                        </h3>
-
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">
-                          {item.description
-                            ? item.description.substring(
-                                0,
-                                60
-                              ) +
-                              (item.description.length >
-                              60
-                                ? '...'
-                                : '')
-                            : 'Handout Document'}
-                        </p>
-
-                        <div className="flex flex-wrap gap-2">
-
-                          {/* min-w-[90px] + flex-wrap: on a container too
-                              narrow for both at a readable size, they wrap
-                              to full-width stacked buttons instead of
-                              getting squeezed to unreadable slivers
-                              (Button's whitespace-nowrap base style gives
-                              it an intrinsic min-width flex-1 can't shrink
-                              past on its own). */}
-                          <Button
-                            onClick={() =>
-                              handlePreview(item)
-                            }
-                            className="flex-1 min-w-[90px] h-11 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs text-white"
-                          >
-                            <Eye className="w-3 h-3 mr-2 shrink-0" />
-                            Preview
-                          </Button>
-
-                          {item.file_url && (
-                            <Button
-                              onClick={() =>
-                                downloadFile(
-                                  item.file_url!,
-                                  item.title
-                                )
-                              }
-                              variant="outline"
-                              className="flex-1 min-w-[90px] h-11 border-slate-200 rounded-xl font-black uppercase text-xs"
-                            >
-                              <Download className="w-3 h-3 mr-2 shrink-0" />
-                              Save
-                            </Button>
-                          )}
-
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                ))
-              ) : (
-                <EmptyState message="No articles found" />
-              )}
-            </div>
-            <PaginationControls
-              page={articlesPage}
-              totalPages={articlesTotalPages}
-              totalItems={articles.length}
-              pageSize={MATERIALS_PAGE_SIZE}
-              onPageChange={setArticlesPage}
-              className="mt-6"
-            />
-            </TabsContent>
-
             {/* =====================================================
                 INFOGRAPHICS
             ====================================================== */}
@@ -1458,10 +1325,6 @@ export default function IECMaterials() {
                     }}
                     className="select-field"
                   >
-                    <option value="PDF">
-                      Article / Document (PDF)
-                    </option>
-
                     <option value="Image">
                       Infographic Graphic Image
                     </option>
