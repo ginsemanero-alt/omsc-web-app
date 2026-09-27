@@ -32,6 +32,9 @@ export default function ProgramEntryTimeline({ entries, onImageClick, className 
 
           <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">
             {entry.label}
+            {(entry.image_urls?.length ?? 0) > 1 && (
+              <span className="ml-2 text-slate-400">· {entry.image_urls!.length} photos</span>
+            )}
           </p>
 
           {(entry.image_urls?.length ?? 0) > 0 && (

@@ -8,6 +8,7 @@ import { CAMPUSES, ALL_CAMPUSES_LABEL, campusLabel } from '../../lib/campuses';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
 import ZoomableImage from '../shared/ZoomableImage';
 import ProgramEntryTimeline from '../shared/ProgramEntryTimeline';
+import PhotoViewer, { collectProgramPhotos, viewerAt, type PhotoViewerState } from '../shared/PhotoViewer';
 import { useAuth } from '../../hooks/useAuth';
 import { usePagination } from '../../hooks/usePagination';
 import { Card } from '../../components/ui/card';
@@ -44,7 +45,7 @@ export default function ProgramManagement() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
+  const [photoViewer, setPhotoViewer] = useState<PhotoViewerState | null>(null);
   const [previewHandout, setPreviewHandout] = useState<{ url: string; title: string } | null>(null);
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -512,10 +513,11 @@ export default function ProgramManagement() {
             <Card key={program.id} className="overflow-hidden rounded-2xl md:rounded-[2rem] border-none shadow-sm bg-white hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col md:flex-row">
               <div
                 className="md:w-64 h-44 md:h-auto md:min-h-[11rem] bg-slate-900 relative shrink-0 cursor-pointer group/poster"
-                onClick={() => setPreviewImage({
-                  url: program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop',
-                  title: program.title,
-                })}
+                onClick={() => setPhotoViewer(viewerAt(
+                  collectProgramPhotos(program),
+                  program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop',
+                  program.title,
+                ))}
               >
                 <img src={program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop'} className="absolute inset-0 w-full h-full object-cover" alt="" />
                 <div className="absolute inset-0 bg-black/0 group-hover/poster:bg-black/30 transition-colors flex items-center justify-center">
@@ -876,7 +878,9 @@ export default function ProgramManagement() {
                       <div className="mt-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
                         <ProgramEntryTimeline
                           entries={entries}
-                          onImageClick={(url, title) => setPreviewImage({ url, title })}
+                          onImageClick={(url, title) =>
+                            setPhotoViewer(viewerAt(collectProgramPhotos({ title: formData.title, program_entries: entries }), url, title))
+                          }
                         />
                       </div>
                     )}
@@ -909,14 +913,8 @@ export default function ProgramManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* POSTER IMAGE PREVIEW */}
-      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
-        <DialogContent className="max-w-4xl w-[95vw] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl [&>button]:bg-black/50 [&>button]:rounded-full [&>button]:p-1.5 [&>button]:text-white [&>button]:opacity-100">
-          {previewImage && (
-            <img src={previewImage.url} alt={previewImage.title} className="w-full max-h-[85vh] object-contain" />
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* POSTER / PHOTO PREVIEW — same viewer students get */}
+      <PhotoViewer state={photoViewer} onChange={setPhotoViewer} />
 
       {/* HANDOUT PREVIEW — opens in-app first; downloading is a separate,
           explicit action below, not the default click behavior. */}

@@ -17,6 +17,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { usePagination } from '../../hooks/usePagination';
 import { PaginationControls } from '../../components/ui/pagination-controls';
 import ProgramEntryTimeline from '../shared/ProgramEntryTimeline';
+import PhotoViewer, { collectProgramPhotos, viewerAt, type PhotoViewerState } from '../shared/PhotoViewer';
 
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a handout PDF preview.
@@ -77,7 +78,7 @@ export default function ProgramsActivities() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
+  const [photoViewer, setPhotoViewer] = useState<PhotoViewerState | null>(null);
   const [previewHandout, setPreviewHandout] = useState<{ url: string; title: string } | null>(null);
 
   // Handouts open in an in-app preview first — downloading is a separate,
@@ -230,10 +231,11 @@ export default function ProgramsActivities() {
 
             <div
               className="aspect-video w-full bg-slate-900 relative shrink-0 cursor-pointer group/poster"
-              onClick={() => setPreviewImage({
-                url: program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop',
-                title: program.title,
-              })}
+              onClick={() => setPhotoViewer(viewerAt(
+                collectProgramPhotos(program),
+                program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop',
+                program.title,
+              ))}
             >
               <img
                 src={program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop'}
@@ -320,12 +322,14 @@ export default function ProgramsActivities() {
 
                     <ProgramEntryTimeline
                       entries={program.program_entries || []}
-                      onImageClick={(url, title) => setPreviewImage({ url, title })}
+                      onImageClick={(url, title) => setPhotoViewer(viewerAt(collectProgramPhotos(program), url, title))}
                     />
 
                     {(program.gallery_urls?.length ?? 0) > 0 && (
                       <div className="space-y-2">
-                        <p className="text-[9px] font-black uppercase text-indigo-500 tracking-widest ml-1">More Photos</p>
+                        <p className="text-[9px] font-black uppercase text-indigo-500 tracking-widest ml-1">
+                          More Photos · {program.gallery_urls!.length}
+                        </p>
                         <div className="flex gap-2 overflow-x-auto pb-1">
                           {program.gallery_urls!.map((url, i) => (
                             <img
@@ -333,7 +337,7 @@ export default function ProgramsActivities() {
                               src={url}
                               alt={program.title}
                               className="h-28 w-auto rounded-xl object-cover shrink-0 cursor-pointer"
-                              onClick={() => setPreviewImage({ url, title: program.title })}
+                              onClick={() => setPhotoViewer(viewerAt(collectProgramPhotos(program), url, program.title))}
                             />
                           ))}
                         </div>
@@ -358,13 +362,7 @@ export default function ProgramsActivities() {
         className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800"
       />
 
-      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
-        <DialogContent className="max-w-4xl w-[95vw] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl [&>button]:bg-black/50 [&>button]:rounded-full [&>button]:p-1.5 [&>button]:text-white [&>button]:opacity-100">
-          {previewImage && (
-            <img src={previewImage.url} alt={previewImage.title} className="w-full max-h-[85vh] object-contain" />
-          )}
-        </DialogContent>
-      </Dialog>
+      <PhotoViewer state={photoViewer} onChange={setPhotoViewer} />
 
       {/* HANDOUT PREVIEW — opens in-app first; downloading is a separate,
           explicit action below, not the default click behavior. */}
