@@ -41,7 +41,9 @@ import StudentBottomNav from '../student/StudentBottomNav';
 // The floating mobile bar only ever shows these 4 destinations, in this
 // exact order, regardless of how navigationItems (which also carries
 // Profile/About for the desktop nav and admin's own drawer) is ordered.
-const STUDENT_BOTTOM_NAV_PATHS = ['/student', '/student/materials', '/student/programs', '/student/survey'];
+// Same order as the desktop nav: Dashboard → Programs → IEC Library →
+// Survey (programs first, then the materials that support them).
+const STUDENT_BOTTOM_NAV_PATHS = ['/student', '/student/programs', '/student/materials', '/student/survey'];
 
 interface NavigationItem {
   label: string;
