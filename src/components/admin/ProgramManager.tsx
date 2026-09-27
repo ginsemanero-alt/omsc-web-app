@@ -78,9 +78,10 @@ export default function ProgramManagement() {
     campus: ''
   });
 
-  // Entries (timeline) for whichever program is currently open in the
-  // edit dialog. Only meaningful once a program has an id — a new,
-  // unsaved program has nowhere to attach entries to yet.
+  // Entries (timeline) for whichever program is open in the dialog.
+  // A new, unsaved program has no id to attach entries to yet, so its
+  // entries are drafts held here (negative id, photos as local files +
+  // blob preview URLs) and saved by handleSave right after the program.
   const [entries, setEntries] = useState<any[]>([]);
   const [entryLabel, setEntryLabel] = useState('');
   const [entryDescription, setEntryDescription] = useState('');
@@ -162,6 +163,9 @@ export default function ProgramManagement() {
   };
 
   const handleOpenDialog = (program?: any) => {
+    // Unsaved drafts from a previously abandoned dialog are discarded.
+    revokeDraftPreviews(entries);
+
     if (program) {
       setEditingId(program.id);
       setFormData({
@@ -261,6 +265,7 @@ export default function ProgramManagement() {
       };
 
       let currentProgramId = editingId;
+      let isNewProgram = false;
 
       if (editingId) {
         const { error } = await supabase.from('programs').update(payload).eq('id', editingId);
@@ -271,8 +276,21 @@ export default function ProgramManagement() {
         if (error) throw error;
         if (!data || data.length === 0) throw new Error("Failed to capture generated record primary key.");
         currentProgramId = data[0].id;
+        isNewProgram = true;
+        // From here on this dialog is editing the saved program, so if a
+        // step below fails, pressing save again updates it instead of
+        // creating a duplicate.
+        setEditingId(currentProgramId);
         logActivity({ actorEmail: user?.email, actorName: userName, action: 'create', entityType: 'program', entityId: currentProgramId, entityLabel: payload.title });
-        notifyStudents('program', payload.title, payload.content);
+      }
+
+      // Draft entries added before the program existed. Students are
+      // notified only after this, so a new program first appears with
+      // its timeline already in place.
+      try {
+        if (currentProgramId) await saveDraftEntries(currentProgramId);
+      } finally {
+        if (isNewProgram) notifyStudents('program', payload.title, payload.content);
       }
 
       if (materialFile && currentProgramId) {
@@ -306,10 +324,63 @@ export default function ProgramManagement() {
 
   // ENTRIES (timeline) — a separate, ordered set of sub-records under one
   // program (e.g. "Week 1", "Week 2" of a month-long campaign), each with
-  // its own photos. Deliberately independent of handleSave above: a
-  // program with zero entries must save and display exactly as it always
-  // has, so entries are only ever added/removed once the program itself
-  // already exists (editingId is set).
+  // its own photos. For a saved program each entry is written as soon as
+  // it's added. For a new program they're drafts (id < 0) until
+  // handleSave creates the program and calls saveDraftEntries. A program
+  // with zero entries saves exactly as it always has.
+  const isDraftEntry = (entry: any) => entry.id < 0;
+
+  const uploadEntryPhotos = async (files: File[]) => {
+    const urls: string[] = [];
+    for (const file of files) {
+      // Same bucket and path convention the poster upload uses — no new
+      // bucket, no new storage policy needed.
+      const uploadFile = await compressImageFile(file);
+      const path = `posters/${Date.now()}_${uploadFile.name}`;
+      const { error: uploadError } = await supabase.storage.from('program-posters').upload(path, uploadFile, { cacheControl: '31536000' });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from('program-posters').getPublicUrl(path);
+      urls.push(data.publicUrl);
+    }
+    return urls;
+  };
+
+  const revokeDraftPreviews = (list: any[]) => {
+    list
+      .filter(isDraftEntry)
+      .forEach((entry) => (entry.image_urls || []).forEach((url: string) => URL.revokeObjectURL(url)));
+  };
+
+  // Saves every draft entry, in list order, under programId. Each one is
+  // swapped for its saved row as soon as it's written, so a failure part
+  // way through leaves only the unsaved ones as drafts for a retry.
+  const saveDraftEntries = async (programId: number) => {
+    let current = entries;
+    for (let index = 0; index < current.length; index++) {
+      const draft = current[index];
+      if (!isDraftEntry(draft)) continue;
+
+      const imageUrls = await uploadEntryPhotos(draft.pending_files || []);
+      const { data, error } = await supabase
+        .from('program_entries')
+        .insert([{
+          program_id: programId,
+          label: draft.label,
+          description: draft.description,
+          caption: draft.caption,
+          image_urls: imageUrls.length > 0 ? imageUrls : null,
+          sort_order: index,
+        }])
+        .select();
+
+      if (error) throw new Error(`Program saved, but entry "${draft.label}" failed: ${error.message}`);
+
+      revokeDraftPreviews([draft]);
+      current = current.map((entry, i) => (i === index ? data[0] : entry));
+      setEntries(current);
+    }
+  };
+
   const resetEntryForm = () => {
     setEditingEntryId(null);
     setEntryLabel('');
@@ -332,27 +403,61 @@ export default function ProgramManagement() {
     if (entryFileInputRef.current) entryFileInputRef.current.value = '';
   };
 
+  // Draft (new program, or an entry still waiting to be saved): kept
+  // locally — nothing is uploaded until the program is saved.
+  const saveDraftEntryLocally = () => {
+    const previews = entryFiles.map((file) => URL.createObjectURL(file));
+    const fields = {
+      label: entryLabel.trim(),
+      description: entryDescription.trim() || null,
+      caption: entryCaption.trim() || null,
+    };
+
+    if (editingEntryId) {
+      setEntries(entries.map((entry) =>
+        entry.id === editingEntryId
+          ? {
+              ...entry,
+              ...fields,
+              image_urls: [...(entry.image_urls || []), ...previews],
+              pending_files: [...(entry.pending_files || []), ...entryFiles],
+            }
+          : entry
+      ));
+      toast({ title: "Entry updated", description: "It will be saved with the program." });
+    } else {
+      setEntries([
+        ...entries,
+        {
+          id: -Date.now(),
+          ...fields,
+          image_urls: previews,
+          pending_files: entryFiles,
+          sort_order: entries.length,
+        },
+      ]);
+      toast({ title: "Entry added", description: "It will be saved with the program." });
+    }
+
+    resetEntryForm();
+  };
+
   const handleSaveEntry = async () => {
-    if (!editingId) return;
     if (!entryLabel.trim()) {
       toast({ variant: "destructive", title: "Label required", description: "Give this entry a label, e.g. \"Week 1\"." });
+      return;
+    }
+
+    const editingEntry = entries.find((e) => e.id === editingEntryId);
+    if (!editingId || (editingEntry && isDraftEntry(editingEntry))) {
+      saveDraftEntryLocally();
       return;
     }
 
     try {
       setIsSavingEntry(true);
 
-      const newImageUrls: string[] = [];
-      for (const file of entryFiles) {
-        // Same bucket and path convention the poster upload above already
-        // uses — no new bucket, no new storage policy needed.
-        const uploadFile = await compressImageFile(file);
-        const path = `posters/${Date.now()}_${uploadFile.name}`;
-        const { error: uploadError } = await supabase.storage.from('program-posters').upload(path, uploadFile, { cacheControl: '31536000' });
-        if (uploadError) throw uploadError;
-        const { data } = supabase.storage.from('program-posters').getPublicUrl(path);
-        newImageUrls.push(data.publicUrl);
-      }
+      const newImageUrls = await uploadEntryPhotos(entryFiles);
 
       if (editingEntryId) {
         const existing = entries.find((e) => e.id === editingEntryId);
@@ -401,6 +506,14 @@ export default function ProgramManagement() {
   };
 
   const handleDeleteEntry = async (entryId: number) => {
+    const target = entries.find((e) => e.id === entryId);
+    if (target && isDraftEntry(target)) {
+      revokeDraftPreviews([target]);
+      setEntries(entries.filter((e) => e.id !== entryId));
+      if (editingEntryId === entryId) resetEntryForm();
+      return;
+    }
+
     try {
       const { error } = await supabase.from('program_entries').delete().eq('id', entryId);
       if (error) throw error;
@@ -418,12 +531,14 @@ export default function ProgramManagement() {
     const reordered = entries.slice();
     [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
 
-    // Persist new sort_order values for just the two swapped rows.
+    // Persist new sort_order values for just the two swapped rows (drafts
+    // get theirs when they're saved).
     try {
-      await Promise.all([
-        supabase.from('program_entries').update({ sort_order: index }).eq('id', reordered[index].id),
-        supabase.from('program_entries').update({ sort_order: targetIndex }).eq('id', reordered[targetIndex].id),
-      ]);
+      await Promise.all(
+        [index, targetIndex]
+          .filter((i) => !isDraftEntry(reordered[i]))
+          .map((i) => supabase.from('program_entries').update({ sort_order: i }).eq('id', reordered[i].id))
+      );
       setEntries(reordered);
     } catch (err: any) {
       toast({ variant: "destructive", title: "Reorder Error", description: err.message });
@@ -774,120 +889,125 @@ export default function ProgramManagement() {
               </select>
             </div>
 
-            {/* ENTRIES (TIMELINE) — only once the program itself has an id.
-                A brand-new, unsaved program has nothing for an entry to
-                attach to yet; save it first, then reopen it to add entries. */}
-            {editingId && (
-              <div className="space-y-3 border-t border-slate-100 pt-5">
-                <div>
-                  <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Entries (Timeline)</Label>
-                  <p className="text-[9px] text-slate-400 ml-1 mt-0.5">
-                    For a multi-part program (e.g. a month-long campaign) — one entry per week, day, or milestone.
-                  </p>
-                </div>
+            {/* ENTRIES (TIMELINE) — available while creating too: a new
+                program's entries are drafts, saved together with it. */}
+            <div className="space-y-3 border-t border-slate-100 pt-5">
+              <div>
+                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Entries (Timeline)</Label>
+                <p className="text-[9px] text-slate-400 ml-1 mt-0.5">
+                  For a multi-part program (e.g. a month-long campaign) — one entry per week, day, or milestone.
+                  {!editingId && ' Entries you add here are saved when you publish the program.'}
+                </p>
+              </div>
 
-                {entries.length > 0 && (
-                  <div className="space-y-2">
-                    {entries.map((entry, index) => (
-                      <div
-                        key={entry.id}
-                        className={`flex items-start gap-3 p-3 rounded-xl ${editingEntryId === entry.id ? 'bg-indigo-50 ring-2 ring-indigo-200' : 'bg-slate-50'}`}
-                      >
-                        {entry.image_urls?.[0] && (
-                          <img src={entry.image_urls[0]} className="w-14 h-14 rounded-lg object-cover shrink-0" alt="" />
+              {entries.length > 0 && (
+                <div className="space-y-2">
+                  {entries.map((entry, index) => (
+                    <div
+                      key={entry.id}
+                      className={`flex items-start gap-3 p-3 rounded-xl ${editingEntryId === entry.id ? 'bg-indigo-50 ring-2 ring-indigo-200' : 'bg-slate-50'}`}
+                    >
+                      {entry.image_urls?.[0] && (
+                        <img src={entry.image_urls[0]} className="w-14 h-14 rounded-lg object-cover shrink-0" alt="" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-black text-slate-800 truncate">
+                          {entry.label}
+                          {isDraftEntry(entry) && (
+                            <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[8px] font-black uppercase tracking-wider align-middle">
+                              Not saved yet
+                            </span>
+                          )}
+                        </p>
+                        {entry.description && (
+                          <p className="text-[10px] text-slate-500 line-clamp-2 mt-0.5">{entry.description}</p>
                         )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-black text-slate-800 truncate">{entry.label}</p>
-                          {entry.description && (
-                            <p className="text-[10px] text-slate-500 line-clamp-2 mt-0.5">{entry.description}</p>
-                          )}
-                          {entry.image_urls?.length > 0 ? (
-                            <p className="text-[9px] font-bold text-indigo-500 mt-0.5">{entry.image_urls.length} photo{entry.image_urls.length > 1 ? 's' : ''}</p>
-                          ) : (
-                            <p className="text-[9px] font-bold text-amber-500 mt-0.5">No photos yet</p>
-                          )}
-                        </div>
-                        <div className="flex flex-col gap-1 shrink-0">
-                          <button type="button" onClick={() => handleMoveEntry(index, -1)} disabled={index === 0} className="text-slate-400 hover:text-indigo-600 disabled:opacity-20">
-                            <ChevronUp className="w-4 h-4" />
-                          </button>
-                          <button type="button" onClick={() => handleMoveEntry(index, 1)} disabled={index === entries.length - 1} className="text-slate-400 hover:text-indigo-600 disabled:opacity-20">
-                            <ChevronDown className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <button type="button" onClick={() => handleEditEntryClick(entry)} className="text-slate-400 hover:text-indigo-600 shrink-0" aria-label={`Edit ${entry.label}`}>
-                          <Edit className="w-4 h-4" />
+                        {entry.image_urls?.length > 0 ? (
+                          <p className="text-[9px] font-bold text-indigo-500 mt-0.5">{entry.image_urls.length} photo{entry.image_urls.length > 1 ? 's' : ''}</p>
+                        ) : (
+                          <p className="text-[9px] font-bold text-amber-500 mt-0.5">No photos yet</p>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-1 shrink-0">
+                        <button type="button" onClick={() => handleMoveEntry(index, -1)} disabled={index === 0} className="text-slate-400 hover:text-indigo-600 disabled:opacity-20">
+                          <ChevronUp className="w-4 h-4" />
                         </button>
-                        <button type="button" onClick={() => handleDeleteEntry(entry.id)} className="text-slate-300 hover:text-rose-500 shrink-0" aria-label={`Delete ${entry.label}`}>
-                          <Trash2 className="w-4 h-4" />
+                        <button type="button" onClick={() => handleMoveEntry(index, 1)} disabled={index === entries.length - 1} className="text-slate-400 hover:text-indigo-600 disabled:opacity-20">
+                          <ChevronDown className="w-4 h-4" />
                         </button>
                       </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className={`p-4 bg-white border-2 border-dashed rounded-xl space-y-2 ${editingEntryId ? 'border-indigo-300' : 'border-slate-200'}`}>
-                  {editingEntryId && (
-                    <div className="flex items-center justify-between">
-                      <p className="text-[9px] font-black uppercase text-indigo-500 tracking-widest">Editing entry</p>
-                      <button type="button" onClick={resetEntryForm} className="text-[9px] font-black uppercase text-slate-400 hover:text-slate-600 tracking-widest">
-                        Cancel
+                      <button type="button" onClick={() => handleEditEntryClick(entry)} className="text-slate-400 hover:text-indigo-600 shrink-0" aria-label={`Edit ${entry.label}`}>
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => handleDeleteEntry(entry.id)} className="text-slate-300 hover:text-rose-500 shrink-0" aria-label={`Delete ${entry.label}`}>
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                  )}
-                  <Input value={entryLabel} onChange={(e) => setEntryLabel(e.target.value)} placeholder='Label, e.g. "Week 1"' className="rounded-lg bg-slate-50 border-none h-10 font-bold px-3 text-xs" />
-                  <Textarea value={entryDescription} onChange={(e) => setEntryDescription(e.target.value)} placeholder="Description (optional)" className="h-16 rounded-lg bg-slate-50 border-none p-3 text-xs resize-none" />
-                  <Input value={entryCaption} onChange={(e) => setEntryCaption(e.target.value)} placeholder="Caption (optional)" className="rounded-lg bg-slate-50 border-none h-10 font-bold px-3 text-xs" />
-                  <div onClick={() => entryFileInputRef.current?.click()} className="h-10 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center px-3 cursor-pointer text-slate-600 text-xs">
-                    <Camera className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
-                    <span className="truncate flex-1 font-bold">
-                      {entryFiles.length > 0
-                        ? `${entryFiles.length} photo(s) selected`
-                        : editingEntryId
-                          ? 'Add more photos...'
-                          : 'Choose photos...'}
-                    </span>
-                    <input type="file" ref={entryFileInputRef} className="hidden" accept="image/*" multiple onChange={(e) => setEntryFiles(Array.from(e.target.files || []))} />
-                  </div>
-                  <Button type="button" onClick={handleSaveEntry} disabled={isSavingEntry} variant="outline" className="w-full h-10 rounded-lg font-black uppercase text-[10px]">
-                    {isSavingEntry ? (
-                      <Loader2 className="animate-spin h-4 w-4 mx-auto" />
-                    ) : editingEntryId ? (
-                      <><Edit className="w-3.5 h-3.5 mr-2" /> Update Entry</>
-                    ) : (
-                      <><Plus className="w-3.5 h-3.5 mr-2" /> Add Entry</>
-                    )}
-                  </Button>
+                  ))}
                 </div>
+              )}
 
-                {/* Same rendering component the student's Programs page
-                    uses — not a lookalike, the literal same one, so this
-                    can never drift from what students actually see. */}
-                {entries.length > 0 && (
-                  <div className="pt-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => setShowStudentPreview(!showStudentPreview)}
-                      className="w-full h-10 rounded-lg font-black uppercase text-[10px] text-indigo-600 hover:bg-indigo-50"
-                    >
-                      <Eye className="w-3.5 h-3.5 mr-2" />
-                      {showStudentPreview ? 'Hide' : 'Preview as Student Sees It'}
-                    </Button>
-                    {showStudentPreview && (
-                      <div className="mt-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
-                        <ProgramEntryTimeline
-                          entries={entries}
-                          onImageClick={(url, title) =>
-                            setPhotoViewer(viewerAt(collectProgramPhotos({ title: formData.title, program_entries: entries }), url, title))
-                          }
-                        />
-                      </div>
-                    )}
+              <div className={`p-4 bg-white border-2 border-dashed rounded-xl space-y-2 ${editingEntryId ? 'border-indigo-300' : 'border-slate-200'}`}>
+                {editingEntryId && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-[9px] font-black uppercase text-indigo-500 tracking-widest">Editing entry</p>
+                    <button type="button" onClick={resetEntryForm} className="text-[9px] font-black uppercase text-slate-400 hover:text-slate-600 tracking-widest">
+                      Cancel
+                    </button>
                   </div>
                 )}
+                <Input value={entryLabel} onChange={(e) => setEntryLabel(e.target.value)} placeholder='Label, e.g. "Week 1"' className="rounded-lg bg-slate-50 border-none h-10 font-bold px-3 text-xs" />
+                <Textarea value={entryDescription} onChange={(e) => setEntryDescription(e.target.value)} placeholder="Description (optional)" className="h-16 rounded-lg bg-slate-50 border-none p-3 text-xs resize-none" />
+                <Input value={entryCaption} onChange={(e) => setEntryCaption(e.target.value)} placeholder="Caption (optional)" className="rounded-lg bg-slate-50 border-none h-10 font-bold px-3 text-xs" />
+                <div onClick={() => entryFileInputRef.current?.click()} className="h-10 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center px-3 cursor-pointer text-slate-600 text-xs">
+                  <Camera className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
+                  <span className="truncate flex-1 font-bold">
+                    {entryFiles.length > 0
+                      ? `${entryFiles.length} photo(s) selected`
+                      : editingEntryId
+                        ? 'Add more photos...'
+                        : 'Choose photos...'}
+                  </span>
+                  <input type="file" ref={entryFileInputRef} className="hidden" accept="image/*" multiple onChange={(e) => setEntryFiles(Array.from(e.target.files || []))} />
+                </div>
+                <Button type="button" onClick={handleSaveEntry} disabled={isSavingEntry} variant="outline" className="w-full h-10 rounded-lg font-black uppercase text-[10px]">
+                  {isSavingEntry ? (
+                    <Loader2 className="animate-spin h-4 w-4 mx-auto" />
+                  ) : editingEntryId ? (
+                    <><Edit className="w-3.5 h-3.5 mr-2" /> Update Entry</>
+                  ) : (
+                    <><Plus className="w-3.5 h-3.5 mr-2" /> Add Entry</>
+                  )}
+                </Button>
               </div>
-            )}
+
+              {/* Same rendering component the student's Programs page
+                  uses — not a lookalike, the literal same one, so this
+                  can never drift from what students actually see. */}
+              {entries.length > 0 && (
+                <div className="pt-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setShowStudentPreview(!showStudentPreview)}
+                    className="w-full h-10 rounded-lg font-black uppercase text-[10px] text-indigo-600 hover:bg-indigo-50"
+                  >
+                    <Eye className="w-3.5 h-3.5 mr-2" />
+                    {showStudentPreview ? 'Hide' : 'Preview as Student Sees It'}
+                  </Button>
+                  {showStudentPreview && (
+                    <div className="mt-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                      <ProgramEntryTimeline
+                        entries={entries}
+                        onImageClick={(url, title) =>
+                          setPhotoViewer(viewerAt(collectProgramPhotos({ title: formData.title, program_entries: entries }), url, title))
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             <div className="pt-2">
               <Button onClick={handleSave} disabled={loading || isDateOccupied} className="w-full h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-xs shadow-md">
