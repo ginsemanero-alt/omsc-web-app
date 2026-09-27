@@ -119,6 +119,44 @@ export default function ArchiveScreen() {
     return { bucket: match[1], path: decodeURIComponent(match[2]) };
   };
 
+  // Best-effort: by the time this runs the rows are already gone, so a
+  // storage hiccup just leaves an orphaned file, not a broken item shown
+  // to anyone. One remove() call per bucket.
+  const removeStorageFiles = async (urls: (string | null | undefined)[]) => {
+    const byBucket = new Map<string, string[]>();
+    for (const url of new Set(urls.filter(Boolean) as string[])) {
+      const parsed = parseStorageUrl(url);
+      if (!parsed) continue;
+      byBucket.set(parsed.bucket, [...(byBucket.get(parsed.bucket) || []), parsed.path]);
+    }
+    for (const [bucket, paths] of byBucket) {
+      const { error } = await supabase.storage.from(bucket).remove(paths);
+      if (error) console.warn(`Storage cleanup failed in ${bucket}:`, error.message);
+    }
+  };
+
+  // Everything a program owns in storage — cover, gallery, every timeline
+  // entry's photos, and its handouts — plus its handout rows, which live
+  // in `materials` (program_id) and are deleted here before the program.
+  // Timeline entry rows go with the program (ON DELETE CASCADE).
+  const collectProgramFiles = async (programId: number): Promise<string[]> => {
+    const [programRes, entriesRes, handoutsRes] = await Promise.all([
+      supabase.from('programs').select('image_url, gallery_urls').eq('id', programId).maybeSingle(),
+      supabase.from('program_entries').select('image_urls').eq('program_id', programId),
+      supabase.from('materials').select('file_url, image_url').eq('program_id', programId),
+    ]);
+    if (programRes.error) throw programRes.error;
+    if (entriesRes.error) throw entriesRes.error;
+    if (handoutsRes.error) throw handoutsRes.error;
+
+    return [
+      programRes.data?.image_url,
+      ...(programRes.data?.gallery_urls || []),
+      ...(entriesRes.data || []).flatMap((entry: any) => entry.image_urls || []),
+      ...(handoutsRes.data || []).flatMap((handout: any) => [handout.file_url, handout.image_url]),
+    ].filter(Boolean);
+  };
+
   const handlePermanentDelete = async () => {
     if (!confirmTarget) return;
     const { type, row } = confirmTarget;
@@ -142,21 +180,19 @@ export default function ArchiveScreen() {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data?.message || 'Failed to delete user.');
       } else {
+        // Gather a program's files before its rows disappear.
+        const programFiles = type === 'program' ? await collectProgramFiles(row.id) : [];
+
+        if (type === 'program') {
+          const { error: handoutError } = await supabase.from('materials').delete().eq('program_id', row.id);
+          if (handoutError) throw handoutError;
+        }
+
         const { error } = await supabase.from(tableName(type)).delete().eq('id', row.id);
         if (error) throw error;
 
-        if (type === 'material') {
-          // Best-effort — the row is already gone either way, so a
-          // storage hiccup here just leaves an orphaned file, not a
-          // broken material shown to anyone.
-          const storageUrls = [...new Set([row.file_url, row.image_url].filter(Boolean))] as string[];
-          for (const url of storageUrls) {
-            const parsed = parseStorageUrl(url);
-            if (!parsed) continue;
-            const { error: storageError } = await supabase.storage.from(parsed.bucket).remove([parsed.path]);
-            if (storageError) console.warn('Storage cleanup failed for', url, storageError.message);
-          }
-        }
+        if (type === 'program') await removeStorageFiles(programFiles);
+        if (type === 'material') await removeStorageFiles([row.file_url, row.image_url]);
 
         logActivity({ actorEmail: authUser?.email, actorName: userName, action: 'delete', entityType: type, entityId: row.id, entityLabel: row.label, details: 'Permanently deleted from Archive' });
       }
@@ -255,7 +291,10 @@ export default function ArchiveScreen() {
           </DialogHeader>
           <div className="mt-3 text-slate-500 text-xs font-medium leading-relaxed px-2">
             You are about to permanently delete{' '}
-            <span className="font-bold text-slate-800">"{confirmTarget?.row.label}"</span>. This cannot be undone.
+            <span className="font-bold text-slate-800">"{confirmTarget?.row.label}"</span>.
+            {confirmTarget?.type === 'program' && ' Its photos, timeline entries, and handouts will be deleted too.'}
+            {confirmTarget?.type === 'material' && ' Its files will be deleted too.'}
+            {' '}This cannot be undone.
           </div>
           <div className="grid grid-cols-2 gap-3 mt-6">
             <Button variant="ghost" onClick={() => setConfirmTarget(null)} className="h-12 rounded-xl font-black uppercase text-[10px] tracking-wider text-slate-500 bg-slate-50 hover:bg-slate-100">
