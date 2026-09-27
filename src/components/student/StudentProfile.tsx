@@ -9,6 +9,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from '../../components/ui/select';
 import { useToast } from '../../hooks/use-toast';
+import { ALL_PROGRAMS, PROGRAMS_BY_CAMPUS, YEAR_LEVELS, normalizeYearLevel } from '../../lib/programs';
 import { 
   User, ShieldCheck, Loader2, Save, GraduationCap 
 } from 'lucide-react';
@@ -23,6 +24,7 @@ export default function StudentProfile() {
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [program, setProgram] = useState('');
+  const [campus, setCampus] = useState('');
   const [yearLevel, setYearLevel] = useState('');
   const [gender, setGender] = useState('');
   const [age, setAge] = useState<number | string>('');
@@ -52,7 +54,8 @@ export default function StudentProfile() {
       if (data) {
         setFullName(data.full_name || '');
         setProgram(data.program || '');
-        setYearLevel(data.year_level || '');
+        setCampus(data.campus || '');
+        setYearLevel(normalizeYearLevel(data.year_level));
         setGender(data.gender || '');
         setAge(data.age || '');
         setIsPwd(!!data.is_pwd);
@@ -210,13 +213,17 @@ export default function StudentProfile() {
                     <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold px-4 text-xs">
                       <SelectValue placeholder="Select Course" />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl border-none shadow-2xl bg-white dark:bg-slate-900">
-                      <SelectItem value="BSIT">BSIT - Bachelor of Science in Information Technology</SelectItem>
-                      <SelectItem value="BSBA">BSBA - Bachelor of Science in Business Administration</SelectItem>
-                      <SelectItem value="BSED">BSED - Bachelor of Secondary Education</SelectItem>
-                      <SelectItem value="BEED">BEED - Bachelor of Elementary Education</SelectItem>
-                      <SelectItem value="BSHM">BSHM - Bachelor of Science in Hospitality Management</SelectItem>
-                      <SelectItem value="BSAgri">BSAgri - Bachelor of Science in Agriculture</SelectItem>
+                    {/* Same list and spellings as registration (lib/programs.ts),
+                        for the student's own campus. A saved value that isn't
+                        in the list (older data) stays selectable so it isn't
+                        silently blanked. */}
+                    <SelectContent className="rounded-xl border-none shadow-2xl bg-white dark:bg-slate-900 max-h-72">
+                      {[...new Set([
+                        ...(program ? [program] : []),
+                        ...(PROGRAMS_BY_CAMPUS[campus] || ALL_PROGRAMS),
+                      ])].map((item) => (
+                        <SelectItem key={item} value={item}>{item}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -230,10 +237,9 @@ export default function StudentProfile() {
                       <SelectValue placeholder="Select Year Level" />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl border-none shadow-2xl bg-white dark:bg-slate-900">
-                      <SelectItem value="1st Year">1st Year</SelectItem>
-                      <SelectItem value="2nd Year">2nd Year</SelectItem>
-                      <SelectItem value="3rd Year">3rd Year</SelectItem>
-                      <SelectItem value="4th Year">4th Year</SelectItem>
+                      {YEAR_LEVELS.map((level) => (
+                        <SelectItem key={level.value} value={level.value}>{level.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

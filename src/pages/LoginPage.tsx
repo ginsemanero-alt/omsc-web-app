@@ -42,6 +42,7 @@ import {
 import { useToast } from '../hooks/use-toast';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/activityLog';
+import { PROGRAMS_BY_CAMPUS } from '../lib/programs';
 
 type UserRole = 'student' | 'admin';
 
@@ -59,64 +60,6 @@ const CAMPUSES = [
   'Murtha Campus',
 ];
 
-// Official program offerings per campus. Majors are flattened into their
-// own entry (e.g. "... — Major in X") since `profiles.program` is a single
-// text field, not a separate program+major pair. Undergraduate only —
-// this guidance system's services (career orientation, testing, PWD/IP
-// tracking, mental health support) are built around the undergrad
-// population, so graduate programs (Master's/Doctorate) were removed
-// from registration entirely rather than left as a selectable option.
-const PROGRAMS_BY_CAMPUS: Record<string, string[]> = {
-  'Labangan Campus': [
-    'Bachelor of Science in Social Work (BSSW)',
-    'Bachelor of Science in Development Communication (BSDevCom)',
-    'Bachelor of Arts in History (BAHist)',
-    'Bachelor of Arts in Communication (BACom)',
-    'Bachelor in Human Services (BSM)',
-    'Bachelor of Science in Business Administration (BSBA) — Major in Financial Management',
-    'Bachelor of Science in Business Administration (BSBA) — Major in Operations Management',
-    'Bachelor of Science in Accounting Information System (BSAIS)',
-    'Bachelor of Science in Office Administration (BSOA)',
-    'Bachelor of Public Administration (BPA)',
-    'Bachelor of Science in Hospitality Management (BSHM)',
-    'Bachelor of Science in Management Accounting (BSMA)',
-    'Bachelor of Science in Accountancy (BSA)',
-    'Bachelor of Science in Architecture (BSArchi)',
-    'Bachelor of Science in Civil Engineering (BSCE)',
-    'Bachelor of Science in Electrical Engineering (BSEE)',
-    'Bachelor of Science in Industrial Engineering (BSIE)',
-    'Bachelor of Science in Criminology (BSCrim)',
-    'Bachelor of Science in Industrial Security Management (BSISM)',
-    'Other',
-  ],
-  'San Jose Campus': [
-    'Bachelor of Elementary Education (BEEd)',
-    'Bachelor of Secondary Education (BSEd) — Major in English',
-    'Bachelor of Secondary Education (BSEd) — Major in Filipino',
-    'Bachelor of Secondary Education (BSEd) — Major in Mathematics',
-    'Bachelor of Secondary Education (BSEd) — Major in Science',
-    'Teacher Certificate Program',
-    'Bachelor of Technology and Livelihood Education (BTLEd) — Major in Home Economics',
-    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Automotive Technology',
-    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Electrical Technology',
-    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Electronics Technology',
-    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Food Technology and Service Management',
-    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Welding and Fabrication Technology',
-    'Bachelor of Physical Education (BPEd)',
-    'Bachelor of Science in Information Technology (BSIT)',
-    'Bachelor of Science in Midwifery (BSM)',
-    'Diploma in Midwifery',
-    'Other',
-  ],
-  'Murtha Campus': [
-    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Animal Production',
-    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Horticulture',
-    'Bachelor of Technical-Vocational Teacher Education (BTVTEd) — Major in Agricultural Crops Production',
-    'Bachelor of Science in Agriculture (BSAgri)',
-    'Bachelor of Science in Agroforestry (BSAgro)',
-    'Other',
-  ],
-};
 
 
 export default function LoginPage({
