@@ -121,7 +121,7 @@ export default function ProgramManagement() {
         .from('programs')
         .select(`
           *,
-          materials (
+          materials!materials_program_id_fkey (
             id,
             title,
             file_url

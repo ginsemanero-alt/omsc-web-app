@@ -122,7 +122,7 @@ export default function ProgramsActivities() {
     try {
       let query = supabase
         .from('programs')
-        .select('*, materials(id, title, file_url), program_entries(id, label, description, caption, image_urls, sort_order)')
+        .select('*, materials!materials_program_id_fkey(id, title, file_url), program_entries(id, label, description, caption, image_urls, sort_order)')
         .is('archived_at', null);
 
       const campus = await fetchViewerCampus();
