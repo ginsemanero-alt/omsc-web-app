@@ -103,7 +103,35 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
     fetchPrograms();
   }, []);
 
-  const latest = programs[0];
+  // Hero collage: the 3 most recent programs (newest first, from the
+  // same fetch as Recent programs).
+  const heroPrograms = programs.slice(0, 3);
+
+  // One poster in the hero, linking to the Programs page (there is no
+  // per-program page). No image: a #2B2F55 block with the title.
+  const heroPoster = (program: Program, className: string) => (
+    <a
+      key={program.id}
+      href="/programs"
+      onClick={(event) => {
+        event.preventDefault();
+        handleNavigation("Programs");
+      }}
+      className={`block overflow-hidden bg-[#2B2F55] ${focusRing} ${className}`}
+    >
+      {program.image_url ? (
+        <img
+          src={program.image_url}
+          alt={`Poster of ${program.title.trim()}`}
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <span className="w-full h-full flex items-end p-5 font-bold text-base leading-[1.3] text-white">
+          {program.title.trim()}
+        </span>
+      )}
+    </a>
+  );
 
   const logo = (size: string) => (
     <img
@@ -231,77 +259,69 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
         {/* ================= HERO ================= */}
         <section className="px-3 pt-1 lg:px-6 lg:pt-2">
           <div className="relative overflow-hidden rounded-[40px] lg:rounded-[3.5rem] bg-[#1E1B4B] text-white">
-            {/* Phones: the latest program's poster behind the top of the
-                hero, fading into ink (plain ink if it has no image). */}
-            {latest?.image_url && (
-              <div aria-hidden="true" className="lg:hidden absolute inset-0">
-                <img src={latest.image_url} alt="" className="w-full h-[260px] object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-b from-[#1E1B4B]/55 via-[#1E1B4B]/[0.92] via-40% to-[#1E1B4B]/[0.98]" />
-              </div>
-            )}
-
-            <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-12 px-[22px] pt-24 pb-7 sm:px-10 lg:px-[72px] lg:py-[72px] lg:min-h-[660px]">
-              <div className="flex flex-col gap-[18px] lg:gap-[26px] max-w-[660px]">
+            <div className="relative flex flex-col lg:flex-row lg:items-center gap-12 px-[22px] pt-9 pb-7 sm:px-10 lg:pl-[72px] lg:pr-16 lg:py-[60px] lg:min-h-[700px]">
+              <div className="flex flex-col gap-[18px] lg:gap-[26px] lg:w-[48%] xl:w-[660px] lg:shrink-0">
                 <span className="self-start px-3 py-1.5 lg:px-[15px] lg:py-2 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-xs lg:text-sm">
                   For OMSU higher education students
                 </span>
-                <h1 className="m-0 font-bricolage font-extrabold text-[40px] leading-none tracking-[-1.2px] sm:text-[56px] lg:text-[76px] lg:leading-[0.98] lg:tracking-[-2.4px]">
+                <h1 className="m-0 font-bricolage font-extrabold text-[40px] sm:text-[56px] lg:text-[60px] xl:text-[72px] leading-[1.02] tracking-[-0.02em]">
                   Every guidance program, open to every student.
                 </h1>
                 <p className="m-0 text-base lg:text-[19px] leading-[1.55] text-[#D4D6F5] max-w-[560px]">
                   See what the Guidance and Testing Center's programs covered, read their materials, and check how
                   much you have learned with a short pre- and post-test.
                 </p>
-                <div className="flex flex-col sm:flex-row gap-2.5 lg:gap-3 mt-1 lg:mt-1.5">
+                <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2.5 lg:gap-3 mt-1 lg:mt-1.5">
                   <button
                     type="button"
                     onClick={() => handleNavigation("Programs")}
-                    className={`h-[54px] lg:h-[58px] px-7 rounded-[18px] bg-[#FBBF24] hover:bg-[#F59E0B] text-[#1E1B4B] font-extrabold text-base transition-colors ${focusRing}`}
+                    className={`h-[54px] lg:h-[58px] px-7 rounded-[18px] whitespace-nowrap bg-[#FBBF24] hover:bg-[#F59E0B] text-[#1E1B4B] font-extrabold text-base transition-colors ${focusRing}`}
                   >
                     Browse programs
                   </button>
                   <button
                     type="button"
                     onClick={goToRegister}
-                    className={`h-[54px] lg:h-[58px] px-[26px] rounded-[18px] border-2 border-white/60 hover:bg-white/10 text-white font-bold text-base transition-colors ${focusRing}`}
+                    className={`h-[54px] lg:h-[58px] px-[26px] rounded-[18px] whitespace-nowrap border-2 border-white/60 hover:bg-white/10 text-white font-bold text-base transition-colors ${focusRing}`}
                   >
                     Create student account
                   </button>
                 </div>
+
+                {/* Below lg: only the newest poster, under the buttons. */}
+                {isLoading ? (
+                  <div className="lg:hidden h-[220px] rounded-[1.75rem] bg-[#2B2F55] animate-pulse" />
+                ) : (
+                  heroPrograms[0] && heroPoster(heroPrograms[0], "lg:hidden h-[220px] rounded-[1.75rem]")
+                )}
+
                 <p className="m-0 mt-1 lg:mt-2 text-xs lg:text-[13px] leading-[1.5] text-[#B9BCEB] max-w-[560px]">
                   {SYSTEM_TITLE}
                 </p>
               </div>
 
-              {/* Desktop: the latest program as the "what's next" card. */}
-              <button
-                type="button"
-                onClick={() => handleNavigation("Programs")}
-                className={`hidden lg:flex self-end mb-10 w-[300px] shrink-0 flex-col gap-3 p-[20px_22px] rounded-[28px] bg-white text-left text-[#1E293B] shadow-[0_20px_40px_-16px_rgba(0,0,0,0.5)] hover:-translate-y-1 transition-transform ${focusRing}`}
-                aria-label={latest ? `${latest.title}: next, take the pre-test` : "Browse programs"}
-              >
-                {isLoading ? (
-                  <span className="w-full h-[150px] rounded-[18px] bg-slate-200 animate-pulse" />
-                ) : latest?.image_url ? (
-                  <img
-                    src={latest.image_url}
-                    alt={`Poster of the ${latest.title} program`}
-                    className="w-full h-[150px] rounded-[18px] object-cover"
-                  />
-                ) : (
-                  <span className="w-full h-[150px] rounded-[18px] bg-[#1E1B4B]" />
-                )}
-                <span className="text-[13px] font-semibold text-[#5B6477] line-clamp-2">
-                  {isLoading ? "Loading the latest program..." : latest?.title ?? "Guidance programs"}
-                </span>
-                <span className="font-extrabold text-lg text-[#1E1B4B]">Next: take the pre-test</span>
-                <span className="grid grid-cols-4 gap-[5px]" aria-hidden="true">
-                  <span className="h-1.5 rounded-full bg-[#34D399]" />
-                  <span className="h-1.5 rounded-full bg-[#FBBF24]" />
-                  <span className="h-1.5 rounded-full bg-[#DDE1EE]" />
-                  <span className="h-1.5 rounded-full bg-[#DDE1EE]" />
-                </span>
-              </button>
+              {/* Desktop: poster collage of the 3 newest programs — the
+                  newest across the top, the next two side by side. */}
+              {isLoading ? (
+                <div className="hidden lg:grid flex-grow min-w-0 grid-cols-2 grid-rows-[300px_262px] gap-4" aria-hidden="true">
+                  <div className="col-span-2 rounded-[2.25rem] bg-[#2B2F55] animate-pulse" />
+                  <div className="rounded-[1.75rem] bg-[#2B2F55] animate-pulse" />
+                  <div className="rounded-[1.75rem] bg-[#2B2F55] animate-pulse" />
+                </div>
+              ) : heroPrograms.length > 0 && (
+                <div
+                  className={`hidden lg:grid flex-grow min-w-0 grid-cols-2 gap-4 ${
+                    heroPrograms.length === 1 ? "grid-rows-[300px]" : "grid-rows-[300px_262px]"
+                  }`}
+                >
+                  {heroPoster(heroPrograms[0], "col-span-2 rounded-[2.25rem]")}
+                  {heroPrograms
+                    .slice(1)
+                    .map((program) =>
+                      heroPoster(program, `rounded-[1.75rem] ${heroPrograms.length === 2 ? "col-span-2" : ""}`)
+                    )}
+                </div>
+              )}
             </div>
           </div>
         </section>
