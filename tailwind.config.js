@@ -90,6 +90,9 @@ module.exports = {
         sans: ['"Inter"', 'sans-serif'],
         heading: ['"DM Sans"', 'sans-serif'],
         mono: ['"IBM Plex Mono"', 'monospace'],
+        // Sign-in / registration screens (LoginPage.tsx).
+        figtree: ['"Figtree"', 'system-ui', 'sans-serif'],
+        bricolage: ['"Bricolage Grotesque"', '"Figtree"', 'sans-serif'],
       },
       fontSize: {
         'h1': ['36px', { lineHeight: '1.2', fontWeight: '500' }],

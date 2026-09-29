@@ -1,42 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Button } from '../components/ui/button';
-import { Card } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
 
 import {
-  GraduationCap,
-  Loader2,
-  UserPlus,
   ArrowLeft,
-  ShieldCheck,
-  X,
-  Check,
-  Mail,
-  Lock,
-  Fingerprint,
-  MapPin,
   BookOpen,
-  UserCircle,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Circle,
   Eye,
   EyeOff,
-  User,
-  CalendarDays,
-  Users,
-  Accessibility,
-  UsersRound,
-  CheckCircle2,
-  AlertCircle,
+  Fingerprint,
   KeyRound,
+  Loader2,
+  Lock,
+  Mail,
   Send,
+  ShieldCheck,
+  SquareCheckBig,
+  User,
+  X,
 } from 'lucide-react';
 
 import { useToast } from '../hooks/use-toast';
@@ -53,6 +37,7 @@ interface LoginPageProps {
 
 type Gender = 'Male' | 'Female' | 'Other';
 type YesNo = 'Yes' | 'No';
+type RegisterStep = 1 | 2 | 3;
 
 const CAMPUSES = [
   'San Jose Campus',
@@ -60,7 +45,41 @@ const CAMPUSES = [
   'Murtha Campus',
 ];
 
+const YEAR_LEVELS = [
+  { value: '1', label: '1st' },
+  { value: '2', label: '2nd' },
+  { value: '3', label: '3rd' },
+  { value: '4', label: '4th' },
+];
 
+const SYSTEM_TITLE =
+  'Web-Based Guidance Program Dissemination and Awareness Assessment System for the Higher Education Students of Occidental Mindoro State University';
+
+// The three registration steps: what the student fills in on each.
+const REGISTER_STEPS: Record<RegisterStep, { title: string; description: string }> = {
+  1: {
+    title: 'Account details',
+    description: 'Use the name, student ID, and institutional email on your school records.',
+  },
+  2: {
+    title: 'Academic and profile',
+    description: 'These help the Guidance Center see which students its programs are reaching.',
+  },
+  3: {
+    title: 'Password and consent',
+    description: 'Choose a password, then review how your information is used.',
+  },
+};
+
+// Shared input styling (mockup: 52px tall, 16px radius, 1.5px #DDE1EE
+// border on #F5F6FB, #A5B4FC focus ring). 16px text on phones so iOS
+// doesn't zoom into the field.
+const inputBase =
+  'w-full border-[1.5px] border-[#DDE1EE] bg-[#F5F6FB] font-figtree text-base lg:text-[15px] text-[#1E293B] placeholder:text-[#8A91A6] outline-none focus:outline-[3px] focus:outline-offset-2 focus:outline-[#A5B4FC] transition-colors';
+const inputClass = `${inputBase} h-[52px] rounded-2xl`;
+
+const focusRing =
+  'focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]';
 
 export default function LoginPage({
   onLogin,
@@ -72,6 +91,7 @@ export default function LoginPage({
   // themselves.
   const [searchParams] = useSearchParams();
   const [isRegister, setIsRegister] = useState(() => searchParams.get('mode') === 'register');
+  const [registerStep, setRegisterStep] = useState<RegisterStep>(1);
   const [showTerms, setShowTerms] = useState(false);
   const [agreed, setAgreed] = useState(false);
 
@@ -124,6 +144,11 @@ export default function LoginPage({
     }
   }, [toast]);
 
+  // Each registration step starts at the top of the page.
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [registerStep, isRegister]);
+
   const passwordChecks = {
     length: password.length >= 8,
     upper: /[A-Z]/.test(password),
@@ -153,132 +178,67 @@ export default function LoginPage({
     setAgreed(false);
     setShowPassword(false);
     setShowConfirmPassword(false);
+    setRegisterStep(1);
   };
 
-  const validateRegistration = () => {
-    const trimmedName = name.trim();
-    const trimmedStudentId = studentId.trim();
-    const trimmedEmail = email.trim();
-    const numericAge = Number(age);
+  const fail = (title: string, description: string) => {
+    toast({ variant: 'destructive', title, description });
+    return false;
+  };
 
-    if (trimmedName.length < 3) {
-      toast({
-        variant: 'destructive',
-        title: 'INVALID NAME',
-        description: 'Please enter your complete name.',
-      });
-      return false;
+  // Validation for one registration step — Continue only moves on when
+  // the current step is complete. Same rules and messages as before the
+  // form was split into steps.
+  const validateStep = (step: RegisterStep) => {
+    if (step === 1) {
+      if (name.trim().length < 3) return fail('INVALID NAME', 'Please enter your complete name.');
+      if (!studentId.trim()) return fail('STUDENT ID REQUIRED', 'Please enter your official Student ID number.');
+      if (!email.trim()) return fail('EMAIL REQUIRED', 'Please enter your institutional email.');
+      return true;
     }
 
-    if (!trimmedStudentId) {
-      toast({
-        variant: 'destructive',
-        title: 'STUDENT ID REQUIRED',
-        description: 'Please enter your official Student ID number.',
-      });
-      return false;
-    }
-
-    if (!trimmedEmail) {
-      toast({
-        variant: 'destructive',
-        title: 'EMAIL REQUIRED',
-        description: 'Please enter your institutional email.',
-      });
-      return false;
-    }
-
-    if (!program) {
-      toast({
-        variant: 'destructive',
-        title: 'PROGRAM REQUIRED',
-        description: 'Please select your academic program.',
-      });
-      return false;
-    }
-
-    if (!age || Number.isNaN(numericAge)) {
-      toast({
-        variant: 'destructive',
-        title: 'AGE REQUIRED',
-        description: 'Please enter your age.',
-      });
-      return false;
-    }
-
-    if (numericAge < 15 || numericAge > 100) {
-      toast({
-        variant: 'destructive',
-        title: 'INVALID AGE',
-        description: 'Please enter a valid age.',
-      });
-      return false;
-    }
-
-    // No default and no "Prefer not to say": these feed the gender, PWD,
-    // and IP analytics, and a preselected answer was being submitted
-    // untouched by most students.
-    if (!gender) {
-      toast({
-        variant: 'destructive',
-        title: 'GENDER REQUIRED',
-        description: 'Please select your gender.',
-      });
-      return false;
-    }
-
-    if (!isPwd) {
-      toast({
-        variant: 'destructive',
-        title: 'PWD STATUS REQUIRED',
-        description: 'Please indicate whether you are a person with disability (PWD).',
-      });
-      return false;
-    }
-
-    if (!isIp) {
-      toast({
-        variant: 'destructive',
-        title: 'IP STATUS REQUIRED',
-        description: 'Please indicate whether you belong to an Indigenous Peoples (IP) group.',
-      });
-      return false;
+    if (step === 2) {
+      const numericAge = Number(age);
+      if (!program) return fail('PROGRAM REQUIRED', 'Please select your academic program.');
+      if (!age || Number.isNaN(numericAge)) return fail('AGE REQUIRED', 'Please enter your age.');
+      if (numericAge < 15 || numericAge > 100) return fail('INVALID AGE', 'Please enter a valid age.');
+      // No default and no "Prefer not to say": these feed the gender, PWD,
+      // and IP analytics, and a preselected answer was being submitted
+      // untouched by most students.
+      if (!gender) return fail('GENDER REQUIRED', 'Please select your gender.');
+      if (!isPwd) return fail('PWD STATUS REQUIRED', 'Please indicate whether you are a person with disability (PWD).');
+      if (!isIp) return fail('IP STATUS REQUIRED', 'Please indicate whether you belong to an Indigenous Peoples (IP) group.');
+      return true;
     }
 
     if (!isPasswordStrong) {
-      toast({
-        variant: 'destructive',
-        title: 'WEAK PASSWORD',
-        description:
-          'Password must be at least 8 characters and contain uppercase, lowercase, and a number.',
-      });
-      return false;
+      return fail('WEAK PASSWORD', 'Password must be at least 8 characters and contain uppercase, lowercase, and a number.');
     }
-
-    if (password !== confirmPassword) {
-      toast({
-        variant: 'destructive',
-        title: 'PASSWORD MISMATCH',
-        description: 'Passwords do not match.',
-      });
-      return false;
-    }
-
-    if (!agreed) {
-      toast({
-        variant: 'destructive',
-        title: 'ACTION REQUIRED',
-        description:
-          'Please read and agree to the Guidance Terms & Privacy Policy.',
-      });
-      return false;
-    }
-
+    if (password !== confirmPassword) return fail('PASSWORD MISMATCH', 'Passwords do not match.');
+    if (!agreed) return fail('ACTION REQUIRED', 'Please read and agree to the Guidance Terms & Privacy Policy.');
     return true;
+  };
+
+  const validateRegistration = () => validateStep(1) && validateStep(2) && validateStep(3);
+
+  const goToNextStep = () => {
+    if (registerStep < 3 && validateStep(registerStep)) {
+      setRegisterStep((registerStep + 1) as RegisterStep);
+    }
+  };
+
+  const goToPreviousStep = () => {
+    if (registerStep > 1) setRegisterStep((registerStep - 1) as RegisterStep);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Enter on steps 1-2 moves to the next step instead of submitting.
+    if (isRegister && registerStep < 3) {
+      goToNextStep();
+      return;
+    }
 
     if (isRegister && !validateRegistration()) {
       return;
@@ -431,6 +391,7 @@ export default function LoginPage({
   const handleToggleMode = () => {
     setIsRegister(!isRegister);
     setAgreed(false);
+    setRegisterStep(1);
 
     if (!isRegister) {
       setPassword('');
@@ -482,977 +443,791 @@ export default function LoginPage({
     }
   };
 
-  return (
-    <div className="relative min-h-screen w-full bg-slate-50 overflow-hidden flex items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
-      {/* Decorative only — same soft gradient-blob treatment as the other
-          public pages (AboutPage's contact section, HomePage's hero),
-          so this page stops looking like a bare leftover form. */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 bg-indigo-200/40 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-blue-200/40 rounded-full blur-[100px] pointer-events-none" />
+  /* =========================================================
+     PIECES
+  ========================================================= */
 
-      {/* FORGOT PASSWORD MODAL */}
-      {showForgotPassword && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200"
-            onClick={() => setShowForgotPassword(false)}
-          />
+  const brand = (size: 'lg' | 'md' | 'sm') => (
+    <button
+      type="button"
+      onClick={onBackToHome}
+      className={`flex items-center text-left rounded-2xl ${focusRing} ${
+        size === 'sm' ? 'gap-3' : 'gap-3.5'
+      }`}
+      aria-label="Guidance and Testing Center home"
+    >
+      <img
+        src="/guidance-logo.jpg"
+        alt="OMSU Guidance and Testing Center logo"
+        className={`rounded-full object-cover bg-white shrink-0 ${
+          size === 'lg' ? 'w-14 h-14' : size === 'md' ? 'w-[52px] h-[52px]' : 'w-11 h-11'
+        }`}
+      />
+      <span className="flex flex-col gap-0.5">
+        <span className={`font-bold ${size === 'lg' ? 'text-base' : size === 'md' ? 'text-[15px]' : 'text-sm'}`}>
+          Guidance and Testing Center
+        </span>
+        <span className={`text-[#C7C9F2] ${size === 'lg' ? 'text-sm' : size === 'md' ? 'text-[13px]' : 'text-xs'}`}>
+          Occidental Mindoro State University
+        </span>
+      </span>
+    </button>
+  );
 
-          <Card className="relative z-10 w-full max-w-md bg-white rounded-[2rem] sm:rounded-[3rem] shadow-2xl border-none overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-6 sm:p-8 md:p-10">
-              <div className="flex items-start justify-between gap-4 mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
-                    <KeyRound className="w-6 h-6 text-indigo-600" />
-                  </div>
+  const passwordField = (
+    id: string,
+    label: string,
+    value: string,
+    onChange: (value: string) => void,
+    visible: boolean,
+    onToggle: () => void,
+    placeholder: string,
+    autoComplete: string,
+    extra?: ReactNode
+  ) => (
+    <div className="flex flex-col gap-2">
+      <div className="flex justify-between items-baseline gap-3">
+        <label htmlFor={id} className="font-semibold text-sm text-[#1E293B]">{label}</label>
+        {extra}
+      </div>
+      <div className="relative">
+        <Lock className="absolute left-4 top-[17px] w-[18px] h-[18px] text-[#6B7285] pointer-events-none" aria-hidden="true" />
+        <input
+          id={id}
+          type={visible ? 'text' : 'password'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          autoComplete={autoComplete}
+          required
+          className={`${inputClass} pl-[46px] pr-[52px]`}
+        />
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={visible ? 'Hide password' : 'Show password'}
+          className={`absolute right-1 lg:right-1.5 top-1 w-11 h-11 rounded-xl flex items-center justify-center text-[#6B7285] hover:bg-slate-100 transition-colors ${focusRing}`}
+        >
+          {visible ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
+        </button>
+      </div>
+    </div>
+  );
 
-                  <div>
-                    <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-slate-900">
-                      Reset Password
-                    </h2>
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">
-                      OMSU Guidance System
-                    </p>
-                  </div>
-                </div>
+  /* =========================================================
+     SIGN IN
+  ========================================================= */
 
-                <button
-                  type="button"
-                  onClick={() => setShowForgotPassword(false)}
-                  className="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors shrink-0"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+  const signIn = (
+    <div className="min-h-screen w-full font-figtree text-[#1E293B] bg-[#1E1B4B] lg:bg-[#EEF0FA] flex flex-col lg:flex-row lg:p-6 lg:gap-6">
+      {/* DESKTOP PANEL */}
+      <aside className="hidden lg:flex lg:w-[46%] xl:w-[600px] shrink-0 flex-col justify-between rounded-[56px] bg-[#1E1B4B] text-white px-10 xl:px-[52px] py-12">
+        {brand('lg')}
+
+        <div className="flex flex-col gap-[22px]">
+          <span className="self-start px-3.5 py-[7px] rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-[13px]">
+            Student portal
+          </span>
+          <h1 className="m-0 font-bricolage font-extrabold text-[44px] xl:text-[54px] leading-[1.02] tracking-[-1.5px]">
+            Every guidance program, open to every student.
+          </h1>
+          <p className="m-0 text-lg leading-[1.55] text-[#C7C9F2] max-w-[460px]">
+            Browse the Center's programs, read their materials, and see how much you have learned.
+          </p>
+          <div className="flex flex-col gap-3.5 mt-1.5">
+            {[
+              { icon: CalendarDays, text: 'Revisit programs even if you missed the event' },
+              { icon: BookOpen, text: 'Infographics, videos, and guides from the Center' },
+              { icon: SquareCheckBig, text: 'Short pre- and post-tests that show your progress' },
+            ].map(({ icon: Icon, text }) => (
+              <div key={text} className="flex items-center gap-3.5">
+                <span className="w-10 h-10 rounded-[14px] bg-white/10 flex items-center justify-center shrink-0">
+                  <Icon className="w-5 h-5 text-[#FBBF24]" aria-hidden="true" />
+                </span>
+                <span className="text-base leading-[1.4]">{text}</span>
               </div>
-
-              {resetEmailSent ? (
-                <div className="text-center py-4">
-                  <div className="mx-auto w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center mb-4">
-                    <CheckCircle2 className="w-7 h-7 text-emerald-600" />
-                  </div>
-
-                  <h3 className="text-lg font-black text-slate-900">
-                    Check Your Email
-                  </h3>
-
-                  <p className="mt-2 text-sm text-slate-500 leading-relaxed">
-                    If an account exists for{' '}
-                    <strong className="text-slate-700">{resetEmail}</strong>,
-                    a password reset link has been sent. Open it from the same
-                    device/browser to set a new password.
-                  </p>
-
-                  <Button
-                    type="button"
-                    onClick={() => setShowForgotPassword(false)}
-                    className="w-full h-12 mt-6 bg-slate-900 hover:bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs tracking-wider"
-                  >
-                    Back to Sign In
-                  </Button>
-                </div>
-              ) : (
-                <form onSubmit={handleSendResetEmail} className="space-y-5">
-                  <p className="text-sm text-slate-500 leading-relaxed">
-                    Enter your institutional email and we'll send you a link
-                    to reset your password.
-                  </p>
-
-                  <FieldWrapper
-                    label="Institutional Email"
-                    required
-                    icon={<Mail className="w-4 h-4" />}
-                  >
-                    <Input
-                      className="input-style pl-11"
-                      type="email"
-                      placeholder="student@omsu.edu.ph"
-                      value={resetEmail}
-                      onChange={(e) => setResetEmail(e.target.value)}
-                      autoComplete="email"
-                      required
-                    />
-                  </FieldWrapper>
-
-                  <Button
-                    type="submit"
-                    disabled={sendingReset}
-                    className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-xs tracking-wider"
-                  >
-                    {sendingReset ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-4 h-4 mr-2" />
-                        Send Reset Link
-                      </>
-                    )}
-                  </Button>
-                </form>
-              )}
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* TERMS MODAL */}
-      {showTerms && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200"
-            onClick={() => setShowTerms(false)}
-          />
-
-          <Card className="relative z-10 w-full max-w-lg bg-white rounded-[2rem] sm:rounded-[3rem] shadow-2xl border-none overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-6 sm:p-8 md:p-10">
-              <div className="flex items-start justify-between gap-4 mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
-                    <ShieldCheck className="w-6 h-6 text-indigo-600" />
-                  </div>
-
-                  <div>
-                    <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-slate-900">
-                      Privacy & Terms
-                    </h2>
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">
-                      OMSU Guidance System
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setShowTerms(false)}
-                  className="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors shrink-0"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="space-y-5 max-h-[55vh] overflow-y-auto pr-2 custom-scrollbar">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-1">
-                    01. Information Accuracy
-                  </p>
-                  <p className="text-sm leading-relaxed text-slate-500 font-medium">
-                    You certify that the information you provide
-                    during registration is true and accurate.
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-1">
-                    02. Purpose of Data Collection
-                  </p>
-                  <p className="text-sm leading-relaxed text-slate-500 font-medium">
-                    Student information may be used for account
-                    management, guidance program dissemination,
-                    survey administration, and aggregated system
-                    analytics.
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-1">
-                    03. Analytics
-                  </p>
-                  <p className="text-sm leading-relaxed text-slate-500 font-medium">
-                    Demographic information such as program, year
-                    level, age, gender, PWD status, and IP status
-                    may be used to generate aggregated awareness
-                    analytics.
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-1">
-                    04. Confidentiality
-                  </p>
-                  <p className="text-sm leading-relaxed text-slate-500 font-medium">
-                    Individual student information and survey
-                    responses should be handled confidentially and
-                    should not be unnecessarily exposed in public
-                    reports.
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-1">
-                    05. Account Security
-                  </p>
-                  <p className="text-sm leading-relaxed text-slate-500 font-medium">
-                    Students are responsible for keeping their
-                    account credentials secure.
-                  </p>
-                </div>
-              </div>
-
-              <Button
-                type="button"
-                onClick={() => {
-                  setAgreed(true);
-                  setShowTerms(false);
-                }}
-                className="w-full h-14 mt-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-xs tracking-wider"
-              >
-                <Check className="w-4 h-4 mr-2" />
-                I Agree to Terms & Privacy Policy
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      <Card className="relative z-10 w-full max-w-2xl bg-white border-none shadow-2xl rounded-[2rem] sm:rounded-[3rem] overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-        {/* HEADER */}
-        <div className="relative px-6 pt-6 sm:px-8 sm:pt-8">
-          <button
-            type="button"
-            onClick={onBackToHome}
-            className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-slate-400 hover:text-indigo-600 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Home
-          </button>
-
-          <div className="flex flex-col items-center text-center mt-8 sm:mt-6">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-indigo-600 to-blue-600 rounded-[1.5rem] sm:rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-200">
-              {isRegister ? (
-                <UserPlus key="register-icon" className="w-8 h-8 sm:w-10 sm:h-10 text-white animate-in zoom-in-50 spin-in-6 duration-300" />
-              ) : (
-                <img
-                  key="login-icon"
-                  src="/guidance-logo.jpg"
-                  alt="OMSU Guidance and Testing Center"
-                  className="w-11 h-11 sm:w-14 sm:h-14 rounded-full object-cover animate-in zoom-in-50 spin-in-6 duration-300"
-                />
-              )}
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-slate-900 mt-5">
-              {isRegister
-                ? 'Student Registration'
-                : 'Portal Sign In'}
-            </h1>
-
-            <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mt-2 max-w-md">
-              {isRegister
-                ? 'Create your Higher Education student account'
-                : 'Unified access for students & administrators'}
-            </p>
+            ))}
           </div>
         </div>
 
-        {/* FORM */}
-        {/* key={isRegister ...} remounts on toggle so the fade/slide
-            replays each time instead of only ever playing once. */}
+        <div className="flex flex-col gap-3.5">
+          <div className="flex gap-2">
+            {['San Jose', 'Labangan', 'Murtha'].map((campusName) => (
+              <span key={campusName} className="px-3.5 py-[7px] rounded-full bg-white/10 text-[13px] font-semibold">
+                {campusName}
+              </span>
+            ))}
+          </div>
+          <p className="m-0 text-[13px] leading-[1.5] text-[#A5A8E0] max-w-[470px]">{SYSTEM_TITLE}</p>
+        </div>
+      </aside>
+
+      {/* MOBILE HEADER */}
+      <header className="lg:hidden px-6 pt-7 pb-[34px] text-white flex flex-col gap-[18px]">
+        {brand('sm')}
+        <span className="self-start px-3 py-1.5 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-xs">
+          Student portal
+        </span>
+        <h1 className="m-0 font-bricolage font-extrabold text-[34px] leading-[1.04] tracking-[-1px]">
+          Every guidance program, open to every student.
+        </h1>
+      </header>
+
+      {/* FORM */}
+      <main className="flex-grow flex flex-col bg-white rounded-t-[40px] px-6 pt-[26px] pb-7 lg:bg-transparent lg:rounded-none lg:p-0 lg:items-center lg:justify-center">
         <form
-          key={isRegister ? 'register' : 'login'}
           onSubmit={handleSubmit}
-          className="px-5 sm:px-8 md:px-10 py-7 sm:py-8 animate-in fade-in slide-in-from-bottom-2 duration-300"
+          className="w-full max-w-md mx-auto flex flex-grow lg:flex-grow-0 flex-col gap-[22px] lg:gap-[26px] lg:w-[460px] lg:max-w-none lg:rounded-[40px] lg:bg-white lg:px-11 lg:pt-11 lg:pb-10 lg:shadow-[0_24px_60px_-24px_rgba(30,27,75,0.25)]"
         >
-          {isRegister ? (
-            <div className="space-y-7">
-              {/* ACCOUNT INFORMATION */}
-              <section>
-                <SectionHeader
-                  number="01"
-                  title="Account Information"
-                  description="Use your official student information."
-                />
+          <div className="grid grid-cols-2 gap-1 p-[5px] rounded-full bg-[#F1F2F9]">
+            <button
+              type="button"
+              aria-pressed="true"
+              className={`h-11 rounded-full bg-white text-[#1E1B4B] font-bold text-[15px] shadow-[0_2px_8px_rgba(30,27,75,0.12)] ${focusRing}`}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              aria-pressed="false"
+              onClick={handleToggleMode}
+              className={`h-11 rounded-full text-[#5B6477] font-semibold text-[15px] hover:text-[#1E1B4B] transition-colors ${focusRing}`}
+            >
+              Create account
+            </button>
+          </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  {/* FULL NAME */}
-                  <FieldWrapper
-                    label="Full Name"
-                    required
-                    icon={<UserCircle className="w-4 h-4" />}
-                  >
-                    <Input
-                      className="input-style pl-11"
-                      placeholder="Juan Dela Cruz"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      autoComplete="name"
-                      required
-                    />
-                  </FieldWrapper>
+          <div className="hidden lg:flex flex-col gap-2">
+            <h2 className="m-0 font-bricolage font-extrabold text-4xl tracking-[-0.8px] text-[#1E1B4B]">Welcome back</h2>
+            <p className="m-0 text-[15px] leading-[1.5] text-[#5B6477]">
+              Sign in with your institutional email. Guidance staff use this sign-in too.
+            </p>
+          </div>
 
-                  {/* STUDENT ID */}
-                  <FieldWrapper
-                    label="Student ID Number"
-                    required
-                    icon={<Fingerprint className="w-4 h-4" />}
-                  >
-                    <Input
-                      className="input-style pl-11"
-                      placeholder="2024-XXXXX"
-                      value={studentId}
-                      onChange={(e) =>
-                        setStudentId(e.target.value)
-                      }
-                      autoComplete="off"
-                      required
-                    />
-                  </FieldWrapper>
-
-                  {/* EMAIL */}
-                  <div className="md:col-span-2">
-                    <FieldWrapper
-                      label="Institutional Email"
-                      required
-                      icon={<Mail className="w-4 h-4" />}
-                    >
-                      <Input
-                        className="input-style pl-11"
-                        type="email"
-                        placeholder="student@omsu.edu.ph"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        autoComplete="email"
-                        required
-                      />
-                    </FieldWrapper>
-                  </div>
-                </div>
-              </section>
-
-              {/* ACADEMIC INFORMATION */}
-              <section>
-                <SectionHeader
-                  number="02"
-                  title="Academic Information"
-                  description="This information supports program-level analytics."
-                />
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  {/* CAMPUS */}
-                  <FieldWrapper
-                    label="Campus"
-                    required
-                    icon={<MapPin className="w-4 h-4" />}
-                  >
-                    <Select
-                      value={campus}
-                      onValueChange={(value) => {
-                        setCampus(value);
-                        // The previously selected program almost certainly
-                        // doesn't exist at the newly selected campus.
-                        setProgram('');
-                      }}
-                    >
-                      <SelectTrigger className="select-style pl-11">
-                        <SelectValue placeholder="Select campus" />
-                      </SelectTrigger>
-
-                      <SelectContent className="rounded-2xl">
-                        {CAMPUSES.map((item) => (
-                          <SelectItem key={item} value={item}>
-                            {item}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FieldWrapper>
-
-                  {/* YEAR */}
-                  <FieldWrapper
-                    label="Year Level"
-                    required
-                    icon={<GraduationCap className="w-4 h-4" />}
-                  >
-                    <Select
-                      value={yearLevel}
-                      onValueChange={setYearLevel}
-                    >
-                      <SelectTrigger className="select-style pl-11">
-                        <SelectValue placeholder="Select year" />
-                      </SelectTrigger>
-
-                      <SelectContent className="rounded-2xl">
-                        <SelectItem value="1">
-                          1st Year
-                        </SelectItem>
-                        <SelectItem value="2">
-                          2nd Year
-                        </SelectItem>
-                        <SelectItem value="3">
-                          3rd Year
-                        </SelectItem>
-                        <SelectItem value="4">
-                          4th Year
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldWrapper>
-
-                  {/* PROGRAM */}
-                  <div className="md:col-span-2">
-                    <FieldWrapper
-                      label="Academic Program"
-                      required
-                      icon={<BookOpen className="w-4 h-4" />}
-                    >
-                      <Select
-                        value={program}
-                        onValueChange={setProgram}
-                      >
-                        <SelectTrigger className="select-style pl-11">
-                          <SelectValue placeholder="Select your academic program" />
-                        </SelectTrigger>
-
-                        <SelectContent className="rounded-2xl max-h-72">
-                          {(PROGRAMS_BY_CAMPUS[campus] || []).map((item) => (
-                            <SelectItem
-                              key={item}
-                              value={item}
-                            >
-                              {item}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FieldWrapper>
-                  </div>
-                </div>
-              </section>
-
-              {/* DEMOGRAPHIC INFORMATION */}
-              <section>
-                <SectionHeader
-                  number="03"
-                  title="Student Profile"
-                  description="Used for aggregated awareness analytics."
-                />
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                  {/* AGE */}
-                  <FieldWrapper
-                    label="Age"
-                    required
-                    icon={<CalendarDays className="w-4 h-4" />}
-                  >
-                    <Input
-                      className="input-style pl-11"
-                      type="number"
-                      min="15"
-                      max="100"
-                      placeholder="e.g. 20"
-                      value={age}
-                      onChange={(e) => setAge(e.target.value)}
-                      required
-                    />
-                  </FieldWrapper>
-
-                  {/* GENDER */}
-                  <FieldWrapper
-                    label="Gender"
-                    required
-                    icon={<Users className="w-4 h-4" />}
-                  >
-                    <Select
-                      value={gender}
-                      onValueChange={(value) =>
-                        setGender(value as Gender)
-                      }
-                    >
-                      <SelectTrigger className="select-style pl-11">
-                        <SelectValue placeholder="Select gender" />
-                      </SelectTrigger>
-
-                      <SelectContent className="rounded-2xl">
-                        <SelectItem value="Male">
-                          Male
-                        </SelectItem>
-                        <SelectItem value="Female">
-                          Female
-                        </SelectItem>
-                        <SelectItem value="Other">
-                          Other
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldWrapper>
-
-                  {/* PWD */}
-                  <FieldWrapper
-                    label="PWD Status"
-                    required
-                    icon={<Accessibility className="w-4 h-4" />}
-                  >
-                    <Select
-                      value={isPwd}
-                      onValueChange={(value) =>
-                        setIsPwd(value as YesNo)
-                      }
-                    >
-                      <SelectTrigger className="select-style pl-11">
-                        <SelectValue placeholder="Select PWD status" />
-                      </SelectTrigger>
-
-                      <SelectContent className="rounded-2xl">
-                        <SelectItem value="Yes">
-                          Yes
-                        </SelectItem>
-                        <SelectItem value="No">
-                          No
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldWrapper>
-
-                  {/* IP */}
-                  <FieldWrapper
-                    label="Indigenous Peoples (IP) Status"
-                    required
-                    icon={<UsersRound className="w-4 h-4" />}
-                  >
-                    <Select
-                      value={isIp}
-                      onValueChange={(value) =>
-                        setIsIp(value as YesNo)
-                      }
-                    >
-                      <SelectTrigger className="select-style pl-11">
-                        <SelectValue placeholder="Select IP status" />
-                      </SelectTrigger>
-
-                      <SelectContent className="rounded-2xl">
-                        <SelectItem value="Yes">
-                          Yes
-                        </SelectItem>
-                        <SelectItem value="No">
-                          No
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldWrapper>
-                </div>
-
-                <div className="mt-4 flex gap-3 p-4 bg-indigo-50/70 border border-indigo-100 rounded-2xl">
-                  <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
-
-                  <p className="text-[10px] leading-relaxed font-medium text-indigo-700">
-                    These demographic details are collected to
-                    support aggregated system analytics requested
-                    for the study. They should not be unnecessarily
-                    displayed with individual survey responses.
-                  </p>
-                </div>
-              </section>
-
-              {/* PASSWORD */}
-              <section>
-                <SectionHeader
-                  number="04"
-                  title="Account Security"
-                  description="Create a secure password for your account."
-                />
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  {/* PASSWORD */}
-                  <FieldWrapper
-                    label="Password"
-                    required
-                    icon={<Lock className="w-4 h-4" />}
-                  >
-                    <div className="relative">
-                      <Input
-                        className="input-style pl-11 pr-12"
-                        type={
-                          showPassword ? 'text' : 'password'
-                        }
-                        placeholder="Create password"
-                        value={password}
-                        onChange={(e) =>
-                          setPassword(e.target.value)
-                        }
-                        autoComplete="new-password"
-                        required
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowPassword(!showPassword)
-                        }
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600"
-                      >
-                        {showPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                  </FieldWrapper>
-
-                  {/* CONFIRM */}
-                  <FieldWrapper
-                    label="Confirm Password"
-                    required
-                    icon={<Lock className="w-4 h-4" />}
-                  >
-                    <div className="relative">
-                      <Input
-                        className="input-style pl-11 pr-12"
-                        type={
-                          showConfirmPassword
-                            ? 'text'
-                            : 'password'
-                        }
-                        placeholder="Confirm password"
-                        value={confirmPassword}
-                        onChange={(e) =>
-                          setConfirmPassword(e.target.value)
-                        }
-                        autoComplete="new-password"
-                        required
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowConfirmPassword(
-                            !showConfirmPassword
-                          )
-                        }
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600"
-                      >
-                        {showConfirmPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                  </FieldWrapper>
-                </div>
-
-                {/* PASSWORD CHECKLIST */}
-                {password.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4 p-4 bg-slate-50 rounded-2xl">
-                    <PasswordCheck
-                      valid={passwordChecks.length}
-                      text="At least 8 characters"
-                    />
-
-                    <PasswordCheck
-                      valid={passwordChecks.upper}
-                      text="One uppercase letter"
-                    />
-
-                    <PasswordCheck
-                      valid={passwordChecks.lower}
-                      text="One lowercase letter"
-                    />
-
-                    <PasswordCheck
-                      valid={passwordChecks.number}
-                      text="One number"
-                    />
-                  </div>
-                )}
-              </section>
-            </div>
-          ) : (
-            /* LOGIN */
-            <div className="max-w-md mx-auto space-y-5">
-              <FieldWrapper
-                label="Institutional Email"
-                required
-                icon={<Mail className="w-4 h-4" />}
-              >
-                <Input
-                  className="input-style pl-11 h-14 text-base"
+          <div className="flex flex-col gap-4 lg:gap-[18px]">
+            <div className="flex flex-col gap-2">
+              <label htmlFor="email" className="font-semibold text-sm">Institutional email</label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-[17px] w-[18px] h-[18px] text-[#6B7285] pointer-events-none" aria-hidden="true" />
+                <input
+                  id="email"
                   type="email"
-                  placeholder="student@omsu.edu.ph"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  placeholder="student@omsu.edu.ph"
                   autoComplete="email"
                   required
+                  className={`${inputClass} pl-[46px] pr-4`}
                 />
-              </FieldWrapper>
-
-              <FieldWrapper
-                label="Password"
-                required
-                icon={<Lock className="w-4 h-4" />}
-              >
-                <div className="relative">
-                  <Input
-                    className="input-style pl-11 pr-12 h-14 text-base"
-                    type={
-                      showPassword ? 'text' : 'password'
-                    }
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) =>
-                      setPassword(e.target.value)
-                    }
-                    autoComplete="current-password"
-                    required
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setShowPassword(!showPassword)
-                    }
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="w-5 h-5" />
-                    ) : (
-                      <Eye className="w-5 h-5" />
-                    )}
-                  </button>
-                </div>
-              </FieldWrapper>
-
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleOpenForgotPassword}
-                  className="text-[10px] font-black uppercase tracking-wider text-indigo-600 hover:underline"
-                >
-                  Forgot Password?
-                </button>
               </div>
             </div>
-          )}
 
-          {/* TERMS (registration only — sign-in doesn't re-collect consent) */}
-          {isRegister && (
-          <div className="mt-7">
-            <div
-              className={`flex items-start gap-3 p-4 rounded-2xl border transition-all ${
-                agreed
-                  ? 'bg-emerald-50 border-emerald-100'
-                  : 'bg-slate-50 border-slate-100'
-              }`}
-            >
-              <div className="relative flex items-center shrink-0 mt-0.5">
-                <input
-                  id="terms"
-                  type="checkbox"
-                  checked={agreed}
-                  onChange={(e) =>
-                    setAgreed(e.target.checked)
-                  }
-                  className="peer h-5 w-5 cursor-pointer appearance-none rounded-md border-2 border-slate-300 bg-white checked:bg-indigo-600 checked:border-indigo-600 transition-all"
-                />
-
-                <Check className="absolute w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 pointer-events-none top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-              </div>
-
-              <label
-                htmlFor="terms"
-                className="text-[10px] sm:text-xs leading-relaxed font-bold text-slate-500 cursor-pointer select-none"
+            {passwordField(
+              'password',
+              'Password',
+              password,
+              setPassword,
+              showPassword,
+              () => setShowPassword(!showPassword),
+              'Enter your password',
+              'current-password',
+              <button
+                type="button"
+                onClick={handleOpenForgotPassword}
+                className={`text-sm font-bold text-[#4338CA] hover:text-[#312E81] hover:underline rounded ${focusRing}`}
               >
-                I agree to the{' '}
-                <button
-                  type="button"
-                  onClick={() => setShowTerms(true)}
-                  className="text-indigo-600 hover:underline font-black"
-                >
-                  Guidance Terms & Privacy Policy
-                </button>
-                .
-              </label>
-            </div>
+                Forgot password?
+              </button>
+            )}
           </div>
-          )}
 
-          {/* SUBMIT */}
-          <Button
+          <button
             type="submit"
             disabled={isLoading}
-            className="w-full h-14 sm:h-16 mt-4 bg-slate-900 hover:bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] sm:text-xs transition-all shadow-xl shadow-slate-200 hover:shadow-2xl hover:-translate-y-0.5"
+            className={`h-14 rounded-[18px] bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors disabled:opacity-70 ${focusRing}`}
           >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                Processing...
-              </>
-            ) : isRegister ? (
-              <>
-                <UserPlus className="w-4 h-4 mr-2" />
-                Create Student Account
-              </>
-            ) : (
-              <>
-                <GraduationCap className="w-4 h-4 mr-2" />
-                Login to Portal
-              </>
-            )}
-          </Button>
-        </form>
+            {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
+            {isLoading ? 'Signing in...' : 'Sign in'}
+          </button>
 
-        {/* FOOTER */}
-        <div className="px-5 sm:px-8 pb-7 sm:pb-8">
-          <div className="border-t border-slate-100 pt-6 text-center">
-            <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400">
-              {isRegister
-                ? 'Already have a student account?'
-                : 'New student?'}
-            </p>
-
+          <p className="m-0 text-center text-[15px] text-[#5B6477]">
+            New student?{' '}
             <button
               type="button"
               onClick={handleToggleMode}
-              className="mt-2 text-indigo-600 hover:text-indigo-700 font-black uppercase text-[10px] tracking-wider hover:underline"
+              className={`font-bold text-[#4338CA] hover:text-[#312E81] hover:underline rounded ${focusRing}`}
             >
-              {isRegister
-                ? 'Login here'
-                : 'Register here'}
+              Create your account
             </button>
-          </div>
-        </div>
-      </Card>
+          </p>
 
-      {/* SIMPLE LOCAL STYLES */}
-      <style>{`
-        .input-style {
-          width: 100%;
-          height: 3rem;
-          border-radius: 1rem;
-          background: rgb(248 250 252);
-          border: 1px solid transparent;
-          font-weight: 700;
-          color: rgb(51 65 85);
-          transition: all 0.2s ease;
-        }
-
-        .input-style:focus {
-          background: white;
-          border-color: rgb(165 180 252);
-          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
-          outline: none;
-        }
-
-        .select-style {
-          width: 100%;
-          height: 3rem;
-          border-radius: 1rem;
-          background: rgb(248 250 252);
-          border: 1px solid transparent;
-          font-weight: 700;
-          color: rgb(51 65 85);
-        }
-
-        .select-style:focus {
-          background: white;
-          border-color: rgb(165 180 252);
-          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
-        }
-
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 5px;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgb(203 213 225);
-          border-radius: 999px;
-        }
-      `}</style>
+          <p className="lg:hidden mt-auto mb-0 text-center text-xs leading-[1.5] text-[#6B7285]">
+            Web-Based Guidance Program Dissemination and Awareness Assessment System
+          </p>
+        </form>
+      </main>
     </div>
   );
-}
 
-/* =========================================================
-   HELPER COMPONENTS
-========================================================= */
+  /* =========================================================
+     REGISTER
+  ========================================================= */
 
-function SectionHeader({
-  number,
-  title,
-  description,
-}: {
-  number: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="flex items-start gap-3">
-      <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">
-        {number}
-      </div>
+  const stepInfo = REGISTER_STEPS[registerStep];
 
-      <div>
-        <h2 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-800">
-          {title}
-        </h2>
-
-        <p className="text-[9px] sm:text-[10px] text-slate-400 font-medium mt-1">
-          {description}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function FieldWrapper({
-  label,
-  required,
-  icon,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  icon?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="flex items-center gap-1.5 ml-1 text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-500">
-        {icon && (
-          <span className="text-indigo-500">
-            {icon}
-          </span>
-        )}
-
-        {label}
-
-        {required && (
-          <span className="text-rose-500">*</span>
-        )}
-      </Label>
-
-      {children}
-    </div>
-  );
-}
-
-function PasswordCheck({
-  valid,
-  text,
-}: {
-  valid: boolean;
-  text: string;
-}) {
-  return (
-    <div
-      className={`flex items-center gap-2 text-[9px] font-bold ${
-        valid
-          ? 'text-emerald-600'
-          : 'text-slate-400'
+  const choiceButton = (selected: boolean, label: string, onClick: () => void, key?: string) => (
+    <button
+      key={key ?? label}
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      className={`h-12 rounded-[14px] border-[1.5px] text-sm lg:text-[15px] transition-colors ${focusRing} ${
+        selected
+          ? 'border-[#4F46E5] bg-[#4F46E5] text-white font-bold'
+          : 'border-[#DDE1EE] bg-white text-[#1E293B] font-semibold hover:border-[#A5B4FC]'
       }`}
     >
-      {valid ? (
-        <CheckCircle2 className="w-3.5 h-3.5" />
-      ) : (
-        <AlertCircle className="w-3.5 h-3.5" />
-      )}
+      {label}
+    </button>
+  );
 
-      {text}
+  const choiceGroup = (legend: string, columns: string, children: ReactNode, className = '') => (
+    <fieldset className={`m-0 p-0 border-0 flex flex-col gap-2 min-w-0 ${className}`}>
+      <legend className="p-0 mb-2 font-semibold text-sm">{legend}</legend>
+      <div className={`grid ${columns} gap-2`}>{children}</div>
+    </fieldset>
+  );
+
+  const infoNote = (children: ReactNode) => (
+    <div className="flex gap-3 lg:gap-3.5 items-start p-4 lg:px-5 lg:py-[18px] rounded-[20px] lg:rounded-[22px] bg-[#EEF0FA]">
+      <ShieldCheck className="w-5 h-5 lg:w-[22px] lg:h-[22px] text-[#4338CA] shrink-0 mt-px" aria-hidden="true" />
+      <p className="m-0 text-[13px] lg:text-sm leading-[1.55] text-[#334155]">{children}</p>
     </div>
+  );
+
+  const stepOneFields = (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-[22px] lg:gap-x-6">
+      <div className="flex flex-col gap-2">
+        <label htmlFor="reg-name" className="font-semibold text-sm">Full name</label>
+        <div className="relative">
+          <User className="absolute left-4 top-[17px] w-[18px] h-[18px] text-[#6B7285] pointer-events-none" aria-hidden="true" />
+          <input
+            id="reg-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Juan Dela Cruz"
+            autoComplete="name"
+            className={`${inputClass} pl-[46px] pr-4`}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label htmlFor="reg-student-id" className="font-semibold text-sm">Student ID number</label>
+        <div className="relative">
+          <Fingerprint className="absolute left-4 top-[17px] w-[18px] h-[18px] text-[#6B7285] pointer-events-none" aria-hidden="true" />
+          <input
+            id="reg-student-id"
+            value={studentId}
+            onChange={(e) => setStudentId(e.target.value)}
+            placeholder="2024-XXXXX"
+            autoComplete="off"
+            className={`${inputClass} pl-[46px] pr-4`}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2 lg:col-span-2">
+        <label htmlFor="reg-email" className="font-semibold text-sm">Institutional email</label>
+        <div className="relative">
+          <Mail className="absolute left-4 top-[17px] w-[18px] h-[18px] text-[#6B7285] pointer-events-none" aria-hidden="true" />
+          <input
+            id="reg-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="student@omsu.edu.ph"
+            autoComplete="email"
+            className={`${inputClass} pl-[46px] pr-4`}
+          />
+        </div>
+        <p className="m-0 text-[13px] text-[#5B6477]">You'll use this email to sign in.</p>
+      </div>
+    </div>
+  );
+
+  const stepTwoFields = (
+    <>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-[22px] lg:gap-x-6">
+        {choiceGroup(
+          'Campus',
+          'grid-cols-3',
+          CAMPUSES.map((item) =>
+            choiceButton(campus === item, item.replace(' Campus', ''), () => {
+              if (campus === item) return;
+              setCampus(item);
+              // The previously selected program almost certainly
+              // doesn't exist at the newly selected campus.
+              setProgram('');
+            }, item)
+          ),
+          'lg:col-span-2'
+        )}
+
+        <div className="flex flex-col gap-2 lg:col-span-2">
+          <label htmlFor="reg-program" className="font-semibold text-sm">Academic program</label>
+          <div className="relative">
+            <select
+              id="reg-program"
+              value={program}
+              onChange={(e) => setProgram(e.target.value)}
+              className={`${inputClass} appearance-none pl-3.5 lg:pl-4 pr-12 ${program ? '' : 'text-[#8A91A6]'}`}
+            >
+              <option value="" disabled>Select your academic program</option>
+              {(PROGRAMS_BY_CAMPUS[campus] || []).map((item) => (
+                <option key={item} value={item} className="text-[#1E293B]">{item}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-4 lg:right-[18px] top-[17px] w-[18px] h-[18px] text-[#6B7285] pointer-events-none" aria-hidden="true" />
+          </div>
+        </div>
+
+        {choiceGroup(
+          'Year level',
+          'grid-cols-4',
+          YEAR_LEVELS.map((level) =>
+            choiceButton(yearLevel === level.value, level.label, () => setYearLevel(level.value), level.value)
+          )
+        )}
+
+        <div className="flex flex-col gap-2">
+          <label htmlFor="reg-age" className="font-semibold text-sm">Age</label>
+          <input
+            id="reg-age"
+            type="number"
+            min={15}
+            max={100}
+            value={age}
+            onChange={(e) => setAge(e.target.value)}
+            placeholder="e.g. 20"
+            className={`${inputBase} h-12 rounded-[14px] px-3.5 lg:px-4`}
+          />
+        </div>
+
+        {choiceGroup(
+          'Gender',
+          'grid-cols-3',
+          (['Male', 'Female', 'Other'] as Gender[]).map((option) =>
+            choiceButton(gender === option, option, () => setGender(option))
+          ),
+          'lg:col-span-2'
+        )}
+
+        {choiceGroup(
+          'Person with disability (PWD)',
+          'grid-cols-2',
+          (['Yes', 'No'] as YesNo[]).map((option) =>
+            choiceButton(isPwd === option, option, () => setIsPwd(option), `pwd-${option}`)
+          )
+        )}
+
+        {choiceGroup(
+          'Member of an Indigenous Peoples group (IP)',
+          'grid-cols-2',
+          (['Yes', 'No'] as YesNo[]).map((option) =>
+            choiceButton(isIp === option, option, () => setIsIp(option), `ip-${option}`)
+          )
+        )}
+      </div>
+
+      {infoNote(
+        <>
+          <strong className="text-[#1E1B4B]">Why we ask.</strong> These details appear only in combined
+          statistics and are never shown next to your name. They are handled under the Data Privacy Act of
+          2012 (RA 10173).
+        </>
+      )}
+    </>
+  );
+
+  const stepThreeFields = (
+    <>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-[22px] lg:gap-x-6">
+        {passwordField(
+          'reg-password',
+          'Password',
+          password,
+          setPassword,
+          showPassword,
+          () => setShowPassword(!showPassword),
+          'Create a password',
+          'new-password'
+        )}
+        {passwordField(
+          'reg-confirm-password',
+          'Confirm password',
+          confirmPassword,
+          setConfirmPassword,
+          showConfirmPassword,
+          () => setShowConfirmPassword(!showConfirmPassword),
+          'Type it again',
+          'new-password'
+        )}
+      </div>
+
+      <ul className="m-0 p-4 lg:px-5 list-none grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-[20px] border-[1.5px] border-[#DDE1EE]" aria-label="Password requirements">
+        {[
+          { valid: passwordChecks.length, text: 'At least 8 characters' },
+          { valid: passwordChecks.upper, text: 'One uppercase letter' },
+          { valid: passwordChecks.lower, text: 'One lowercase letter' },
+          { valid: passwordChecks.number, text: 'One number' },
+        ].map(({ valid, text }) => (
+          <li key={text} className={`flex items-center gap-2 text-sm font-semibold ${valid ? 'text-emerald-600' : 'text-[#5B6477]'}`}>
+            {valid ? <CheckCircle2 className="w-[18px] h-[18px] shrink-0" /> : <Circle className="w-[18px] h-[18px] shrink-0 text-[#C0C5D6]" />}
+            {text}
+          </li>
+        ))}
+        {confirmPassword.length > 0 && (
+          <li className={`flex items-center gap-2 text-sm font-semibold sm:col-span-2 ${password === confirmPassword ? 'text-emerald-600' : 'text-rose-600'}`}>
+            {password === confirmPassword ? <CheckCircle2 className="w-[18px] h-[18px] shrink-0" /> : <X className="w-[18px] h-[18px] shrink-0" />}
+            {password === confirmPassword ? 'Passwords match' : 'Passwords do not match'}
+          </li>
+        )}
+      </ul>
+
+      <label
+        htmlFor="reg-terms"
+        className={`flex gap-3.5 items-start p-4 lg:px-5 lg:py-[18px] rounded-[20px] lg:rounded-[22px] cursor-pointer border-[1.5px] transition-colors ${
+          agreed ? 'bg-emerald-50 border-emerald-300' : 'bg-[#EEF0FA] border-transparent'
+        }`}
+      >
+        <span className="relative flex items-center shrink-0 mt-0.5">
+          <input
+            id="reg-terms"
+            type="checkbox"
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+            className={`peer h-[22px] w-[22px] appearance-none rounded-md border-2 border-[#A5ADC6] bg-white checked:bg-[#4F46E5] checked:border-[#4F46E5] cursor-pointer transition-colors ${focusRing}`}
+          />
+          <Check className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 pointer-events-none" strokeWidth={3} />
+        </span>
+        <span className="text-sm leading-[1.55] text-[#334155]">
+          I agree to the{' '}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              setShowTerms(true);
+            }}
+            className={`font-bold text-[#4338CA] hover:text-[#312E81] hover:underline rounded ${focusRing}`}
+          >
+            Guidance Terms &amp; Privacy Policy
+          </button>
+          , and confirm the information I gave is true.
+        </span>
+      </label>
+    </>
+  );
+
+  const register = (
+    <div className="min-h-screen w-full font-figtree text-[#1E293B] bg-white lg:bg-[#EEF0FA] flex flex-col lg:flex-row lg:p-6 lg:gap-6">
+      {/* DESKTOP PANEL */}
+      <aside className="hidden lg:flex w-[400px] xl:w-[440px] shrink-0 flex-col justify-between rounded-[56px] bg-[#1E1B4B] text-white p-11">
+        <div className="flex flex-col gap-10">
+          {brand('md')}
+
+          <div className="flex flex-col gap-3.5">
+            <h1 className="m-0 font-bricolage font-extrabold text-[42px] leading-[1.05] tracking-[-1px]">
+              Create your student account
+            </h1>
+            <p className="m-0 text-base leading-[1.55] text-[#C7C9F2]">
+              Takes about two minutes. Have your student ID and institutional email ready.
+            </p>
+          </div>
+
+          <ol aria-label="Registration steps" className="m-0 p-0 list-none flex flex-col">
+            {([1, 2, 3] as RegisterStep[]).map((step) => {
+              const done = step < registerStep;
+              const current = step === registerStep;
+              return (
+                <li key={step} aria-current={current ? 'step' : undefined} className="flex gap-4">
+                  <div className="flex flex-col items-center">
+                    {done ? (
+                      <span className="w-9 h-9 rounded-full bg-[#34D399] flex items-center justify-center">
+                        <Check className="w-[18px] h-[18px] text-[#064E3B]" strokeWidth={3} aria-hidden="true" />
+                      </span>
+                    ) : current ? (
+                      <span className="w-9 h-9 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-base flex items-center justify-center">
+                        {step}
+                      </span>
+                    ) : (
+                      <span className="w-9 h-9 rounded-full border-2 border-white/35 text-[#C7C9F2] font-bold text-base flex items-center justify-center">
+                        {step}
+                      </span>
+                    )}
+                    {step < 3 && (
+                      <span className={`w-0.5 h-[34px] ${done ? 'bg-[#34D399]' : 'bg-white/[0.18]'}`} />
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-0.5 pt-1.5">
+                    <span className={`font-bold text-base ${!done && !current ? 'text-[#C7C9F2]' : ''}`}>
+                      {REGISTER_STEPS[step].title}
+                    </span>
+                    <span className={`text-sm ${current ? 'text-[#FBBF24]' : 'text-[#A5A8E0]'}`}>
+                      {done ? 'Done' : current ? 'In progress' : 'Next'}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+
+        <p className="m-0 text-[15px] text-[#C7C9F2]">
+          Already have an account?{' '}
+          <button
+            type="button"
+            onClick={handleToggleMode}
+            className={`font-bold text-white underline rounded ${focusRing}`}
+          >
+            Sign in
+          </button>
+        </p>
+      </aside>
+
+      {/* MOBILE HEADER */}
+      <header className="lg:hidden px-5 pt-[18px] pb-5 bg-[#1E1B4B] text-white rounded-b-[32px] flex flex-col gap-4">
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={registerStep === 1 ? handleToggleMode : goToPreviousStep}
+            aria-label={registerStep === 1 ? 'Back to sign in' : 'Previous step'}
+            className={`w-11 h-11 rounded-[14px] bg-white/10 flex items-center justify-center ${focusRing}`}
+          >
+            <ArrowLeft className="w-5 h-5" aria-hidden="true" />
+          </button>
+          <span className="font-bold text-base">Create your account</span>
+          <span className="ml-auto px-[11px] py-1.5 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-xs">
+            Step {registerStep} of 3
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-1.5" aria-hidden="true">
+          {([1, 2, 3] as RegisterStep[]).map((step) => (
+            <span
+              key={step}
+              className={`h-1.5 rounded-full ${
+                step < registerStep ? 'bg-[#34D399]' : step === registerStep ? 'bg-[#FBBF24]' : 'bg-white/20'
+              }`}
+            />
+          ))}
+        </div>
+        <div className="flex flex-col gap-1">
+          <h1 className="m-0 font-bricolage font-extrabold text-[28px] tracking-[-0.6px]">{stepInfo.title}</h1>
+          <p className="m-0 text-sm leading-[1.5] text-[#C7C9F2]">{stepInfo.description}</p>
+        </div>
+      </header>
+
+      {/* FORM */}
+      <main className="flex-grow flex flex-col px-5 py-6 lg:rounded-[40px] lg:bg-white lg:px-[52px] lg:py-11">
+        <form
+          key={registerStep}
+          onSubmit={handleSubmit}
+          noValidate
+          className="w-full max-w-xl lg:max-w-none mx-auto flex flex-grow flex-col gap-[22px] lg:gap-[26px] animate-in fade-in duration-200"
+        >
+          <div className="hidden lg:flex flex-col gap-2.5">
+            <span className="self-start px-3 py-1.5 rounded-full bg-[#EEF0FA] text-[#4338CA] font-bold text-[13px]">
+              Step {registerStep} of 3
+            </span>
+            <h2 className="m-0 font-bricolage font-extrabold text-[34px] tracking-[-0.8px] text-[#1E1B4B]">{stepInfo.title}</h2>
+            <p className="m-0 text-[15px] leading-[1.5] text-[#5B6477]">{stepInfo.description}</p>
+          </div>
+
+          {registerStep === 1 && stepOneFields}
+          {registerStep === 2 && stepTwoFields}
+          {registerStep === 3 && stepThreeFields}
+
+          <div className="mt-auto pt-2 flex flex-col-reverse gap-3 lg:flex-row lg:justify-between lg:items-center">
+            {registerStep > 1 ? (
+              <button
+                type="button"
+                onClick={goToPreviousStep}
+                className={`hidden lg:flex h-[52px] px-[22px] rounded-2xl border-[1.5px] border-[#DDE1EE] bg-white text-[#1E293B] font-bold text-[15px] items-center gap-2 hover:border-[#A5B4FC] transition-colors ${focusRing}`}
+              >
+                <ArrowLeft className="w-[18px] h-[18px]" aria-hidden="true" /> Back
+              </button>
+            ) : (
+              <p className="hidden lg:block m-0 text-sm text-[#5B6477]">
+                Already registered?{' '}
+                <button
+                  type="button"
+                  onClick={handleToggleMode}
+                  className={`font-bold text-[#4338CA] hover:text-[#312E81] hover:underline rounded ${focusRing}`}
+                >
+                  Sign in
+                </button>
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className={`h-14 lg:h-[52px] w-full lg:w-auto px-[34px] rounded-[18px] lg:rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors disabled:opacity-70 ${focusRing}`}
+            >
+              {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
+              {registerStep < 3 ? 'Continue' : isLoading ? 'Creating account...' : 'Create account'}
+            </button>
+          </div>
+
+          {registerStep === 1 && (
+            <p className="lg:hidden m-0 text-center text-[15px] text-[#5B6477]">
+              Already have an account?{' '}
+              <button
+                type="button"
+                onClick={handleToggleMode}
+                className={`font-bold text-[#4338CA] hover:text-[#312E81] hover:underline rounded ${focusRing}`}
+              >
+                Sign in
+              </button>
+            </p>
+          )}
+        </form>
+      </main>
+    </div>
+  );
+
+  /* =========================================================
+     MODALS
+  ========================================================= */
+
+  const modalShell = (onClose: () => void, icon: ReactNode, title: string, children: ReactNode, maxWidth = 'max-w-md') => (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 font-figtree text-[#1E293B]">
+      <div className="absolute inset-0 bg-[#1E1B4B]/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={`relative z-10 w-full ${maxWidth} bg-white rounded-[40px] shadow-[0_24px_60px_-24px_rgba(30,27,75,0.45)] p-7 sm:p-10 animate-in fade-in zoom-in-95 duration-200`}
+      >
+        <div className="flex items-start justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <span className="w-11 h-11 rounded-[14px] bg-[#EEF0FA] flex items-center justify-center shrink-0">{icon}</span>
+            <div>
+              <h2 className="m-0 font-bricolage font-extrabold text-2xl tracking-[-0.5px] text-[#1E1B4B]">{title}</h2>
+              <p className="m-0 mt-0.5 text-[13px] text-[#5B6477]">Guidance and Testing Center</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className={`w-10 h-10 rounded-xl bg-[#F1F2F9] flex items-center justify-center text-[#5B6477] hover:text-[#1E1B4B] shrink-0 ${focusRing}`}
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {isRegister ? register : signIn}
+
+      {/* FORGOT PASSWORD */}
+      {showForgotPassword &&
+        modalShell(
+          () => setShowForgotPassword(false),
+          <KeyRound className="w-6 h-6 text-[#4338CA]" />,
+          'Reset password',
+          resetEmailSent ? (
+            <div className="text-center py-2">
+              <div className="mx-auto w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center mb-4">
+                <CheckCircle2 className="w-7 h-7 text-emerald-600" />
+              </div>
+              <h3 className="m-0 font-bricolage font-extrabold text-xl text-[#1E1B4B]">Check your email</h3>
+              <p className="mt-2 mb-0 text-sm text-[#5B6477] leading-relaxed">
+                If an account exists for <strong className="text-[#1E293B]">{resetEmail}</strong>, a password reset
+                link has been sent. Open it from the same device/browser to set a new password.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(false)}
+                className={`w-full h-[52px] mt-6 rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] transition-colors ${focusRing}`}
+              >
+                Back to sign in
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSendResetEmail} className="flex flex-col gap-5">
+              <p className="m-0 text-sm text-[#5B6477] leading-relaxed">
+                Enter your institutional email and we'll send you a link to reset your password.
+              </p>
+              <div className="flex flex-col gap-2">
+                <label htmlFor="reset-email" className="font-semibold text-sm">Institutional email</label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-[17px] w-[18px] h-[18px] text-[#6B7285] pointer-events-none" aria-hidden="true" />
+                  <input
+                    id="reset-email"
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="student@omsu.edu.ph"
+                    autoComplete="email"
+                    required
+                    className={`${inputClass} pl-[46px] pr-4`}
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={sendingReset}
+                className={`h-[52px] rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] flex items-center justify-center gap-2 transition-colors disabled:opacity-70 ${focusRing}`}
+              >
+                {sendingReset ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {sendingReset ? 'Sending...' : 'Send reset link'}
+              </button>
+            </form>
+          )
+        )}
+
+      {/* TERMS */}
+      {showTerms &&
+        modalShell(
+          () => setShowTerms(false),
+          <ShieldCheck className="w-6 h-6 text-[#4338CA]" />,
+          'Privacy and terms',
+          <>
+            <div className="flex flex-col gap-5 max-h-[55vh] overflow-y-auto pr-2">
+              {[
+                { title: 'Information accuracy', text: 'You certify that the information you provide during registration is true and accurate.' },
+                { title: 'Purpose of data collection', text: 'Student information may be used for account management, guidance program dissemination, survey administration, and aggregated system analytics.' },
+                { title: 'Analytics', text: 'Demographic information such as program, year level, age, gender, PWD status, and IP status may be used to generate aggregated awareness analytics.' },
+                { title: 'Confidentiality', text: 'Individual student information and survey responses should be handled confidentially and should not be unnecessarily exposed in public reports.' },
+                { title: 'Account security', text: 'Students are responsible for keeping their account credentials secure.' },
+              ].map((item, index) => (
+                <div key={item.title}>
+                  <p className="m-0 mb-1 font-bold text-sm text-[#4338CA]">
+                    {String(index + 1).padStart(2, '0')}. {item.title}
+                  </p>
+                  <p className="m-0 text-sm leading-relaxed text-[#5B6477]">{item.text}</p>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setAgreed(true);
+                setShowTerms(false);
+              }}
+              className={`w-full h-14 mt-7 rounded-[18px] bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors ${focusRing}`}
+            >
+              <Check className="w-5 h-5" /> I agree
+            </button>
+          </>,
+          'max-w-lg'
+        )}
+    </>
   );
 }
