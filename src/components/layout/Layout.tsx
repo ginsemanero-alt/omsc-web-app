@@ -96,8 +96,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         {children}
       </main>
 
-      {/* --- FOOTER --- */}
-      <Footer />
+      {/* --- FOOTER --- HomePage renders its own footer, same as its own
+          navbar above, so the shared one would appear twice there. */}
+      {!isHomePage && <Footer />}
     </div>
   );
 };
