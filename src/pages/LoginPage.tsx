@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import {
   ArrowLeft,
+  Home,
   BookOpen,
   CalendarDays,
   Check,
@@ -447,11 +448,37 @@ export default function LoginPage({
      PIECES
   ========================================================= */
 
-  const brand = (size: 'lg' | 'md' | 'sm') => (
+  // Explicit way back to the public homepage (the logo also links there,
+  // but that isn't obvious).
+  const homeButton = (compact = false) => (
     <button
       type="button"
       onClick={onBackToHome}
-      className={`flex items-center text-left rounded-2xl ${focusRing} ${
+      aria-label="Back to homepage"
+      className={`shrink-0 flex items-center justify-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white font-semibold transition-colors ${focusRing} ${
+        compact ? 'w-11 h-11 rounded-[14px]' : 'h-10 px-4 text-[13px]'
+      }`}
+    >
+      {compact ? <Home className="w-5 h-5" aria-hidden="true" /> : (
+        <>
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Home
+        </>
+      )}
+    </button>
+  );
+
+  const brand = (size: 'lg' | 'md' | 'sm') => (
+    <div className="flex items-center justify-between gap-3">
+      {brandMark(size)}
+      {homeButton(size === 'sm')}
+    </div>
+  );
+
+  const brandMark = (size: 'lg' | 'md' | 'sm') => (
+    <button
+      type="button"
+      onClick={onBackToHome}
+      className={`flex items-center text-left rounded-2xl min-w-0 ${focusRing} ${
         size === 'sm' ? 'gap-3' : 'gap-3.5'
       }`}
       aria-label="Guidance and Testing Center home"
@@ -1007,9 +1034,10 @@ export default function LoginPage({
             <ArrowLeft className="w-5 h-5" aria-hidden="true" />
           </button>
           <span className="font-bold text-base">Create your account</span>
-          <span className="ml-auto px-[11px] py-1.5 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-xs">
+          <span className="ml-auto px-[11px] py-1.5 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-xs whitespace-nowrap">
             Step {registerStep} of 3
           </span>
+          {homeButton(true)}
         </div>
         <div className="grid grid-cols-3 gap-1.5" aria-hidden="true">
           {([1, 2, 3] as RegisterStep[]).map((step) => (
