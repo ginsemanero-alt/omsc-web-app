@@ -48,6 +48,17 @@ function AppContent() {
     // Auth state itself now comes from the Supabase session (via useAuth).
     // localStorage keeps only display values.
     localStorage.setItem('userName', name);
+
+    // /login?redirect=/student/... (e.g. "View program" on the public
+    // Programs page) returns a student to where they were headed. Only
+    // in-app student paths are honored, so the parameter can't be used to
+    // send someone to another site.
+    const redirect = new URLSearchParams(window.location.search).get('redirect');
+    if (role === 'student' && redirect && redirect.startsWith('/student/') && !redirect.startsWith('//')) {
+      navigate(redirect);
+      return;
+    }
+
     navigate(`/${role}`);
   };
 
