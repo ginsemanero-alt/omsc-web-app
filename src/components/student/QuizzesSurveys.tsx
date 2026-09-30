@@ -348,6 +348,29 @@ export default function QuizzesSurveys() {
    * ACTIVE SURVEY
    * ---------------------------------------------------------
    */
+  // Knowledge assessments: survey id -> the student's latest pre-test and
+  // post-test result. A pre-test score stays hidden until the post-test
+  // for the same survey exists. (results is newest first.)
+  const attemptsBySurveyResult = useMemo(() => {
+    const map: Record<string, { pre?: SurveyResult; post?: SurveyResult }> = {};
+    for (const result of results) {
+      if (result.attempt_type !== 'pre' && result.attempt_type !== 'post') continue;
+      const entry = (map[String(result.survey_id)] ||= {});
+      if (!entry[result.attempt_type]) entry[result.attempt_type] = result;
+    }
+    return map;
+  }, [results]);
+
+  const preTestComparison = (surveyId: string | number) => {
+    const { pre, post } = attemptsBySurveyResult[String(surveyId)] || {};
+    if (!pre || !post || pre.score == null || post.score == null) return null;
+    const points = post.score - pre.score;
+    const preText = pre.total_scored ? `${pre.score}/${pre.total_scored}` : String(pre.score);
+    const postText = post.total_scored ? `${post.score}/${post.total_scored}` : String(post.score);
+    const change = `${points > 0 ? '+' : ''}${points} ${Math.abs(points) === 1 ? 'point' : 'points'}`;
+    return `Pre-test ${preText}, post-test ${postText}, ${change}`;
+  };
+
   const activeSurvey = useMemo(() => {
     if (activeSurveyId === null) return null;
 
@@ -506,36 +529,6 @@ export default function QuizzesSurveys() {
 
     setCurrentQuestionIndex((previous) => previous - 1);
     scrollToAssessmentTop();
-  };
-
-  /*
-   * ---------------------------------------------------------
-   * REVIEW ANSWERS
-   * ---------------------------------------------------------
-   */
-  const handleOpenReview = () => {
-    if (unansweredQuestions.length > 0) {
-      toast({
-        title: 'Incomplete Assessment',
-        description: `Please answer ${unansweredQuestions.length} unanswered question${
-          unansweredQuestions.length > 1 ? 's' : ''
-        } before reviewing your responses.`,
-        variant: 'destructive',
-      });
-
-      const firstUnansweredIndex = questions.findIndex(
-        (question) => !hasAnswer(question)
-      );
-
-      if (firstUnansweredIndex >= 0) {
-        setCurrentQuestionIndex(firstUnansweredIndex);
-        setShowReview(false);
-      }
-
-      return;
-    }
-
-    setShowReview(true);
   };
 
   /*
@@ -1059,7 +1052,16 @@ export default function QuizzesSurveys() {
                   </div>
                 </div>
 
-                {result.percentage !== null && result.percentage !== undefined ? (
+                {result.attempt_type === 'pre' && !attemptsBySurveyResult[String(result.survey_id)]?.post ? (
+                  // Pre-test without a post-test yet: no score, percentage,
+                  // or correct/incorrect detail.
+                  <div className="text-right shrink-0 max-w-[45%]">
+                    <p className="text-sm font-bold text-indigo-600 dark:text-indigo-300">Pre-test done</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Your score is shown after the post-test.
+                    </p>
+                  </div>
+                ) : result.percentage !== null && result.percentage !== undefined ? (
                   <div className="text-center shrink-0">
                     <p
                       className={`text-xl font-black ${
@@ -1071,6 +1073,11 @@ export default function QuizzesSurveys() {
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
                       {result.score}/{result.total_scored} Correct
                     </p>
+                    {result.attempt_type === 'post' && preTestComparison(result.survey_id) && (
+                      <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        {preTestComparison(result.survey_id)}
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-wider shrink-0">
@@ -1647,6 +1654,27 @@ export default function QuizzesSurveys() {
             ------------------------------------------- */}
             {scoreSummary && (
               <div className="max-w-3xl mx-auto">
+                {submittedAttempt === 'pre' ? (
+                // Pre-test: no score, percentage, or correct/incorrect
+                // detail until the post-test exists.
+                <div className="text-center max-w-xl mx-auto">
+                  <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 rounded-3xl flex items-center justify-center mb-6 bg-indigo-50 dark:bg-indigo-500/10">
+                    <CheckCircle2 className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-600" />
+                  </div>
+
+                  <h3 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">
+                    Pre-test done
+                  </h3>
+
+                  <p className="mt-2 text-base font-semibold text-slate-500 dark:text-slate-400">
+                    Submitted {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  </p>
+
+                  <p className="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Your score is shown after the post-test.
+                  </p>
+                </div>
+                ) : (
                 <div className="text-center max-w-xl mx-auto">
                   <div
                     className={`mx-auto w-16 h-16 sm:w-20 sm:h-20 rounded-3xl flex items-center justify-center mb-6 ${
@@ -1676,14 +1704,19 @@ export default function QuizzesSurveys() {
                     {scoreSummary.percentage}% Score
                   </p>
 
+                  {submittedAttempt === 'post' && activeSurvey && preTestComparison(activeSurvey.id) && (
+                    <p className="mt-2 text-sm sm:text-base font-semibold text-slate-600 dark:text-slate-300">
+                      {preTestComparison(activeSurvey.id)}
+                    </p>
+                  )}
+
                   <p className="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
-                    {submittedAttempt === 'pre'
-                      ? 'This was your Pre-Test. Correct answers are shown after your Post-Test.'
-                      : scoreSummary.missed.length === 0
-                        ? 'Perfect score! You answered every knowledge question correctly.'
-                        : "Here's what to review — each item below links to where you can learn more."}
+                    {scoreSummary.missed.length === 0
+                      ? 'Perfect score! You answered every knowledge question correctly.'
+                      : "Here's what to review — each item below links to where you can learn more."}
                   </p>
                 </div>
+                )}
 
                 {/* Pre-test: no answer key — point the student to the
                     materials, then back here for the post-test. */}

@@ -62,7 +62,7 @@ export default function StudentDashboard({ onLogout }: StudentDashboardProps) {
     // document.documentElement) keeps it from ever touching the admin
     // dashboard or public site, which have no dark: variants of their own.
     <div className={isDark ? 'dark' : ''}>
-      <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 antialiased selection:bg-indigo-500 selection:text-white flex flex-col font-sans transition-colors">
+      <div className="min-h-screen bg-[#EEF0FA] dark:bg-slate-950 antialiased selection:bg-indigo-500 selection:text-white flex flex-col font-sans transition-colors">
         <TopNavBar
           role="student"
           userName={userName}
@@ -74,7 +74,7 @@ export default function StudentDashboard({ onLogout }: StudentDashboardProps) {
           onToggleTheme={toggleTheme}
         />
 
-        <main className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 pt-6 md:pt-10 pb-[calc(84px+env(safe-area-inset-bottom,0px))] md:pb-10 mt-[72px] md:mt-[80px] flex-1 animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-hidden">
+        <main className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 pt-6 md:pt-10 pb-[calc(84px+env(safe-area-inset-bottom,0px))] md:pb-10 mt-[72px] md:mt-[80px] flex-1 animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-x-clip">
           <Routes>
             <Route path="/" element={<DashboardOverview />} />
             <Route path="/programs" element={<ProgramsActivities />} />
