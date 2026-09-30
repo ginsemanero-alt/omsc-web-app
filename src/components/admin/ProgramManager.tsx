@@ -65,6 +65,8 @@ export default function ProgramManagement() {
   // each can be removed or made the cover individually.
   const [coverPhotos, setCoverPhotos] = useState<CoverPhoto[]>([]);
   const [materialFile, setMaterialFile] = useState<File | null>(null);
+  // Existing handouts the admin marked for removal; deleted on save.
+  const [handoutsToRemove, setHandoutsToRemove] = useState<number[]>([]);
 
   const [startTime, setStartTime] = useState('08:00');
   const [endTime, setEndTime] = useState('17:00');
@@ -276,9 +278,55 @@ export default function ProgramManagement() {
       setEndTime('17:00');
     }
     setMaterialFile(null);
+    setHandoutsToRemove([]);
     setShowStudentPreview(false);
     resetEntryForm();
     setIsDialogOpen(true);
+  };
+
+  // Handouts of the program open in the dialog (certificate templates
+  // are stored the same way but aren't handouts).
+  const currentHandouts: any[] = editingId
+    ? (programs.find((p) => p.id === editingId)?.materials || []).filter(
+        (m: any) => !m.title?.startsWith('CERTIFICATE_TEMPLATE:')
+      )
+    : [];
+
+  // Deletes the marked handouts: rows first, then their files
+  // (best-effort — a storage hiccup only leaves an orphaned file, same as
+  // the Archive screen's permanent delete).
+  const removeMarkedHandouts = async (programId: number) => {
+    if (handoutsToRemove.length === 0) return;
+    const removed = currentHandouts.filter((m) => handoutsToRemove.includes(m.id));
+
+    const { error } = await supabase
+      .from('materials')
+      .delete()
+      .in('id', handoutsToRemove)
+      .eq('program_id', programId);
+    if (error) throw new Error(`Program saved, but removing handouts failed: ${error.message}`);
+
+    const byBucket = new Map<string, string[]>();
+    for (const mat of removed) {
+      const match = String(mat.file_url || '').match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+      if (!match) continue;
+      byBucket.set(match[1], [...(byBucket.get(match[1]) || []), decodeURIComponent(match[2])]);
+    }
+    for (const [bucket, paths] of byBucket) {
+      const { error: storageError } = await supabase.storage.from(bucket).remove(paths);
+      if (storageError) console.warn(`Handout file cleanup failed in ${bucket}:`, storageError.message);
+    }
+
+    logActivity({
+      actorEmail: user?.email,
+      actorName: userName,
+      action: 'update',
+      entityType: 'program',
+      entityId: programId,
+      entityLabel: formData.title,
+      details: `Removed handout${removed.length === 1 ? '' : 's'}: ${removed.map((m) => m.title.replace('HANDOUT: ', '')).join(', ')}`,
+    });
+    setHandoutsToRemove([]);
   };
 
   const handleSave = async () => {
@@ -385,6 +433,8 @@ export default function ProgramManagement() {
       } finally {
         if (isNewProgram) notifyStudents('program', payload.title, payload.content);
       }
+
+      if (currentProgramId) await removeMarkedHandouts(currentProgramId);
 
       if (materialFile && currentProgramId) {
         const matPath = `${currentProgramId}/handout_${Date.now()}_${materialFile.name}`;
@@ -1048,11 +1098,76 @@ export default function ProgramManagement() {
 
             <div className="space-y-1.5">
               <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Session Handouts File</Label>
-              <div onClick={() => materialRef.current?.click()} className="h-12 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center px-4 cursor-pointer border-none text-slate-600 text-xs">
+
+              {/* Handouts already on this program. Remove marks one; it is
+                  deleted (row and file) when the program is saved. */}
+              {currentHandouts.length > 0 && (
+                <div className="space-y-1.5">
+                  {currentHandouts.map((mat: any) => {
+                    const title = mat.title.replace('HANDOUT: ', '');
+                    const removing = handoutsToRemove.includes(mat.id);
+                    return (
+                      <div
+                        key={mat.id}
+                        className={`h-12 rounded-xl flex items-center gap-2 pl-4 pr-1.5 text-xs ${removing ? 'bg-rose-50' : 'bg-slate-50'}`}
+                      >
+                        <FileText className={`w-4 h-4 shrink-0 ${removing ? 'text-rose-300' : 'text-indigo-500'}`} />
+                        <span className={`truncate flex-1 font-bold ${removing ? 'line-through text-slate-400' : 'text-slate-600'}`}>{title}</span>
+                        {removing ? (
+                          <>
+                            <span className="text-[8px] font-black uppercase text-rose-500 tracking-wider shrink-0">Removed on save</span>
+                            <button
+                              type="button"
+                              onClick={() => setHandoutsToRemove((previous) => previous.filter((id) => id !== mat.id))}
+                              className="h-9 px-3 rounded-lg text-[9px] font-black uppercase tracking-wider text-slate-600 hover:bg-white shrink-0"
+                            >
+                              Undo
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setHandoutsToRemove((previous) => [...previous, mat.id])}
+                            className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 shrink-0 transition-colors"
+                            aria-label={`Remove handout ${title}`}
+                            title="Remove handout"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div onClick={() => materialRef.current?.click()} className="h-12 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center pl-4 pr-1.5 cursor-pointer border-none text-slate-600 text-xs">
                 <FileText className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
-                <span className="truncate flex-1 font-bold">{materialFile ? materialFile.name : 'Choose Handouts...'}</span>
+                <span className="truncate flex-1 font-bold">
+                  {materialFile ? materialFile.name : currentHandouts.length > 0 ? 'Add another handout...' : 'Choose Handouts...'}
+                </span>
+                {materialFile && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMaterialFile(null);
+                      if (materialRef.current) materialRef.current.value = '';
+                    }}
+                    className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 shrink-0 transition-colors"
+                    aria-label="Remove chosen handout file"
+                    title="Remove"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
                 <input type="file" ref={materialRef} className="hidden" accept=".pdf,.doc,.docx,image/*" onChange={(e) => setMaterialFile(e.target.files?.[0] || null)} />
               </div>
+              {handoutsToRemove.length > 0 && (
+                <p className="text-[9px] font-bold text-rose-500 ml-1">
+                  {handoutsToRemove.length} handout{handoutsToRemove.length === 1 ? '' : 's'} will be deleted when you save.
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">
