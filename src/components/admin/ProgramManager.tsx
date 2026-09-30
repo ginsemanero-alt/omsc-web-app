@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { supabase } from '../../lib/supabase';
 import { compressImageFile } from '../../lib/imageCompress';
 import { logActivity } from '../../lib/activityLog';
@@ -97,6 +97,11 @@ export default function ProgramManagement() {
   const [isSavingEntry, setIsSavingEntry] = useState(false);
   const [showStudentPreview, setShowStudentPreview] = useState(false);
   const entryFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Thumbnails for the photos picked in the entry form (not uploaded
+  // until Add/Update Entry), same idea as the cover photo grid.
+  const entryFilePreviews = useMemo(() => entryFiles.map((file) => URL.createObjectURL(file)), [entryFiles]);
+  useEffect(() => () => entryFilePreviews.forEach((url) => URL.revokeObjectURL(url)), [entryFilePreviews]);
 
   const isDateOccupied = programs.some(p =>
     p.date === formData.date &&
@@ -1092,17 +1097,86 @@ export default function ProgramManagement() {
                 <Input value={entryLabel} onChange={(e) => setEntryLabel(e.target.value)} placeholder='Label, e.g. "Week 1"' className="rounded-lg bg-slate-50 border-none h-10 font-bold px-3 text-xs" />
                 <Textarea value={entryDescription} onChange={(e) => setEntryDescription(e.target.value)} placeholder="Description (optional)" className="h-16 rounded-lg bg-slate-50 border-none p-3 text-xs resize-none" />
                 <Input value={entryCaption} onChange={(e) => setEntryCaption(e.target.value)} placeholder="Caption (optional)" className="rounded-lg bg-slate-50 border-none h-10 font-bold px-3 text-xs" />
-                <div onClick={() => entryFileInputRef.current?.click()} className="h-10 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center px-3 cursor-pointer text-slate-600 text-xs">
-                  <Camera className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
-                  <span className="truncate flex-1 font-bold">
-                    {entryFiles.length > 0
-                      ? `${entryFiles.length} photo(s) selected`
-                      : editingEntryId
-                        ? 'Add more photos...'
-                        : 'Choose photos...'}
-                  </span>
-                  <input type="file" ref={entryFileInputRef} className="hidden" accept="image/*" multiple onChange={(e) => setEntryFiles(Array.from(e.target.files || []))} />
-                </div>
+                {/* Photos: thumbnails like the cover grid. Picking more
+                    adds to the selection instead of replacing it. */}
+                <input
+                  type="file"
+                  ref={entryFileInputRef}
+                  className="hidden"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) setEntryFiles((previous) => [...previous, ...files]);
+                    e.target.value = '';
+                  }}
+                />
+                {(() => {
+                  const editingEntry = editingEntryId !== null ? entries.find((e) => e.id === editingEntryId) : null;
+                  const savedPhotos: string[] = editingEntry?.image_urls || [];
+
+                  if (savedPhotos.length === 0 && entryFiles.length === 0) {
+                    return (
+                      <div onClick={() => entryFileInputRef.current?.click()} className="h-10 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center px-3 cursor-pointer text-slate-600 text-xs">
+                        <Camera className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
+                        <span className="truncate flex-1 font-bold">{editingEntryId ? 'Add more photos...' : 'Choose photos...'}</span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-1.5">
+                      <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                        {savedPhotos.map((url, photoIndex) => (
+                          <div key={`saved-${url}-${photoIndex}`} className="relative aspect-square rounded-xl overflow-hidden bg-slate-100">
+                            <img src={url} className="w-full h-full object-cover" alt="" />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEntryPhoto(editingEntry, photoIndex)}
+                              className="absolute right-1 top-1 w-6 h-6 rounded-full bg-black/55 hover:bg-rose-600 text-white flex items-center justify-center transition-colors"
+                              aria-label={`Remove photo ${photoIndex + 1}`}
+                              title="Remove"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+
+                        {entryFilePreviews.map((url, fileIndex) => (
+                          <div key={url} className="relative aspect-square rounded-xl overflow-hidden bg-slate-100">
+                            <img src={url} className="w-full h-full object-cover" alt="" />
+                            <button
+                              type="button"
+                              onClick={() => setEntryFiles((previous) => previous.filter((_, i) => i !== fileIndex))}
+                              className="absolute right-1 top-1 w-6 h-6 rounded-full bg-black/55 hover:bg-rose-600 text-white flex items-center justify-center transition-colors"
+                              aria-label={`Remove new photo ${fileIndex + 1}`}
+                              title="Remove"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                            <span className="absolute left-1 bottom-1 px-1.5 py-0.5 rounded-md bg-amber-400 text-amber-950 text-[7px] font-black uppercase tracking-wider">
+                              New
+                            </span>
+                          </div>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={() => entryFileInputRef.current?.click()}
+                          className="aspect-square rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-slate-100 flex flex-col items-center justify-center text-slate-400 transition-colors"
+                        >
+                          <Plus className="w-5 h-5" />
+                          <span className="text-[8px] font-black uppercase tracking-widest mt-1">Add</span>
+                        </button>
+                      </div>
+                      {entryFiles.length > 0 && (
+                        <p className="text-[9px] font-bold text-slate-400 ml-1">
+                          New photos are added when you click {editingEntryId ? 'Update Entry' : 'Add Entry'}.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
                 <Button type="button" onClick={handleSaveEntry} disabled={isSavingEntry} variant="outline" className="w-full h-10 rounded-lg font-black uppercase text-[10px]">
                   {isSavingEntry ? (
                     <Loader2 className="animate-spin h-4 w-4 mx-auto" />
