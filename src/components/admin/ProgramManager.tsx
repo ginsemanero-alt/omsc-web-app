@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, lazy, Suspense, type DragEvent as ReactDragEvent } from 'react';
 import { supabase } from '../../lib/supabase';
 import { compressImageFile } from '../../lib/imageCompress';
 import { logActivity } from '../../lib/activityLog';
@@ -102,6 +102,59 @@ export default function ProgramManagement() {
   // until Add/Update Entry), same idea as the cover photo grid.
   const entryFilePreviews = useMemo(() => entryFiles.map((file) => URL.createObjectURL(file)), [entryFiles]);
   useEffect(() => () => entryFilePreviews.forEach((url) => URL.revokeObjectURL(url)), [entryFilePreviews]);
+
+  // Drag and drop for the cover photos and the entry photos: dropping
+  // image files on either area adds them, same as choosing them.
+  const [dragTarget, setDragTarget] = useState<'cover' | 'entry' | null>(null);
+
+  const addCoverFiles = (files: File[]) => {
+    if (files.length === 0) return;
+    setCoverPhotos((previous) => [...previous, ...files.map((file) => ({ url: URL.createObjectURL(file), file }))]);
+  };
+
+  const addEntryFiles = (files: File[]) => {
+    if (files.length > 0) setEntryFiles((previous) => [...previous, ...files]);
+  };
+
+  const dropZone = (target: 'cover' | 'entry', onFiles: (files: File[]) => void) => ({
+    onDragOver: (e: ReactDragEvent) => {
+      if (!e.dataTransfer.types.includes('Files')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      if (dragTarget !== target) setDragTarget(target);
+    },
+    onDragLeave: (e: ReactDragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragTarget(null);
+    },
+    onDrop: (e: ReactDragEvent) => {
+      e.preventDefault();
+      setDragTarget(null);
+      const images = Array.from(e.dataTransfer.files).filter((file) => file.type.startsWith('image/'));
+      if (images.length === 0) {
+        toast({ variant: "destructive", title: "Images Only", description: "Drop image files (JPG, PNG, WebP, GIF)." });
+        return;
+      }
+      onFiles(images);
+    },
+  });
+
+  // While the dialog is open, a file dropped anywhere outside the two
+  // drop areas must not make the browser open it (and lose the form).
+  useEffect(() => {
+    if (!isDialogOpen) return;
+    const block = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
+    };
+    const reset = () => setDragTarget(null);
+    window.addEventListener('dragover', block);
+    window.addEventListener('drop', block);
+    window.addEventListener('dragend', reset);
+    return () => {
+      window.removeEventListener('dragover', block);
+      window.removeEventListener('drop', block);
+      window.removeEventListener('dragend', reset);
+    };
+  }, [isDialogOpen]);
 
   const isDateOccupied = programs.some(p =>
     p.date === formData.date &&
@@ -836,21 +889,26 @@ export default function ProgramManagement() {
                 <div className="space-y-1.5">
                   <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Poster &amp; Photos</Label>
                   <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={(e) => {
-                    const files = Array.from(e.target.files || []);
-                    if (files.length > 0) {
-                      setCoverPhotos((previous) => [
-                        ...previous,
-                        ...files.map((file) => ({ url: URL.createObjectURL(file), file })),
-                      ]);
-                    }
+                    addCoverFiles(Array.from(e.target.files || []));
                     e.target.value = '';
                   }} />
 
+                  {/* Drop area: drag image files here to add them. */}
+                  <div
+                    {...dropZone('cover', addCoverFiles)}
+                    className={`relative rounded-xl md:rounded-2xl transition-shadow ${dragTarget === 'cover' ? 'ring-2 ring-indigo-400 ring-offset-2' : ''}`}
+                  >
+                  {dragTarget === 'cover' && (
+                    <div className="absolute inset-0 z-10 rounded-xl md:rounded-2xl bg-indigo-50/90 border-2 border-dashed border-indigo-400 flex items-center justify-center pointer-events-none">
+                      <span className="text-[9px] font-black uppercase text-indigo-600 tracking-widest">Drop photos here</span>
+                    </div>
+                  )}
                   {coverPhotos.length === 0 ? (
                     <div onClick={() => fileInputRef.current?.click()} className="aspect-video bg-slate-50 hover:bg-slate-100/70 rounded-xl md:rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden relative transition-colors">
                       <div className="text-center p-4">
                         <Camera className="mx-auto text-slate-300 mb-1 w-6 h-6"/>
                         <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest block">Upload Event Poster</span>
+                        <span className="text-[8px] font-bold text-slate-400 block mt-0.5">or drag photos here</span>
                       </div>
                     </div>
                   ) : (
@@ -906,9 +964,10 @@ export default function ProgramManagement() {
                       </button>
                     </div>
                   )}
+                  </div>
 
                   <p className="text-[9px] font-bold text-slate-400 ml-1 leading-relaxed">
-                    The first photo is the cover shown on cards; the rest are the gallery.
+                    The first photo is the cover shown on cards; the rest are the gallery. You can also drag photos in.
                     {' '}<Star className="inline w-2.5 h-2.5 -mt-0.5" /> makes a photo the cover. Changes apply when you save.
                   </p>
                 </div>
@@ -1106,11 +1165,20 @@ export default function ProgramManagement() {
                   accept="image/*"
                   multiple
                   onChange={(e) => {
-                    const files = Array.from(e.target.files || []);
-                    if (files.length > 0) setEntryFiles((previous) => [...previous, ...files]);
+                    addEntryFiles(Array.from(e.target.files || []));
                     e.target.value = '';
                   }}
                 />
+                {/* Drop area: drag image files here to add them. */}
+                <div
+                  {...dropZone('entry', addEntryFiles)}
+                  className={`relative rounded-xl transition-shadow ${dragTarget === 'entry' ? 'ring-2 ring-indigo-400 ring-offset-2' : ''}`}
+                >
+                {dragTarget === 'entry' && (
+                  <div className="absolute inset-0 z-10 min-h-10 rounded-xl bg-indigo-50/90 border-2 border-dashed border-indigo-400 flex items-center justify-center pointer-events-none">
+                    <span className="text-[9px] font-black uppercase text-indigo-600 tracking-widest">Drop photos here</span>
+                  </div>
+                )}
                 {(() => {
                   const editingEntry = editingEntryId !== null ? entries.find((e) => e.id === editingEntryId) : null;
                   const savedPhotos: string[] = editingEntry?.image_urls || [];
@@ -1119,7 +1187,10 @@ export default function ProgramManagement() {
                     return (
                       <div onClick={() => entryFileInputRef.current?.click()} className="h-10 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center px-3 cursor-pointer text-slate-600 text-xs">
                         <Camera className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
-                        <span className="truncate flex-1 font-bold">{editingEntryId ? 'Add more photos...' : 'Choose photos...'}</span>
+                        <span className="truncate flex-1 font-bold">
+                          {editingEntryId ? 'Add more photos...' : 'Choose photos...'}
+                          <span className="font-medium text-slate-400"> or drag them here</span>
+                        </span>
                       </div>
                     );
                   }
@@ -1177,6 +1248,7 @@ export default function ProgramManagement() {
                     </div>
                   );
                 })()}
+                </div>
                 <Button type="button" onClick={handleSaveEntry} disabled={isSavingEntry} variant="outline" className="w-full h-10 rounded-lg font-black uppercase text-[10px]">
                   {isSavingEntry ? (
                     <Loader2 className="animate-spin h-4 w-4 mx-auto" />
