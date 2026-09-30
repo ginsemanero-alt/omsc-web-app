@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import {
@@ -28,6 +28,10 @@ import { useToast } from '../hooks/use-toast';
 import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/activityLog';
 import { PROGRAMS_BY_CAMPUS } from '../lib/programs';
+import { motionDelay, prefersReducedMotion, replayAnimation } from '../lib/motion';
+
+// How long the sign in <-> register switch plays before the view changes.
+const VIEW_SWITCH_MS = 200;
 
 type UserRole = 'student' | 'admin';
 
@@ -127,6 +131,59 @@ export default function LoginPage({
   const [resetEmailSent, setResetEmailSent] = useState(false);
 
   const { toast } = useToast();
+
+  /* ---------------- Motion only (no effect on the form logic) ---------------- */
+
+  // Sign in <-> register switch: the current view fades out (and on sign
+  // in, the tab pill slides over) before handleToggleMode runs. Extra
+  // clicks during that time are ignored. ?mode=register opens register
+  // straight away, with the normal page entrance and no exit.
+  const [switchingOut, setSwitchingOut] = useState(false);
+  const [viewEntrance, setViewEntrance] = useState<'page' | 'switch'>('page');
+  const switchingRef = useRef(false);
+  const switchTimerRef = useRef<number | null>(null);
+  const focusHeadingAfterSwitchRef = useRef(false);
+
+  // Failed sign-in shakes the submit button (never with reduced motion —
+  // the shake class only animates without it).
+  const [signInShakes, setSignInShakes] = useState(0);
+  const signInButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Direction of the last registration step change, for the slide-in.
+  // Kept until the step changes again so re-renders don't flip it.
+  const stepMotionRef = useRef<{ step: RegisterStep; direction: 'next' | 'prev' | null }>({
+    step: registerStep,
+    direction: null,
+  });
+  if (stepMotionRef.current.step !== registerStep) {
+    stepMotionRef.current = {
+      step: registerStep,
+      direction: registerStep > stepMotionRef.current.step ? 'next' : 'prev',
+    };
+  }
+  const stepDirection = stepMotionRef.current.direction;
+
+  useEffect(() => {
+    if (signInShakes > 0) replayAnimation(signInButtonRef.current, 'motion-shake');
+  }, [signInShakes]);
+
+  // After a switch, keyboard and screen-reader users land on the new
+  // view's heading (whichever one is visible at this screen size).
+  useEffect(() => {
+    if (!focusHeadingAfterSwitchRef.current) return;
+    focusHeadingAfterSwitchRef.current = false;
+    const heading = Array.from(document.querySelectorAll<HTMLElement>('[data-view-heading]')).find(
+      (element) => element.getClientRects().length > 0
+    );
+    heading?.focus({ preventScroll: true });
+  }, [isRegister]);
+
+  useEffect(
+    () => () => {
+      if (switchTimerRef.current !== null) window.clearTimeout(switchTimerRef.current);
+    },
+    []
+  );
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -367,6 +424,7 @@ export default function LoginPage({
           onLogin(data.role, data.name);
         }
       } else {
+        if (!isRegister) setSignInShakes((count) => count + 1);
         toast({
           variant: 'destructive',
           title: 'REGISTRATION / LOGIN ERROR',
@@ -378,6 +436,7 @@ export default function LoginPage({
     } catch (error) {
       console.error(error);
 
+      if (!isRegister) setSignInShakes((count) => count + 1);
       toast({
         variant: 'destructive',
         title: 'SERVER ERROR',
@@ -399,6 +458,41 @@ export default function LoginPage({
       setConfirmPassword('');
     }
   };
+
+  // Every sign in <-> register link goes through here: play the switch,
+  // then run the unchanged handleToggleMode. With reduced motion it runs
+  // right away.
+  const switchMode = () => {
+    if (switchingRef.current) return;
+    switchingRef.current = true;
+
+    const finish = () => {
+      switchTimerRef.current = null;
+      focusHeadingAfterSwitchRef.current = true;
+      // A new view starts with the view fade only, not a step slide.
+      stepMotionRef.current = { step: 1, direction: null };
+      handleToggleMode();
+      setSwitchingOut(false);
+      setViewEntrance('switch');
+      switchingRef.current = false;
+    };
+
+    if (prefersReducedMotion()) {
+      finish();
+      return;
+    }
+
+    setSwitchingOut(true);
+    switchTimerRef.current = window.setTimeout(finish, VIEW_SWITCH_MS);
+  };
+
+  // Root class for whichever view is showing: exit, switch-in, or none
+  // (the first page load animates its panel and form card instead).
+  const viewMotionClass = switchingOut ? 'motion-view-exit' : viewEntrance === 'switch' ? 'motion-view-enter' : '';
+  const pageEntrance = viewEntrance === 'page';
+  const panelEntranceClass = pageEntrance ? 'motion-fade-in' : '';
+  const cardEntranceClass = pageEntrance ? 'motion-fade-up' : '';
+  const cardEntranceStyle = pageEntrance ? motionDelay(100) : undefined;
 
   const handleOpenForgotPassword = () => {
     setResetEmail(email.trim());
@@ -546,9 +640,9 @@ export default function LoginPage({
   ========================================================= */
 
   const signIn = (
-    <div className="min-h-screen w-full font-figtree text-[#1E293B] bg-[#1E1B4B] lg:bg-[#EEF0FA] flex flex-col lg:flex-row lg:p-6 lg:gap-6">
+    <div className={`min-h-screen w-full font-figtree text-[#1E293B] bg-[#1E1B4B] lg:bg-[#EEF0FA] flex flex-col lg:flex-row lg:p-6 lg:gap-6 ${viewMotionClass}`}>
       {/* DESKTOP PANEL */}
-      <aside className="hidden lg:flex lg:w-[46%] xl:w-[600px] shrink-0 flex-col justify-between rounded-[56px] bg-[#1E1B4B] text-white px-10 xl:px-[52px] py-12">
+      <aside className={`hidden lg:flex lg:w-[46%] xl:w-[600px] shrink-0 flex-col justify-between rounded-[56px] bg-[#1E1B4B] text-white px-10 xl:px-[52px] py-12 ${panelEntranceClass}`}>
         {brand('lg')}
 
         <div className="flex flex-col gap-[22px]">
@@ -590,42 +684,67 @@ export default function LoginPage({
       </aside>
 
       {/* MOBILE HEADER */}
-      <header className="lg:hidden px-6 pt-7 pb-[34px] text-white flex flex-col gap-[18px]">
+      <header className={`lg:hidden px-6 pt-7 pb-[34px] text-white flex flex-col gap-[18px] ${panelEntranceClass}`}>
         {brand('sm')}
         <span className="self-start px-3 py-1.5 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-xs">
           Student portal
         </span>
-        <h1 className="m-0 font-bricolage font-extrabold text-[34px] leading-[1.04] tracking-[-1px]">
+        <h1
+          data-view-heading
+          tabIndex={-1}
+          className="m-0 font-bricolage font-extrabold text-[34px] leading-[1.04] tracking-[-1px] focus:outline-none"
+        >
           Every guidance program, open to every student.
         </h1>
       </header>
 
       {/* FORM */}
-      <main className="flex-grow flex flex-col bg-white rounded-t-[40px] px-6 pt-[26px] pb-7 lg:bg-transparent lg:rounded-none lg:p-0 lg:items-center lg:justify-center">
+      <main
+        style={cardEntranceStyle}
+        className={`flex-grow flex flex-col bg-white rounded-t-[40px] px-6 pt-[26px] pb-7 lg:bg-transparent lg:rounded-none lg:p-0 lg:items-center lg:justify-center ${cardEntranceClass}`}
+      >
         <form
           onSubmit={handleSubmit}
           className="w-full max-w-md mx-auto flex flex-grow lg:flex-grow-0 flex-col gap-[22px] lg:gap-[26px] lg:w-[460px] lg:max-w-none lg:rounded-[40px] lg:bg-white lg:px-11 lg:pt-11 lg:pb-10 lg:shadow-[0_24px_60px_-24px_rgba(30,27,75,0.25)]"
         >
-          <div className="grid grid-cols-2 gap-1 p-[5px] rounded-full bg-[#F1F2F9]">
+          {/* The white pill is one element that slides to "Create account"
+              while the switch plays, instead of jumping. */}
+          <div className="relative grid grid-cols-2 gap-1 p-[5px] rounded-full bg-[#F1F2F9]">
+            <span
+              aria-hidden="true"
+              className={`absolute top-[5px] bottom-[5px] left-[5px] w-[calc(50%_-_7px)] rounded-full bg-white shadow-[0_2px_8px_rgba(30,27,75,0.12)] motion-slide-indicator ${
+                switchingOut ? 'translate-x-[calc(100%_+_4px)]' : 'translate-x-0'
+              }`}
+            />
             <button
               type="button"
               aria-pressed="true"
-              className={`h-11 rounded-full bg-white text-[#1E1B4B] font-bold text-[15px] shadow-[0_2px_8px_rgba(30,27,75,0.12)] ${focusRing}`}
+              className={`relative h-11 rounded-full text-[15px] transition-colors duration-150 ease-out ${focusRing} ${
+                switchingOut ? 'text-[#5B6477] font-semibold' : 'text-[#1E1B4B] font-bold'
+              }`}
             >
               Sign in
             </button>
             <button
               type="button"
               aria-pressed="false"
-              onClick={handleToggleMode}
-              className={`h-11 rounded-full text-[#5B6477] font-semibold text-[15px] hover:text-[#1E1B4B] transition-colors ${focusRing}`}
+              onClick={switchMode}
+              className={`relative h-11 rounded-full text-[15px] hover:text-[#1E1B4B] transition-colors duration-150 ease-out ${focusRing} ${
+                switchingOut ? 'text-[#1E1B4B] font-bold' : 'text-[#5B6477] font-semibold'
+              }`}
             >
               Create account
             </button>
           </div>
 
           <div className="hidden lg:flex flex-col gap-2">
-            <h2 className="m-0 font-bricolage font-extrabold text-4xl tracking-[-0.8px] text-[#1E1B4B]">Welcome back</h2>
+            <h2
+              data-view-heading
+              tabIndex={-1}
+              className="m-0 font-bricolage font-extrabold text-4xl tracking-[-0.8px] text-[#1E1B4B] focus:outline-none"
+            >
+              Welcome back
+            </h2>
             <p className="m-0 text-[15px] leading-[1.5] text-[#5B6477]">
               Sign in with your institutional email. Guidance staff use this sign-in too.
             </p>
@@ -669,9 +788,10 @@ export default function LoginPage({
           </div>
 
           <button
+            ref={signInButtonRef}
             type="submit"
             disabled={isLoading}
-            className={`h-14 rounded-[18px] bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors disabled:opacity-70 ${focusRing}`}
+            className={`h-14 rounded-[18px] bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors motion-press disabled:opacity-70 ${focusRing}`}
           >
             {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
             {isLoading ? 'Signing in...' : 'Sign in'}
@@ -681,7 +801,7 @@ export default function LoginPage({
             New student?{' '}
             <button
               type="button"
-              onClick={handleToggleMode}
+              onClick={switchMode}
               className={`font-bold text-[#4338CA] hover:text-[#312E81] hover:underline rounded ${focusRing}`}
             >
               Create your account
@@ -708,7 +828,7 @@ export default function LoginPage({
       type="button"
       aria-pressed={selected}
       onClick={onClick}
-      className={`h-12 rounded-[14px] border-[1.5px] text-sm lg:text-[15px] transition-colors ${focusRing} ${
+      className={`h-12 rounded-[14px] border-[1.5px] text-sm lg:text-[15px] motion-chip ${focusRing} ${
         selected
           ? 'border-[#4F46E5] bg-[#4F46E5] text-white font-bold'
           : 'border-[#DDE1EE] bg-white text-[#1E293B] font-semibold hover:border-[#A5B4FC]'
@@ -909,14 +1029,20 @@ export default function LoginPage({
           { valid: passwordChecks.lower, text: 'One lowercase letter' },
           { valid: passwordChecks.number, text: 'One number' },
         ].map(({ valid, text }) => (
-          <li key={text} className={`flex items-center gap-2 text-sm font-semibold ${valid ? 'text-emerald-600' : 'text-[#5B6477]'}`}>
-            {valid ? <CheckCircle2 className="w-[18px] h-[18px] shrink-0" /> : <Circle className="w-[18px] h-[18px] shrink-0 text-[#C0C5D6]" />}
+          <li key={text} className={`flex items-center gap-2 text-sm font-semibold transition-colors duration-150 ease-out ${valid ? 'text-emerald-600' : 'text-[#5B6477]'}`}>
+            {/* The check mounts when the rule is met, so it pops in. */}
+            {valid ? <CheckCircle2 className="w-[18px] h-[18px] shrink-0 motion-pop" /> : <Circle className="w-[18px] h-[18px] shrink-0 text-[#C0C5D6]" />}
             {text}
           </li>
         ))}
         {confirmPassword.length > 0 && (
-          <li className={`flex items-center gap-2 text-sm font-semibold sm:col-span-2 ${password === confirmPassword ? 'text-emerald-600' : 'text-rose-600'}`}>
-            {password === confirmPassword ? <CheckCircle2 className="w-[18px] h-[18px] shrink-0" /> : <X className="w-[18px] h-[18px] shrink-0" />}
+          // Keyed by match state so the message (the one inline error on
+          // this form) fades in fresh each time it changes.
+          <li
+            key={password === confirmPassword ? 'match' : 'mismatch'}
+            className={`flex items-center gap-2 text-sm font-semibold sm:col-span-2 motion-fade-in ${password === confirmPassword ? 'text-emerald-600' : 'text-rose-600'}`}
+          >
+            {password === confirmPassword ? <CheckCircle2 className="w-[18px] h-[18px] shrink-0 motion-pop" /> : <X className="w-[18px] h-[18px] shrink-0" />}
             {password === confirmPassword ? 'Passwords match' : 'Passwords do not match'}
           </li>
         )}
@@ -957,9 +1083,9 @@ export default function LoginPage({
   );
 
   const register = (
-    <div className="min-h-screen w-full font-figtree text-[#1E293B] bg-white lg:bg-[#EEF0FA] flex flex-col lg:flex-row lg:p-6 lg:gap-6">
+    <div className={`min-h-screen w-full font-figtree text-[#1E293B] bg-white lg:bg-[#EEF0FA] flex flex-col lg:flex-row lg:p-6 lg:gap-6 ${viewMotionClass}`}>
       {/* DESKTOP PANEL */}
-      <aside className="hidden lg:flex w-[400px] xl:w-[440px] shrink-0 flex-col justify-between rounded-[56px] bg-[#1E1B4B] text-white p-11">
+      <aside className={`hidden lg:flex w-[400px] xl:w-[440px] shrink-0 flex-col justify-between rounded-[56px] bg-[#1E1B4B] text-white p-11 ${panelEntranceClass}`}>
         <div className="flex flex-col gap-10">
           {brand('md')}
 
@@ -979,25 +1105,29 @@ export default function LoginPage({
               return (
                 <li key={step} aria-current={current ? 'step' : undefined} className="flex gap-4">
                   <div className="flex flex-col items-center">
-                    {done ? (
-                      <span className="w-9 h-9 rounded-full bg-[#34D399] flex items-center justify-center">
-                        <Check className="w-[18px] h-[18px] text-[#064E3B]" strokeWidth={3} aria-hidden="true" />
-                      </span>
-                    ) : current ? (
-                      <span className="w-9 h-9 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-base flex items-center justify-center">
-                        {step}
-                      </span>
-                    ) : (
-                      <span className="w-9 h-9 rounded-full border-2 border-white/35 text-[#C7C9F2] font-bold text-base flex items-center justify-center">
-                        {step}
-                      </span>
-                    )}
+                    {/* One dot element for every state, so its fill
+                        changes smoothly; the check pops in when done. */}
+                    <span
+                      className={`w-9 h-9 rounded-full border-2 text-base flex items-center justify-center transition-colors duration-300 ease-out ${
+                        done
+                          ? 'bg-[#34D399] border-[#34D399]'
+                          : current
+                            ? 'bg-[#FBBF24] border-[#FBBF24] text-[#1E1B4B] font-extrabold'
+                            : 'bg-transparent border-white/35 text-[#C7C9F2] font-bold'
+                      }`}
+                    >
+                      {done ? (
+                        <Check className="w-[18px] h-[18px] text-[#064E3B] motion-pop" strokeWidth={3} aria-hidden="true" />
+                      ) : (
+                        step
+                      )}
+                    </span>
                     {step < 3 && (
-                      <span className={`w-0.5 h-[34px] ${done ? 'bg-[#34D399]' : 'bg-white/[0.18]'}`} />
+                      <span className={`w-0.5 h-[34px] transition-colors duration-300 ease-out ${done ? 'bg-[#34D399]' : 'bg-white/[0.18]'}`} />
                     )}
                   </div>
                   <div className="flex flex-col gap-0.5 pt-1.5">
-                    <span className={`font-bold text-base ${!done && !current ? 'text-[#C7C9F2]' : ''}`}>
+                    <span className={`font-bold text-base transition-colors duration-300 ease-out ${!done && !current ? 'text-[#C7C9F2]' : ''}`}>
                       {REGISTER_STEPS[step].title}
                     </span>
                     <span className={`text-sm ${current ? 'text-[#FBBF24]' : 'text-[#A5A8E0]'}`}>
@@ -1014,7 +1144,7 @@ export default function LoginPage({
           Already have an account?{' '}
           <button
             type="button"
-            onClick={handleToggleMode}
+            onClick={switchMode}
             className={`font-bold text-white underline rounded ${focusRing}`}
           >
             Sign in
@@ -1023,11 +1153,11 @@ export default function LoginPage({
       </aside>
 
       {/* MOBILE HEADER */}
-      <header className="lg:hidden px-5 pt-[18px] pb-5 bg-[#1E1B4B] text-white rounded-b-[32px] flex flex-col gap-4">
+      <header className={`lg:hidden px-5 pt-[18px] pb-5 bg-[#1E1B4B] text-white rounded-b-[32px] flex flex-col gap-4 ${panelEntranceClass}`}>
         <div className="flex items-center gap-2.5">
           <button
             type="button"
-            onClick={registerStep === 1 ? handleToggleMode : goToPreviousStep}
+            onClick={registerStep === 1 ? switchMode : goToPreviousStep}
             aria-label={registerStep === 1 ? 'Back to sign in' : 'Previous step'}
             className={`w-11 h-11 rounded-[14px] bg-white/10 flex items-center justify-center ${focusRing}`}
           >
@@ -1043,31 +1173,50 @@ export default function LoginPage({
           {([1, 2, 3] as RegisterStep[]).map((step) => (
             <span
               key={step}
-              className={`h-1.5 rounded-full ${
+              className={`h-1.5 rounded-full transition-colors duration-300 ease-out ${
                 step < registerStep ? 'bg-[#34D399]' : step === registerStep ? 'bg-[#FBBF24]' : 'bg-white/20'
               }`}
             />
           ))}
         </div>
         <div className="flex flex-col gap-1">
-          <h1 className="m-0 font-bricolage font-extrabold text-[28px] tracking-[-0.6px]">{stepInfo.title}</h1>
+          <h1
+            data-view-heading
+            tabIndex={-1}
+            className="m-0 font-bricolage font-extrabold text-[28px] tracking-[-0.6px] focus:outline-none"
+          >
+            {stepInfo.title}
+          </h1>
           <p className="m-0 text-sm leading-[1.5] text-[#C7C9F2]">{stepInfo.description}</p>
         </div>
       </header>
 
       {/* FORM */}
-      <main className="flex-grow flex flex-col px-5 py-6 lg:rounded-[40px] lg:bg-white lg:px-[52px] lg:py-11">
+      <main
+        style={cardEntranceStyle}
+        className={`flex-grow flex flex-col px-5 py-6 lg:rounded-[40px] lg:bg-white lg:px-[52px] lg:py-11 ${cardEntranceClass}`}
+      >
+        {/* Remounts per step; Continue slides the new step in from the
+            right, Back from the left. */}
         <form
           key={registerStep}
           onSubmit={handleSubmit}
           noValidate
-          className="w-full max-w-xl lg:max-w-none mx-auto flex flex-grow flex-col gap-[22px] lg:gap-[26px] animate-in fade-in duration-200"
+          className={`w-full max-w-xl lg:max-w-none mx-auto flex flex-grow flex-col gap-[22px] lg:gap-[26px] ${
+            stepDirection === 'next' ? 'motion-step-next' : stepDirection === 'prev' ? 'motion-step-prev' : ''
+          }`}
         >
           <div className="hidden lg:flex flex-col gap-2.5">
             <span className="self-start px-3 py-1.5 rounded-full bg-[#EEF0FA] text-[#4338CA] font-bold text-[13px]">
               Step {registerStep} of 3
             </span>
-            <h2 className="m-0 font-bricolage font-extrabold text-[34px] tracking-[-0.8px] text-[#1E1B4B]">{stepInfo.title}</h2>
+            <h2
+              data-view-heading
+              tabIndex={-1}
+              className="m-0 font-bricolage font-extrabold text-[34px] tracking-[-0.8px] text-[#1E1B4B] focus:outline-none"
+            >
+              {stepInfo.title}
+            </h2>
             <p className="m-0 text-[15px] leading-[1.5] text-[#5B6477]">{stepInfo.description}</p>
           </div>
 
@@ -1080,7 +1229,7 @@ export default function LoginPage({
               <button
                 type="button"
                 onClick={goToPreviousStep}
-                className={`hidden lg:flex h-[52px] px-[22px] rounded-2xl border-[1.5px] border-[#DDE1EE] bg-white text-[#1E293B] font-bold text-[15px] items-center gap-2 hover:border-[#A5B4FC] transition-colors ${focusRing}`}
+                className={`hidden lg:flex h-[52px] px-[22px] rounded-2xl border-[1.5px] border-[#DDE1EE] bg-white text-[#1E293B] font-bold text-[15px] items-center gap-2 hover:border-[#A5B4FC] transition-colors motion-press ${focusRing}`}
               >
                 <ArrowLeft className="w-[18px] h-[18px]" aria-hidden="true" /> Back
               </button>
@@ -1089,7 +1238,7 @@ export default function LoginPage({
                 Already registered?{' '}
                 <button
                   type="button"
-                  onClick={handleToggleMode}
+                  onClick={switchMode}
                   className={`font-bold text-[#4338CA] hover:text-[#312E81] hover:underline rounded ${focusRing}`}
                 >
                   Sign in
@@ -1100,10 +1249,25 @@ export default function LoginPage({
             <button
               type="submit"
               disabled={isLoading}
-              className={`h-14 lg:h-[52px] w-full lg:w-auto px-[34px] rounded-[18px] lg:rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors disabled:opacity-70 ${focusRing}`}
+              className={`h-14 lg:h-[52px] w-full lg:w-auto px-[34px] rounded-[18px] lg:rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors motion-press disabled:opacity-70 ${focusRing}`}
             >
-              {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
-              {registerStep < 3 ? 'Continue' : isLoading ? 'Creating account...' : 'Create account'}
+              {registerStep < 3 ? (
+                'Continue'
+              ) : (
+                // On the last step the button reserves room for its
+                // longest label ("Creating account..." with the spinner),
+                // so it keeps the same width while loading.
+                <span className="grid">
+                  <span className="col-start-1 row-start-1 flex items-center justify-center gap-2">
+                    {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
+                    {isLoading ? 'Creating account...' : 'Create account'}
+                  </span>
+                  <span aria-hidden="true" className="col-start-1 row-start-1 invisible flex items-center justify-center gap-2">
+                    <Loader2 className="w-5 h-5" />
+                    Creating account...
+                  </span>
+                </span>
+              )}
             </button>
           </div>
 
@@ -1112,7 +1276,7 @@ export default function LoginPage({
               Already have an account?{' '}
               <button
                 type="button"
-                onClick={handleToggleMode}
+                onClick={switchMode}
                 className={`font-bold text-[#4338CA] hover:text-[#312E81] hover:underline rounded ${focusRing}`}
               >
                 Sign in
@@ -1130,12 +1294,12 @@ export default function LoginPage({
 
   const modalShell = (onClose: () => void, icon: ReactNode, title: string, children: ReactNode, maxWidth = 'max-w-md') => (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 font-figtree text-[#1E293B]">
-      <div className="absolute inset-0 bg-[#1E1B4B]/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose} />
+      <div className="absolute inset-0 bg-[#1E1B4B]/60 backdrop-blur-sm motion-dialog-backdrop" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`relative z-10 w-full ${maxWidth} bg-white rounded-[40px] shadow-[0_24px_60px_-24px_rgba(30,27,75,0.45)] p-7 sm:p-10 animate-in fade-in zoom-in-95 duration-200`}
+        className={`relative z-10 w-full ${maxWidth} bg-white rounded-[40px] shadow-[0_24px_60px_-24px_rgba(30,27,75,0.45)] p-7 sm:p-10 motion-dialog`}
       >
         <div className="flex items-start justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
@@ -1182,7 +1346,7 @@ export default function LoginPage({
               <button
                 type="button"
                 onClick={() => setShowForgotPassword(false)}
-                className={`w-full h-[52px] mt-6 rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] transition-colors ${focusRing}`}
+                className={`w-full h-[52px] mt-6 rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] transition-colors motion-press ${focusRing}`}
               >
                 Back to sign in
               </button>
@@ -1211,7 +1375,7 @@ export default function LoginPage({
               <button
                 type="submit"
                 disabled={sendingReset}
-                className={`h-[52px] rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] flex items-center justify-center gap-2 transition-colors disabled:opacity-70 ${focusRing}`}
+                className={`h-[52px] rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] flex items-center justify-center gap-2 transition-colors motion-press disabled:opacity-70 ${focusRing}`}
               >
                 {sendingReset ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 {sendingReset ? 'Sending...' : 'Send reset link'}
@@ -1249,7 +1413,7 @@ export default function LoginPage({
                 setAgreed(true);
                 setShowTerms(false);
               }}
-              className={`w-full h-14 mt-7 rounded-[18px] bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors ${focusRing}`}
+              className={`w-full h-14 mt-7 rounded-[18px] bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors motion-press ${focusRing}`}
             >
               <Check className="w-5 h-5" /> I agree
             </button>

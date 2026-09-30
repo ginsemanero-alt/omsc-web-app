@@ -1,0 +1,223 @@
+/*
+ * Shared motion for the public pages (Home, Login/Register, navbar).
+ * Pair with src/lib/motion.ts (scroll-reveal hook and helpers).
+ *
+ * Rules:
+ * - Only transform and opacity move. Color and shadow fades are not
+ *   movement, so they stay on with reduced motion.
+ * - Everything that moves lives inside
+ *   @media (prefers-reduced-motion: no-preference). With reduced motion,
+ *   content is simply there: nothing is hidden, nothing slides.
+ * - Entrances use fill-mode "backwards": the start state holds during the
+ *   delay, and once finished the element returns to its normal styles, so
+ *   hover transforms still work afterwards.
+ *
+ * Loaded after index.css (see main.tsx) so these transitions win over
+ * Tailwind's transition-* utilities on the same element.
+ */
+
+:root {
+  --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes motion-fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes motion-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes motion-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes motion-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes motion-dialog-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes motion-pop {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes motion-slide-from-right {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes motion-slide-from-left {
+  from { opacity: 0; transform: translateX(-24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes motion-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+/* ---------- Always on: color and shadow fades ---------- */
+
+.motion-press {
+  transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out;
+}
+
+.motion-chip {
+  transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out;
+}
+
+/* Hover card: the shadow is a pseudo-element whose opacity fades, so the
+   shadow itself never animates. isolation keeps the z-index:-1 layer
+   inside the card instead of behind the page background. */
+.motion-card {
+  position: relative;
+  isolation: isolate;
+}
+
+.motion-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  box-shadow: 0 20px 40px -20px rgba(30, 27, 75, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease-out;
+}
+
+@media (hover: hover) {
+  .motion-card:hover::after {
+    opacity: 1;
+  }
+}
+
+/* ---------- Movement: only without reduced motion ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Entrances (play once, on mount). --motion-delay staggers them. */
+  .motion-fade-up {
+    animation: motion-fade-up 500ms var(--motion-ease) var(--motion-delay, 0ms) backwards;
+  }
+
+  .motion-fade-in {
+    animation: motion-fade-in 400ms var(--motion-ease) var(--motion-delay, 0ms) backwards;
+  }
+
+  .motion-scale-in {
+    animation: motion-scale-in 500ms var(--motion-ease) var(--motion-delay, 0ms) backwards;
+  }
+
+  .motion-pop {
+    animation: motion-pop 250ms var(--motion-ease) backwards;
+  }
+
+  /* View switches (sign in <-> register). */
+  .motion-view-enter {
+    animation: motion-fade-in 200ms var(--motion-ease) backwards;
+  }
+
+  .motion-view-exit {
+    animation: motion-fade-out 200ms ease-out forwards;
+  }
+
+  /* Registration steps. */
+  .motion-step-next {
+    animation: motion-slide-from-right 300ms var(--motion-ease) backwards;
+  }
+
+  .motion-step-prev {
+    animation: motion-slide-from-left 300ms var(--motion-ease) backwards;
+  }
+
+  /* Modals. */
+  .motion-dialog-backdrop {
+    animation: motion-fade-in 200ms ease-out backwards;
+  }
+
+  .motion-dialog {
+    animation: motion-dialog-in 200ms var(--motion-ease) backwards;
+  }
+
+  /* Failed sign-in. Re-triggered from JS (see LoginPage). */
+  .motion-shake {
+    animation: motion-shake 250ms ease-out;
+  }
+
+  /* Scroll reveal (see useRevealGroup in src/lib/motion.ts). Hidden items
+     keep their space: opacity and translate only. */
+  [data-reveal-item]:not([data-revealed]) {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  [data-reveal-item][data-revealed] {
+    animation: motion-fade-up 500ms var(--motion-ease) var(--motion-delay, 0ms) backwards;
+  }
+
+  /* Buttons: slight lift on hover, press to 0.98. */
+  .motion-press {
+    transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out,
+      transform 150ms ease-out;
+  }
+
+  @media (hover: hover) {
+    .motion-press:hover {
+      transform: translateY(-1px);
+    }
+  }
+
+  .motion-press:active {
+    transform: scale(0.98);
+  }
+
+  .motion-press:disabled {
+    transform: none;
+  }
+
+  /* A moving indicator (the sign in / create account tab pill). */
+  .motion-slide-indicator {
+    transition: transform 200ms var(--motion-ease);
+  }
+
+  /* Chips: press to 0.97. */
+  .motion-chip {
+    transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out,
+      transform 150ms ease-out;
+  }
+
+  .motion-chip:active {
+    transform: scale(0.97);
+  }
+
+  /* Cards: lift 4px on hover (desktop), poster scales inside its frame. */
+  .motion-card {
+    transition: transform 200ms ease-out;
+  }
+
+  .motion-card-img {
+    transition: transform 300ms ease-out;
+  }
+
+  @media (hover: hover) {
+    .motion-card:hover {
+      transform: translateY(-4px);
+    }
+
+    .motion-card:hover .motion-card-img {
+      transform: scale(1.03);
+    }
+  }
+}

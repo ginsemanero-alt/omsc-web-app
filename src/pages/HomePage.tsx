@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { formatProgramDate } from "../lib/formatProgramDate";
 import { getEffectiveProgramStatus } from "../lib/programStatus";
+import { motionDelay, useRevealGroup } from "../lib/motion";
 import { ArrowRight, Calendar, Info, MapPin } from "lucide-react";
 import { SYSTEM_TITLE } from "../components/layout/SiteFooter";
 
@@ -51,9 +52,27 @@ function statusLabel(status: string): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
+// The hero entrance plays once per page load, not every time the student
+// comes back to Home within the app.
+let heroEntrancePlayed = false;
+
 const HomePage = ({ onNavigate }: HomePageProps) => {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [playEntrance] = useState(() => !heroEntrancePlayed);
+
+  useEffect(() => {
+    heroEntrancePlayed = true;
+  }, []);
+
+  // Entrance class plus its stagger, or nothing on a return visit.
+  const entrance = (className: string, delayMs = 0) =>
+    playEntrance ? { className, style: motionDelay(delayMs) } : { className: "", style: undefined };
+
+  const stepsRef = useRevealGroup<HTMLOListElement>(80);
+  const programsRef = useRevealGroup<HTMLDivElement>(80, [isLoading, programs.length]);
+  const servicesRef = useRevealGroup<HTMLUListElement>(60);
+  const closingRef = useRevealGroup<HTMLElement>();
 
   const handleNavigation = (page: NavTarget) => {
     onNavigate(page);
@@ -85,30 +104,42 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
   const heroPrograms = programs.slice(0, 3);
 
   // One poster in the hero, linking to the Programs page (there is no
-  // per-program page). No image: a #2B2F55 block with the title.
-  const heroPoster = (program: Program, className: string) => (
-    <a
-      key={program.id}
-      href="/programs"
-      onClick={(event) => {
-        event.preventDefault();
-        handleNavigation("Programs");
-      }}
-      className={`block overflow-hidden bg-[#2B2F55] ${focusRing} ${className}`}
-    >
-      {program.image_url ? (
-        <img
-          src={program.image_url}
-          alt={`Poster of ${program.title.trim()}`}
-          className="w-full h-full object-cover"
-        />
-      ) : (
-        <span className="w-full h-full flex items-end p-5 font-bold text-base leading-[1.3] text-white">
-          {program.title.trim()}
-        </span>
-      )}
-    </a>
-  );
+  // per-program page). No image: a #2B2F55 block with the title. The
+  // posters arrive after the fetch, so their entrance plays when they
+  // first appear.
+  const heroPoster = (program: Program, className: string, delayMs = 0) => {
+    const motion = entrance("motion-scale-in", delayMs);
+    return (
+      <a
+        key={program.id}
+        href="/programs"
+        onClick={(event) => {
+          event.preventDefault();
+          handleNavigation("Programs");
+        }}
+        style={motion.style}
+        className={`block overflow-hidden bg-[#2B2F55] ${motion.className} ${focusRing} ${className}`}
+      >
+        {program.image_url ? (
+          <img
+            src={program.image_url}
+            alt={`Poster of ${program.title.trim()}`}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <span className="w-full h-full flex items-end p-5 font-bold text-base leading-[1.3] text-white">
+            {program.title.trim()}
+          </span>
+        )}
+      </a>
+    );
+  };
+
+  const pill = entrance("motion-fade-up", 0);
+  const headline = entrance("motion-fade-up", 80);
+  const supporting = entrance("motion-fade-up", 160);
+  const buttons = entrance("motion-fade-up", 240);
+  const fullTitle = entrance("motion-fade-up", 320);
 
   return (
     <div id="top" className="w-full font-figtree text-[#1E293B]">
@@ -118,28 +149,40 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
           <div className="relative overflow-hidden rounded-[40px] lg:rounded-[3.5rem] bg-[#1E1B4B] text-white">
             <div className="relative flex flex-col lg:flex-row lg:items-center gap-12 px-[22px] pt-9 pb-7 sm:px-10 lg:pl-[72px] lg:pr-16 lg:py-[60px] lg:min-h-[700px]">
               <div className="flex flex-col gap-[18px] lg:gap-[26px] lg:w-[48%] xl:w-[660px] lg:shrink-0">
-                <span className="self-start px-3 py-1.5 lg:px-[15px] lg:py-2 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-xs lg:text-sm">
+                <span
+                  style={pill.style}
+                  className={`self-start px-3 py-1.5 lg:px-[15px] lg:py-2 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-xs lg:text-sm ${pill.className}`}
+                >
                   For OMSU higher education students
                 </span>
-                <h1 className="m-0 font-bricolage font-extrabold text-[40px] sm:text-[56px] lg:text-[60px] xl:text-[72px] leading-[1.02] tracking-[-0.02em]">
+                <h1
+                  style={headline.style}
+                  className={`m-0 font-bricolage font-extrabold text-[40px] sm:text-[56px] lg:text-[60px] xl:text-[72px] leading-[1.02] tracking-[-0.02em] ${headline.className}`}
+                >
                   Every guidance program, open to every student.
                 </h1>
-                <p className="m-0 text-base lg:text-[19px] leading-[1.55] text-[#D4D6F5] max-w-[560px]">
+                <p
+                  style={supporting.style}
+                  className={`m-0 text-base lg:text-[19px] leading-[1.55] text-[#D4D6F5] max-w-[560px] ${supporting.className}`}
+                >
                   See what the Guidance and Testing Center's programs covered, read their materials, and check how
                   much you have learned with a short pre- and post-test.
                 </p>
-                <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2.5 lg:gap-3 mt-1 lg:mt-1.5">
+                <div
+                  style={buttons.style}
+                  className={`flex flex-col sm:flex-row sm:flex-wrap gap-2.5 lg:gap-3 mt-1 lg:mt-1.5 ${buttons.className}`}
+                >
                   <button
                     type="button"
                     onClick={() => handleNavigation("Programs")}
-                    className={`h-[54px] lg:h-[58px] px-7 rounded-[18px] whitespace-nowrap bg-[#FBBF24] hover:bg-[#F59E0B] text-[#1E1B4B] font-extrabold text-base transition-colors ${focusRing}`}
+                    className={`h-[54px] lg:h-[58px] px-7 rounded-[18px] whitespace-nowrap bg-[#FBBF24] hover:bg-[#F59E0B] text-[#1E1B4B] font-extrabold text-base transition-colors motion-press ${focusRing}`}
                   >
                     Browse programs
                   </button>
                   <button
                     type="button"
                     onClick={goToRegister}
-                    className={`h-[54px] lg:h-[58px] px-[26px] rounded-[18px] whitespace-nowrap border-2 border-white/60 hover:bg-white/10 text-white font-bold text-base transition-colors ${focusRing}`}
+                    className={`h-[54px] lg:h-[58px] px-[26px] rounded-[18px] whitespace-nowrap border-2 border-white/60 hover:bg-white/10 text-white font-bold text-base transition-colors motion-press ${focusRing}`}
                   >
                     Create student account
                   </button>
@@ -152,13 +195,17 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
                   heroPrograms[0] && heroPoster(heroPrograms[0], "lg:hidden h-[220px] rounded-[1.75rem]")
                 )}
 
-                <p className="m-0 mt-1 lg:mt-2 text-xs lg:text-[13px] leading-[1.5] text-[#B9BCEB] max-w-[560px]">
+                <p
+                  style={fullTitle.style}
+                  className={`m-0 mt-1 lg:mt-2 text-xs lg:text-[13px] leading-[1.5] text-[#B9BCEB] max-w-[560px] ${fullTitle.className}`}
+                >
                   {SYSTEM_TITLE}
                 </p>
               </div>
 
               {/* Desktop: poster collage of the 3 newest programs — the
-                  newest across the top, the next two side by side. */}
+                  newest across the top, the next two side by side. The big
+                  one scales in first, the small ones follow 120ms apart. */}
               {isLoading ? (
                 <div className="hidden lg:grid flex-grow min-w-0 grid-cols-2 grid-rows-[300px_262px] gap-4" aria-hidden="true">
                   <div className="col-span-2 rounded-[2.25rem] bg-[#2B2F55] animate-pulse" />
@@ -174,8 +221,12 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
                   {heroPoster(heroPrograms[0], "col-span-2 rounded-[2.25rem]")}
                   {heroPrograms
                     .slice(1)
-                    .map((program) =>
-                      heroPoster(program, `rounded-[1.75rem] ${heroPrograms.length === 2 ? "col-span-2" : ""}`)
+                    .map((program, index) =>
+                      heroPoster(
+                        program,
+                        `rounded-[1.75rem] ${heroPrograms.length === 2 ? "col-span-2" : ""}`,
+                        120 * (index + 1)
+                      )
                     )}
                 </div>
               )}
@@ -193,12 +244,13 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
               Every program follows the same four steps, so you always know what comes next.
             </p>
           </div>
-          <ol className="m-0 p-0 list-none grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-5">
+          <ol ref={stepsRef} className="m-0 p-0 list-none grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-5">
             {STEPS.map((step, index) => {
               const last = index === STEPS.length - 1;
               return (
                 <li
                   key={step.title}
+                  data-reveal-item
                   className="flex lg:flex-col items-start gap-4 lg:gap-3.5 p-5 lg:px-7 lg:py-[30px] rounded-[26px] lg:rounded-[32px] bg-white lg:min-h-[250px]"
                 >
                   <span
@@ -233,7 +285,7 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 lg:gap-5">
+          <div ref={programsRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 lg:gap-5">
             {isLoading ? (
               [1, 2, 3, 4].map((n) => (
                 <div key={n} className="rounded-[28px] lg:rounded-[32px] bg-white overflow-hidden">
@@ -256,15 +308,19 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
                   <button
                     key={program.id}
                     type="button"
+                    data-reveal-item
                     onClick={() => handleNavigation("Programs")}
-                    className={`group text-left rounded-[28px] lg:rounded-[32px] bg-white overflow-hidden flex flex-col hover:shadow-[0_20px_40px_-20px_rgba(30,27,75,0.35)] hover:-translate-y-1 transition-all ${focusRing}`}
+                    className={`group motion-card text-left rounded-[28px] lg:rounded-[32px] bg-white flex flex-col ${focusRing}`}
                   >
-                    <div className="relative h-[170px] lg:h-[200px] w-full bg-[#1E1B4B]">
+                    {/* The frame clips the poster (rounded top), so the
+                        hover zoom stays inside it and the card itself can
+                        cast its hover shadow. */}
+                    <div className="relative h-[170px] lg:h-[200px] w-full bg-[#1E1B4B] overflow-hidden rounded-t-[28px] lg:rounded-t-[32px]">
                       {program.image_url && (
                         <img
                           src={program.image_url}
                           alt={`${program.title} poster`}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover motion-card-img"
                           loading="lazy"
                           decoding="async"
                         />
@@ -320,11 +376,12 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
             </div>
           </div>
 
-          <ul className="m-0 p-0 list-none grid grid-cols-2 lg:grid-cols-3 gap-2.5 lg:gap-4">
+          <ul ref={servicesRef} className="m-0 p-0 list-none grid grid-cols-2 lg:grid-cols-3 gap-2.5 lg:gap-4">
             {SERVICES.map((service) => (
               <li
                 key={service.name}
-                className="flex flex-col gap-2 lg:gap-2.5 p-4 lg:px-6 lg:py-[26px] rounded-[22px] lg:rounded-[28px] bg-white"
+                data-reveal-item
+                className="motion-card flex flex-col gap-2 lg:gap-2.5 p-4 lg:px-6 lg:py-[26px] rounded-[22px] lg:rounded-[28px] bg-white"
               >
                 <span className={`w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-full ${service.dot}`} aria-hidden="true" />
                 <h3 className="m-0 lg:mt-1 font-bold text-[15px] lg:text-lg leading-[1.3] text-[#1E1B4B]">{service.name}</h3>
@@ -343,8 +400,11 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
         </section>
 
         {/* ================= CLOSING PANEL ================= */}
-        <section className="px-3 pt-16 lg:px-6 lg:pt-[104px]">
-          <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3.5 lg:gap-12 px-[22px] py-8 sm:px-10 lg:p-[72px] rounded-[40px] lg:rounded-[3.5rem] bg-[#1E1B4B] text-white">
+        <section ref={closingRef} className="px-3 pt-16 lg:px-6 lg:pt-[104px]">
+          <div
+            data-reveal-item
+            className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3.5 lg:gap-12 px-[22px] py-8 sm:px-10 lg:p-[72px] rounded-[40px] lg:rounded-[3.5rem] bg-[#1E1B4B] text-white"
+          >
             <div className="flex flex-col gap-3.5 max-w-[700px]">
               <h2 className="m-0 font-bricolage font-extrabold text-[32px] leading-[1.04] tracking-[-1px] lg:text-[52px] lg:leading-[1.02] lg:tracking-[-1.6px]">
                 Missed a program? You can still see what it covered.
@@ -357,14 +417,14 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
               <button
                 type="button"
                 onClick={goToRegister}
-                className={`h-[54px] lg:h-[58px] px-[30px] rounded-[18px] bg-[#FBBF24] hover:bg-[#F59E0B] text-[#1E1B4B] font-extrabold text-base transition-colors ${focusRing}`}
+                className={`h-[54px] lg:h-[58px] px-[30px] rounded-[18px] bg-[#FBBF24] hover:bg-[#F59E0B] text-[#1E1B4B] font-extrabold text-base transition-colors motion-press ${focusRing}`}
               >
                 Create student account
               </button>
               <button
                 type="button"
                 onClick={() => (window.location.href = "/login")}
-                className={`h-[54px] lg:h-[58px] px-[30px] rounded-[18px] border-2 border-white/50 hover:bg-white/10 text-white font-bold text-base transition-colors ${focusRing}`}
+                className={`h-[54px] lg:h-[58px] px-[30px] rounded-[18px] border-2 border-white/50 hover:bg-white/10 text-white font-bold text-base transition-colors motion-press ${focusRing}`}
               >
                 Sign in
               </button>

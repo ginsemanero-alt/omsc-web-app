@@ -65,7 +65,7 @@ export default function SiteHeader() {
                 to={to}
                 onClick={scrollToTop}
                 aria-current={active ? "page" : undefined}
-                className={`h-11 px-3 xl:px-4 rounded-full flex items-center whitespace-nowrap text-[15px] transition-colors ${focusRing} ${
+                className={`h-11 px-3 xl:px-4 rounded-full flex items-center whitespace-nowrap text-[15px] transition-colors duration-150 ease-out ${focusRing} ${
                   active ? "bg-white text-[#1E1B4B] font-bold" : "text-[#334155] font-semibold hover:bg-white/60"
                 }`}
               >
@@ -79,14 +79,14 @@ export default function SiteHeader() {
           <button
             type="button"
             onClick={() => goTo("/login")}
-            className={`hidden sm:flex h-[46px] px-4 xl:px-5 rounded-2xl items-center whitespace-nowrap text-[15px] font-bold text-[#1E1B4B] hover:bg-white/60 transition-colors ${focusRing}`}
+            className={`hidden sm:flex h-[46px] px-4 xl:px-5 rounded-2xl items-center whitespace-nowrap text-[15px] font-bold text-[#1E1B4B] hover:bg-white/60 transition-colors motion-press ${focusRing}`}
           >
             Sign in
           </button>
           <button
             type="button"
             onClick={() => goTo("/login?mode=register")}
-            className={`hidden sm:flex h-[46px] px-4 xl:px-[22px] rounded-2xl items-center whitespace-nowrap text-[15px] font-bold bg-[#4F46E5] hover:bg-[#4338CA] text-white transition-colors ${focusRing}`}
+            className={`hidden sm:flex h-[46px] px-4 xl:px-[22px] rounded-2xl items-center whitespace-nowrap text-[15px] font-bold bg-[#4F46E5] hover:bg-[#4338CA] text-white transition-colors motion-press ${focusRing}`}
           >
             Create account
           </button>
@@ -107,7 +107,7 @@ export default function SiteHeader() {
       {isMenuOpen && (
         <div
           id="site-mobile-menu"
-          className="lg:hidden absolute top-[72px] left-3 right-3 bg-white rounded-[28px] p-3 shadow-[0_24px_60px_-24px_rgba(30,27,75,0.45)] flex flex-col gap-1 animate-in fade-in slide-in-from-top-2 duration-200"
+          className="lg:hidden absolute top-[72px] left-3 right-3 bg-white rounded-[28px] p-3 shadow-[0_24px_60px_-24px_rgba(30,27,75,0.45)] flex flex-col gap-1 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 motion-safe:duration-200"
         >
           {PUBLIC_NAV_LINKS.map(({ label, to, icon: Icon }) => {
             const active = isActive(to);
@@ -120,7 +120,7 @@ export default function SiteHeader() {
                   scrollToTop();
                 }}
                 aria-current={active ? "page" : undefined}
-                className={`h-12 px-4 rounded-2xl flex items-center gap-3 text-left text-base transition-colors ${focusRing} ${
+                className={`h-12 px-4 rounded-2xl flex items-center gap-3 text-left text-base transition-colors duration-150 ease-out ${focusRing} ${
                   active ? "bg-[#EEF0FA] text-[#1E1B4B] font-bold" : "text-[#334155] font-semibold hover:bg-[#F5F6FB]"
                 }`}
               >
