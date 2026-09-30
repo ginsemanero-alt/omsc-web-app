@@ -1150,3 +1150,164 @@ DROP FUNCTION IF EXISTS submit_assessment(uuid, jsonb);
 DROP FUNCTION IF EXISTS student_list_surveys();
 DROP FUNCTION IF EXISTS strip_answer_key(jsonb);
 DROP FUNCTION IF EXISTS current_user_row_id();
+
+-- =========================================================
+-- PHASE 27: parallel forms for knowledge assessments
+-- =========================================================
+-- A knowledge assessment can have a second, parallel form: Form A
+-- (questions_data) is the pre-test, Form B (questions_data_post) is the
+-- post-test. Each Form B item carries pairs_with = the id of the Form A
+-- item it parallels (same point measured, its own text, options, and
+-- correct_option). Scoring, attempt_type, and Learning Gain are
+-- unchanged: each attempt is scored against the form it was taken on.
+-- NULL or an empty array means the post-test reuses Form A, so every
+-- existing single-form assessment keeps working as before.
+
+ALTER TABLE surveys ADD COLUMN IF NOT EXISTS questions_data_post jsonb;
+
+-- True when Form B is empty, or when both forms have the same number of
+-- items, every Form B item pairs with an existing Form A item, and every
+-- Form A item has exactly one pair. Same rule as formPairingProblem() in
+-- SurveyBuilder.tsx.
+CREATE OR REPLACE FUNCTION survey_forms_are_paired(form_a jsonb, form_b jsonb)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT
+    form_b IS NULL
+    OR jsonb_typeof(form_b) <> 'array'
+    OR jsonb_array_length(form_b) = 0
+    OR (
+      jsonb_typeof(form_a) = 'array'
+      AND jsonb_array_length(form_a) = jsonb_array_length(form_b)
+      AND NOT EXISTS (
+        SELECT 1 FROM jsonb_array_elements(form_b) AS b(item)
+        WHERE NOT EXISTS (
+          SELECT 1 FROM jsonb_array_elements(form_a) AS a(item)
+          WHERE a.item ->> 'id' = b.item ->> 'pairs_with'
+        )
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM jsonb_array_elements(form_a) AS a(item)
+        WHERE (
+          SELECT count(*) FROM jsonb_array_elements(form_b) AS b(item)
+          WHERE b.item ->> 'pairs_with' = a.item ->> 'id'
+        ) <> 1
+      )
+    )
+$$;
+
+-- A published (active) knowledge assessment must have paired forms.
+-- Drafts and closed assessments can be mid-edit.
+ALTER TABLE surveys DROP CONSTRAINT IF EXISTS surveys_post_form_paired;
+ALTER TABLE surveys ADD CONSTRAINT surveys_post_form_paired
+  CHECK (
+    status IS DISTINCT FROM 'active'
+    OR type IS DISTINCT FROM 'knowledge'
+    OR survey_forms_are_paired(questions_data, questions_data_post)
+  );
+
+-- ---------------------------------------------------------
+-- ROLLBACK of PHASE 27 (run only to undo it). Dropping the column
+-- deletes every Form B that has been written.
+-- ---------------------------------------------------------
+-- ALTER TABLE surveys DROP CONSTRAINT IF EXISTS surveys_post_form_paired;
+-- DROP FUNCTION IF EXISTS survey_forms_are_paired(jsonb, jsonb);
+-- ALTER TABLE surveys DROP COLUMN IF EXISTS questions_data_post;
+
+-- =========================================================
+-- PHASE 28: three knowledge assessments with parallel forms
+-- =========================================================
+-- Requires PHASE 27 (questions_data_post). Adds, as DRAFTS:
+--   "Safe Spaces in Digital Places: Knowledge Check",
+--   "Labor Education for Graduating Students: Knowledge Check", and
+--   "Guardians of Dignity: Knowledge Check".
+-- Form A (questions_data) is the pre-test and Form B
+-- (questions_data_post) the post-test, 10 items each; Form B item N has
+-- pairs_with = the id of Form A item N. Questions use the Assessment
+-- Builder's shape (options are strings, correct_option is the option
+-- text). Every item gets related_program_id = its program;
+-- related_material_id is left empty. surveys.program_id is set too.
+--
+-- Safe to re-run: an assessment whose title already exists is skipped.
+-- All or nothing: if a program title matches zero or several programs,
+-- or a program already has a (non-archived) knowledge assessment, the
+-- whole block stops with an error and nothing is inserted.
+DO $phase28$
+DECLARE
+  spec record;
+  v_count integer;
+  v_program_id bigint;
+  v_program_title text;
+  v_service text;
+  v_title text;
+  v_existing text;
+BEGIN
+  FOR spec IN
+    SELECT * FROM (VALUES
+      ('Safe Spaces in Digital Places', 'Safe Spaces in Digital Places: Knowledge Check',
+       $a1$[{"id":"safe-spaces-a1","text":"Which of the following is not one of the four forms of bullying named in the law?","type":"mcq","options":["Physical","Verbal and slanderous","Cyberbullying","Financial"],"required":true,"correct_option":"Financial","related_material_id":null},{"id":"safe-spaces-a2","text":"According to the law, what is cyberbullying?","type":"mcq","options":["Teasing someone on social media","Any bullying done through technology or other electronic means","Hacking someone's account","Spreading fake news"],"required":true,"correct_option":"Any bullying done through technology or other electronic means","related_material_id":null},{"id":"safe-spaces-a3","text":"Excluding, intimidating, or humiliating someone is an example of which form of bullying?","type":"mcq","options":["Physical","Psychological or emotional","Verbal","Cyberbullying"],"required":true,"correct_option":"Psychological or emotional","related_material_id":null},{"id":"safe-spaces-a4","text":"Making negative comments about a person's looks, clothes, or body is an example of:","type":"mcq","options":["Physical bullying","Verbal and slanderous bullying","Conflict","Doxxing"],"required":true,"correct_option":"Verbal and slanderous bullying","related_material_id":null},{"id":"safe-spaces-a5","text":"Must an act be both severe and repeated to count as bullying?","type":"mcq","options":["Yes, it must be both","No, it may be severe or repeated","Only repeated acts count","Only severe acts count"],"required":true,"correct_option":"No, it may be severe or repeated","related_material_id":null},{"id":"safe-spaces-a6","text":"A disagreement between people who can respond to each other on relatively equal terms is called:","type":"mcq","options":["Bullying","Conflict","Harassment","Cyberbullying"],"required":true,"correct_option":"Conflict","related_material_id":null},{"id":"safe-spaces-a7","text":"Which of the following may be a sign that someone is being bullied?","type":"mcq","options":["Joining more clubs","Withdrawing from friends and online spaces","Getting higher grades","Posting online more often"],"required":true,"correct_option":"Withdrawing from friends and online spaces","related_material_id":null},{"id":"safe-spaces-a8","text":"A classmate posts another student's home address and phone number to shame them. What is this?","type":"mcq","options":["Just a joke","Freedom of expression","Doxxing, which may violate the Data Privacy Act","Allowed, because social media is public"],"required":true,"correct_option":"Doxxing, which may violate the Data Privacy Act","related_material_id":null},{"id":"safe-spaces-a9","text":"Where can a campus-related privacy violation be reported?","type":"mcq","options":["Only at the barangay","The National Privacy Commission or the University Data Protection Officer","On social media","Only to a teacher"],"required":true,"correct_option":"The National Privacy Commission or the University Data Protection Officer","related_material_id":null},{"id":"safe-spaces-a10","text":"In a group chat, classmates pile on a student with insults and reaction emojis. What is the best thing to do?","type":"mcq","options":["React too, so you are not targeted next","Leave the chat and forget about it","Don't join in, speak up, and report it to the guidance office","Screenshot it and post it in another chat"],"required":true,"correct_option":"Don't join in, speak up, and report it to the guidance office","related_material_id":null}]$a1$::jsonb,
+       $b1$[{"id":"safe-spaces-b1","text":"The law identifies four forms of bullying. Which of these is not one of them?","type":"mcq","options":["Psychological or emotional","Cyberbullying","Economic","Physical"],"required":true,"correct_option":"Economic","related_material_id":null,"pairs_with":"safe-spaces-a1"},{"id":"safe-spaces-b2","text":"Under the law, bullying is considered cyberbullying when it is:","type":"mcq","options":["Done by a stranger","About something a person posted online","Carried out through technology or any electronic means","Reported to the police"],"required":true,"correct_option":"Carried out through technology or any electronic means","related_material_id":null,"pairs_with":"safe-spaces-a2"},{"id":"safe-spaces-b3","text":"A student is deliberately left out of group activities and intimidated into staying away. This is an example of:","type":"mcq","options":["Psychological or emotional bullying","Physical bullying","Cyberbullying","Conflict"],"required":true,"correct_option":"Psychological or emotional bullying","related_material_id":null,"pairs_with":"safe-spaces-a3"},{"id":"safe-spaces-b4","text":"Calling a classmate insulting names because of their body is an example of:","type":"mcq","options":["Physical bullying","Psychological bullying","Verbal and slanderous bullying","Doxxing"],"required":true,"correct_option":"Verbal and slanderous bullying","related_material_id":null,"pairs_with":"safe-spaces-a4"},{"id":"safe-spaces-b5","text":"A harmful act happens only once, but it is severe. Can it still count as bullying under RA 10627?","type":"mcq","options":["No, it must happen more than once","Yes, because the law covers acts that are severe or repeated","Only if it happened online","Only if it was reported"],"required":true,"correct_option":"Yes, because the law covers acts that are severe or repeated","related_material_id":null,"pairs_with":"safe-spaces-a5"},{"id":"safe-spaces-b6","text":"Two classmates argue about how to divide their group work, and both can speak up equally. This is best described as:","type":"mcq","options":["Cyberbullying","Bullying","Conflict","Harassment"],"required":true,"correct_option":"Conflict","related_material_id":null,"pairs_with":"safe-spaces-a6"},{"id":"safe-spaces-b7","text":"Which change in a student may signal that they are being targeted?","type":"mcq","options":["A sudden drop in attendance or grades","Making more friends","Being more active in class","Starting a new hobby"],"required":true,"correct_option":"A sudden drop in attendance or grades","related_material_id":null,"pairs_with":"safe-spaces-a7"},{"id":"safe-spaces-b8","text":"Sharing a person's private photos or records online without consent to embarrass them may be:","type":"mcq","options":["Allowed if it is posted on a public page","A violation of the Data Privacy Act","Protected as free speech","Only a matter of school rules"],"required":true,"correct_option":"A violation of the Data Privacy Act","related_material_id":null,"pairs_with":"safe-spaces-a8"},{"id":"safe-spaces-b9","text":"Within the university, who handles concerns about a student's personal data being exposed?","type":"mcq","options":["The Office of the Registrar","The University Data Protection Officer","The campus library","The accounting office"],"required":true,"correct_option":"The University Data Protection Officer","related_material_id":null,"pairs_with":"safe-spaces-a9"},{"id":"safe-spaces-b10","text":"Someone shares embarrassing screenshots of a classmate in a group chat, and others start laughing. What should a responsible bystander do?","type":"mcq","options":["Add a laughing reaction","Refuse to join in, say it is not okay, and report it to the guidance office","Forward the screenshots to friends","Ignore it, since it is not about you"],"required":true,"correct_option":"Refuse to join in, say it is not okay, and report it to the guidance office","related_material_id":null,"pairs_with":"safe-spaces-a10"}]$b1$::jsonb),
+      ('Labor Education for Graduating Students', 'Labor Education for Graduating Students: Knowledge Check',
+       $a2$[{"id":"labor-education-a1","text":"How many hours make up a normal workday?","type":"mcq","options":["6","8","10","12"],"required":true,"correct_option":"8","related_material_id":null},{"id":"labor-education-a2","text":"How long may probationary employment last?","type":"mcq","options":["3 months","6 months","1 year","2 years"],"required":true,"correct_option":"6 months","related_material_id":null},{"id":"labor-education-a3","text":"When must the 13th month pay be given?","type":"mcq","options":["January","June","Not later than December 24","Any time the employer chooses"],"required":true,"correct_option":"Not later than December 24","related_material_id":null},{"id":"labor-education-a4","text":"How many days of service incentive leave does an employee get after one year of service?","type":"mcq","options":["3","5","7","10"],"required":true,"correct_option":"5","related_material_id":null},{"id":"labor-education-a5","text":"What is the minimum additional pay for overtime on an ordinary working day?","type":"mcq","options":["10%","25%","50%","100%"],"required":true,"correct_option":"25%","related_material_id":null},{"id":"labor-education-a6","text":"Night shift differential applies to work done between:","type":"mcq","options":["6 PM and 12 AM","10 PM and 6 AM","12 AM and 8 AM","Any hour at night"],"required":true,"correct_option":"10 PM and 6 AM","related_material_id":null},{"id":"labor-education-a7","text":"What is illegal recruitment?","type":"mcq","options":["Applying for jobs online","Recruiting workers for jobs abroad without a license","Declining a job offer","Changing jobs"],"required":true,"correct_option":"Recruiting workers for jobs abroad without a license","related_material_id":null},{"id":"labor-education-a8","text":"Which of these is a warning sign of illegal recruitment?","type":"mcq","options":["The agency has an office","Asking for fees before there is a job offer","There is a written contract","The agency is licensed by the DMW"],"required":true,"correct_option":"Asking for fees before there is a job offer","related_material_id":null},{"id":"labor-education-a9","text":"Where should you check whether a recruitment agency is licensed?","type":"mcq","options":["At the barangay","With the DMW","On the agency's Facebook page","With a friend"],"required":true,"correct_option":"With the DMW","related_material_id":null},{"id":"labor-education-a10","text":"Who should attend the Pre-Employment Orientation Seminar (PEOS)?","type":"mcq","options":["All employees","First-time applicants planning to work abroad","Retirees","Students only"],"required":true,"correct_option":"First-time applicants planning to work abroad","related_material_id":null}]$a2$::jsonb,
+       $b2$[{"id":"labor-education-b1","text":"Under the Labor Code, normal hours of work should not exceed how many hours a day?","type":"mcq","options":["10","12","8","6"],"required":true,"correct_option":"8","related_material_id":null,"pairs_with":"labor-education-a1"},{"id":"labor-education-b2","text":"An employee is hired on probation. The probationary period generally should not go beyond:","type":"mcq","options":["1 year","3 months","6 months","2 years"],"required":true,"correct_option":"6 months","related_material_id":null,"pairs_with":"labor-education-a2"},{"id":"labor-education-b3","text":"The 13th month pay must be paid on or before:","type":"mcq","options":["December 24","December 31","January 15","June 12"],"required":true,"correct_option":"December 24","related_material_id":null,"pairs_with":"labor-education-a3"},{"id":"labor-education-b4","text":"After one year of service, an employee is entitled to a paid service incentive leave of:","type":"mcq","options":["5 days","7 days","10 days","15 days"],"required":true,"correct_option":"5 days","related_material_id":null,"pairs_with":"labor-education-a4"},{"id":"labor-education-b5","text":"An employee works beyond 8 hours on an ordinary working day. The extra hours must be paid at least:","type":"mcq","options":["The regular hourly rate","The regular hourly rate plus 25%","The regular hourly rate plus 50%","Double the regular hourly rate"],"required":true,"correct_option":"The regular hourly rate plus 25%","related_material_id":null,"pairs_with":"labor-education-a5"},{"id":"labor-education-b6","text":"Night shift differential applies to work performed between:","type":"mcq","options":["6 PM and 12 AM","10 PM and 6 AM","12 AM and 8 AM","8 PM and 4 AM"],"required":true,"correct_option":"10 PM and 6 AM","related_material_id":null,"pairs_with":"labor-education-a6"},{"id":"labor-education-b7","text":"A person offers jobs abroad and collects applicants but has no license from the DMW. This is:","type":"mcq","options":["Direct hiring","Illegal recruitment","A job fair","Legal, as long as no fees are charged"],"required":true,"correct_option":"Illegal recruitment","related_material_id":null,"pairs_with":"labor-education-a7"},{"id":"labor-education-b8","text":"Which offer should make you suspect illegal recruitment?","type":"mcq","options":["The agency shows its DMW license","You are given a written contract","You are told to leave on a tourist visa to work abroad","The agency has a physical office"],"required":true,"correct_option":"You are told to leave on a tourist visa to work abroad","related_material_id":null,"pairs_with":"labor-education-a8"},{"id":"labor-education-b9","text":"Before applying through a recruitment agency, you should first:","type":"mcq","options":["Pay a reservation fee","Confirm its license with the DMW","Ask for opinions online","Check how many followers its page has"],"required":true,"correct_option":"Confirm its license with the DMW","related_material_id":null,"pairs_with":"labor-education-a9"},{"id":"labor-education-b10","text":"The Pre-Employment Orientation Seminar (PEOS) is mainly for:","type":"mcq","options":["Employers","People applying to work abroad for the first time","Returning overseas workers only","Government employees"],"required":true,"correct_option":"People applying to work abroad for the first time","related_material_id":null,"pairs_with":"labor-education-a10"}]$b2$::jsonb),
+      ('Guardians of Dignity', 'Guardians of Dignity: Knowledge Check',
+       $a3$[{"id":"guardians-of-dignity-a1","text":"Which law prohibits hazing in college organizations?","type":"mcq","options":["RA 11313","RA 11053","RA 10627","RA 10175"],"required":true,"correct_option":"RA 11053","related_material_id":null},{"id":"guardians-of-dignity-a2","text":"Which of the following counts as hazing?","type":"mcq","options":["Learning the organization's history during orientation","Joining the organization's community outreach","Causing physical or psychological suffering as a condition for membership","Paying a membership fee"],"required":true,"correct_option":"Causing physical or psychological suffering as a condition for membership","related_material_id":null},{"id":"guardians-of-dignity-a3","text":"A fraternity is not recognized by the school. Is it covered by the Anti-Hazing Act?","type":"mcq","options":["No, only school-recognized groups are covered","Yes, all organizations are covered","Only if the initiation is held on campus","Only if a parent files a complaint"],"required":true,"correct_option":"Yes, all organizations are covered","related_material_id":null},{"id":"guardians-of-dignity-a4","text":"How many days before an initiation rite must a written application be submitted to the school?","type":"mcq","options":["3 days","5 days","7 days","30 days"],"required":true,"correct_option":"7 days","related_material_id":null},{"id":"guardians-of-dignity-a5","text":"How long may an initiation rite last at most?","type":"mcq","options":["1 day","3 days","7 days","No limit"],"required":true,"correct_option":"3 days","related_material_id":null},{"id":"guardians-of-dignity-a6","text":"How many school representatives must be present during an initiation rite?","type":"mcq","options":["One","Two","Three","None"],"required":true,"correct_option":"Two","related_material_id":null},{"id":"guardians-of-dignity-a7","text":"A neophyte agrees to be paddled. What is the legal status of this act?","type":"mcq","options":["Legal, because the person agreed","Legal if there is a signed waiver","Still hazing, because consent is not a defense","Legal if no injury results"],"required":true,"correct_option":"Still hazing, because consent is not a defense","related_material_id":null},{"id":"guardians-of-dignity-a8","text":"You watch a hazing and do nothing. What is your legal position?","type":"mcq","options":["No liability, since you did not hurt anyone","You may be treated as a participant unless you tried to stop it or promptly reported it","You are only a witness","Only the organization's officers are liable"],"required":true,"correct_option":"You may be treated as a participant unless you tried to stop it or promptly reported it","related_material_id":null},{"id":"guardians-of-dignity-a9","text":"You are invited to an initiation that involves paddling. What should you do?","type":"mcq","options":["Join so you are accepted","Attend but only watch","Decline and report it to the Office of Student Affairs or the Guidance Office","Keep it secret to protect the organization"],"required":true,"correct_option":"Decline and report it to the Office of Student Affairs or the Guidance Office","related_material_id":null},{"id":"guardians-of-dignity-a10","text":"What is the penalty when hazing results in death?","type":"mcq","options":["Community service","Suspension from school","Reclusion perpetua and a fine of ₱3 million","A fine of ₱10,000"],"required":true,"correct_option":"Reclusion perpetua and a fine of ₱3 million","related_material_id":null}]$a3$::jsonb,
+       $b3$[{"id":"guardians-of-dignity-b1","text":"Republic Act No. 11053 is also known as the:","type":"mcq","options":["Safe Spaces Act","Anti-Hazing Act of 2018","Anti-Bullying Act of 2013","Cybercrime Prevention Act"],"required":true,"correct_option":"Anti-Hazing Act of 2018","related_material_id":null,"pairs_with":"guardians-of-dignity-a1"},{"id":"guardians-of-dignity-b2","text":"Under the Anti-Hazing Act, hazing refers to:","type":"mcq","options":["Any orientation activity for new members","Any act that causes physical or psychological suffering to a recruit or member as part of an initiation or membership requirement","The collection of membership dues","Required community service"],"required":true,"correct_option":"Any act that causes physical or psychological suffering to a recruit or member as part of an initiation or membership requirement","related_material_id":null,"pairs_with":"guardians-of-dignity-a2"},{"id":"guardians-of-dignity-b3","text":"Does the law also cover community-based organizations that have no connection to a school?","type":"mcq","options":["No, it covers school organizations only","Yes","Only fraternities and sororities","Only organizations registered with the SEC"],"required":true,"correct_option":"Yes","related_material_id":null,"pairs_with":"guardians-of-dignity-a3"},{"id":"guardians-of-dignity-b4","text":"An organization plans to hold an initiation rite. At the latest, when must it file its written application with the school?","type":"mcq","options":["The day before","7 days before","3 days before","No application is needed"],"required":true,"correct_option":"7 days before","related_material_id":null,"pairs_with":"guardians-of-dignity-a4"},{"id":"guardians-of-dignity-b5","text":"What is the maximum duration of an allowed initiation rite?","type":"mcq","options":["One week","5 days","3 days","1 day"],"required":true,"correct_option":"3 days","related_material_id":null,"pairs_with":"guardians-of-dignity-a5"},{"id":"guardians-of-dignity-b6","text":"Who must be present to observe an approved initiation rite?","type":"mcq","options":["The parents of the neophytes","A police officer","At least two representatives of the school","The barangay captain"],"required":true,"correct_option":"At least two representatives of the school","related_material_id":null,"pairs_with":"guardians-of-dignity-a6"},{"id":"guardians-of-dignity-b7","text":"A member defends a hazing by saying, \"He volunteered for it.\" Under the law:","type":"mcq","options":["This is a valid defense","This is not a defense; the consent of the person hazed does not excuse the act","It is valid only if the consent was in writing","It only reduces the penalty"],"required":true,"correct_option":"This is not a defense; the consent of the person hazed does not excuse the act","related_material_id":null,"pairs_with":"guardians-of-dignity-a7"},{"id":"guardians-of-dignity-b8","text":"Being present during a hazing without trying to stop it or reporting it can make a person:","type":"mcq","options":["Only a witness","Liable as a participant","Free from any liability","Liable only if they are an officer"],"required":true,"correct_option":"Liable as a participant","related_material_id":null,"pairs_with":"guardians-of-dignity-a8"},{"id":"guardians-of-dignity-b9","text":"A friend tells you their organization will \"test\" new members with physical punishment tonight. What is the best action?","type":"mcq","options":["Tell your friend to be careful","Report it immediately to school authorities such as the Office of Student Affairs","Attend to make sure no one gets hurt","Stay silent to avoid trouble"],"required":true,"correct_option":"Report it immediately to school authorities such as the Office of Student Affairs","related_material_id":null,"pairs_with":"guardians-of-dignity-a9"},{"id":"guardians-of-dignity-b10","text":"If hazing results in death, rape, sodomy, or mutilation, those who planned or took part in it face:","type":"mcq","options":["Suspension from school","A fine of ₱10,000","Reclusion perpetua and a fine of ₱3 million","Community service"],"required":true,"correct_option":"Reclusion perpetua and a fine of ₱3 million","related_material_id":null,"pairs_with":"guardians-of-dignity-a10"}]$b3$::jsonb)
+    ) AS s(match, title, form_a, form_b)
+  LOOP
+    SELECT count(*) INTO v_count
+      FROM programs
+     WHERE archived_at IS NULL AND title ILIKE '%' || spec.match || '%';
+    IF v_count <> 1 THEN
+      RAISE EXCEPTION 'PHASE 28: "%" matches % programs (needs exactly 1). Nothing was inserted.', spec.match, v_count;
+    END IF;
+
+    SELECT id, title, guidance_service INTO v_program_id, v_program_title, v_service
+      FROM programs
+     WHERE archived_at IS NULL AND title ILIKE '%' || spec.match || '%';
+
+    v_title := spec.title;
+
+    IF EXISTS (SELECT 1 FROM surveys WHERE title = v_title) THEN
+      RAISE NOTICE 'PHASE 28: "%" already exists, skipped.', v_title;
+      CONTINUE;
+    END IF;
+
+    SELECT string_agg(format('#%s "%s" (%s)', id, title, status), ', ') INTO v_existing
+      FROM surveys
+     WHERE type = 'knowledge' AND program_id = v_program_id AND archived_at IS NULL;
+    IF v_existing IS NOT NULL THEN
+      RAISE EXCEPTION 'PHASE 28: program #% already has a knowledge assessment: %. Nothing was inserted.', v_program_id, v_existing;
+    END IF;
+
+    INSERT INTO surveys (title, description, category, type, status, program_id, questions_data, questions_data_post)
+    VALUES (
+      v_title,
+      NULL,
+      COALESCE(NULLIF(v_service, ''), 'Other'),
+      'knowledge',
+      'draft',
+      v_program_id,
+      (SELECT jsonb_agg(q || jsonb_build_object('related_program_id', v_program_id) ORDER BY n)
+         FROM jsonb_array_elements(spec.form_a) WITH ORDINALITY AS t(q, n)),
+      (SELECT jsonb_agg(q || jsonb_build_object('related_program_id', v_program_id) ORDER BY n)
+         FROM jsonb_array_elements(spec.form_b) WITH ORDINALITY AS t(q, n))
+    );
+    RAISE NOTICE 'PHASE 28: added "%" (program #%).', v_title, v_program_id;
+  END LOOP;
+END
+$phase28$;
+
+-- ---------------------------------------------------------
+-- ROLLBACK of PHASE 28 (run only to undo it). Removes the three
+-- assessments only while they are still drafts with no responses.
+-- ---------------------------------------------------------
+-- DELETE FROM surveys s
+--  WHERE s.type = 'knowledge'
+--    AND s.status = 'draft'
+--    AND s.title IN ('Safe Spaces in Digital Places: Knowledge Check',
+--                    'Labor Education for Graduating Students: Knowledge Check',
+--                    'Guardians of Dignity: Knowledge Check')
+--    AND NOT EXISTS (SELECT 1 FROM survey_responses r WHERE r.survey_id = s.id);

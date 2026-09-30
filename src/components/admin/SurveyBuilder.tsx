@@ -62,6 +62,9 @@ type Question = {
   // unmapped (e.g. "None of the above", "Other") is treated as "did not
   // reach this program" rather than ignored.
   option_program_ids?: Record<string, number> | null;
+  // Form B (post-test) items only: the id of the Form A item this one is
+  // the parallel of. Pairs follow ids, not positions (PHASE 27).
+  pairs_with?: string | number | null;
 };
 
 type Survey = {
@@ -82,6 +85,9 @@ type Survey = {
   type: SurveyType;
   status: "draft" | "active" | "closed";
   questions_data: Question[];
+  // Knowledge assessments only: Form B, the parallel post-test form
+  // (PHASE 27). Empty/null means the post-test reuses Form A.
+  questions_data_post?: Question[] | null;
   created_at?: string;
   updated_at?: string;
   start_date?: string | null;
@@ -112,14 +118,52 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: "text", label: "Text Response" },
 ];
 
+function newQuestionId(): string {
+  return `${Date.now()}-${Math.random()}`;
+}
+
 function createQuestion(): Question {
   return {
-    id: `${Date.now()}-${Math.random()}`,
+    id: newQuestionId(),
     text: "",
     type: "mcq",
     options: ["Option 1", "Option 2"],
     required: true,
   };
+}
+
+type FormKey = "A" | "B";
+
+// Same rule as the surveys_post_form_paired constraint (PHASE 27): a
+// knowledge assessment with a Form B can only be published when both
+// forms have the same number of items, every Form B item pairs with an
+// existing Form A item, and every Form A item has exactly one pair.
+// Returns why it isn't ready, or null when it is (or Form B is empty).
+function formPairingProblem(formA: Question[] | null | undefined, formB: Question[] | null | undefined): string | null {
+  const a = Array.isArray(formA) ? formA : [];
+  const b = Array.isArray(formB) ? formB : [];
+  if (b.length === 0) return null;
+
+  if (a.length !== b.length) {
+    return `Form A has ${a.length} item${a.length === 1 ? "" : "s"} and Form B has ${b.length}. Both forms need the same number.`;
+  }
+
+  const aIds = new Set(a.map((q) => String(q.id)));
+  const unpairedB = b.findIndex((q) => q.pairs_with == null || !aIds.has(String(q.pairs_with)));
+  if (unpairedB >= 0) {
+    return `Form B item ${unpairedB + 1} isn't paired with a Form A item.`;
+  }
+
+  for (let index = 0; index < a.length; index++) {
+    const pairs = b.filter((q) => String(q.pairs_with) === String(a[index].id)).length;
+    if (pairs !== 1) {
+      return pairs === 0
+        ? `Form A item ${index + 1} has no pair in Form B.`
+        : `Form A item ${index + 1} is paired with ${pairs} Form B items; it needs exactly one.`;
+    }
+  }
+
+  return null;
 }
 
 export default function SurveyBuilder() {
@@ -131,7 +175,17 @@ export default function SurveyBuilder() {
 
   const [editingSurvey, setEditingSurvey] = useState<Survey | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
+  // Form B (post-test) of a knowledge assessment, and which form the
+  // editor is showing. The question editing functions below act on the
+  // form in view.
+  const [questionsPost, setQuestionsPost] = useState<Question[]>([]);
+  const [activeForm, setActiveForm] = useState<FormKey>("A");
+  const [pendingRemoveA, setPendingRemoveA] = useState<Question | null>(null);
+  const [confirmCopyToB, setConfirmCopyToB] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  const activeQuestions = activeForm === "B" ? questionsPost : questions;
+  const setActiveQuestions = activeForm === "B" ? setQuestionsPost : setQuestions;
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
@@ -332,6 +386,12 @@ export default function SurveyBuilder() {
         ? survey.questions_data
         : []
     );
+    setQuestionsPost(
+      Array.isArray(survey.questions_data_post)
+        ? survey.questions_data_post
+        : []
+    );
+    setActiveForm("A");
   }
 
   async function saveSurveyContent() {
@@ -343,20 +403,40 @@ export default function SurveyBuilder() {
       const cleanQuestions = questions.filter(
         (q) => q.text.trim().length > 0
       );
+      const cleanPost = questionsPost.filter(
+        (q) => q.text.trim().length > 0
+      );
 
       const { error } = await supabase
         .from("surveys")
         .update({
           questions_data: cleanQuestions,
+          // Empty Form B is stored as null: the post-test reuses Form A.
+          questions_data_post: cleanPost.length > 0 ? cleanPost : null,
         })
         .eq("id", editingSurvey.id);
 
-      if (error) throw error;
-      logActivity({ actorEmail: user?.email, actorName: userName, action: "update", entityType: "survey", entityId: editingSurvey.id, entityLabel: editingSurvey.title, details: `${cleanQuestions.length} question(s) saved` });
+      if (error) {
+        // 23514 = check violation: an active assessment whose forms no
+        // longer pair up (surveys_post_form_paired).
+        if (error.code === "23514") {
+          throw new Error(
+            formPairingProblem(cleanQuestions, cleanPost) ||
+              "Form A and Form B must pair up one to one while the assessment is published."
+          );
+        }
+        throw error;
+      }
+      logActivity({ actorEmail: user?.email, actorName: userName, action: "update", entityType: "survey", entityId: editingSurvey.id, entityLabel: editingSurvey.title, details: cleanPost.length > 0 ? `Form A: ${cleanQuestions.length}, Form B: ${cleanPost.length} question(s) saved` : `${cleanQuestions.length} question(s) saved` });
+
+      const pairingProblem =
+        editingSurvey.type === "knowledge" ? formPairingProblem(cleanQuestions, cleanPost) : null;
 
       toast({
         title: "Survey Updated",
-        description: "Your survey questions were saved successfully.",
+        description: pairingProblem
+          ? `Saved. Before publishing: ${pairingProblem}`
+          : "Your survey questions were saved successfully.",
       });
 
       setEditingSurvey(null);
@@ -427,12 +507,27 @@ export default function SurveyBuilder() {
         newStatus = "active";
       }
 
+      // A knowledge assessment with a Form B publishes only when the two
+      // forms pair up one to one (the database enforces the same rule).
+      if (newStatus === "active" && survey.type === "knowledge") {
+        const problem = formPairingProblem(survey.questions_data, survey.questions_data_post);
+        if (problem) {
+          toast({ title: "Can't Publish Yet", description: problem, variant: "destructive" });
+          return;
+        }
+      }
+
       const { error } = await supabase
         .from("surveys")
         .update({ status: newStatus })
         .eq("id", survey.id);
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === "23514") {
+          throw new Error("Form A and Form B must pair up one to one before this assessment can be published.");
+        }
+        throw error;
+      }
       logActivity({ actorEmail: user?.email, actorName: userName, action: "update", entityType: "survey", entityId: survey.id, entityLabel: survey.title, details: `status changed to "${newStatus}"` });
 
       // Only on the moment a survey actually goes live for students —
@@ -474,6 +569,7 @@ export default function SurveyBuilder() {
           type: survey.type || "opinion",
           status: "draft",
           questions_data: survey.questions_data || [],
+          questions_data_post: survey.questions_data_post || null,
         },
       ]).select();
 
@@ -627,7 +723,7 @@ export default function SurveyBuilder() {
     questionIndex: number,
     updates: Partial<Question>
   ) {
-    setQuestions((previous) =>
+    setActiveQuestions((previous) =>
       previous.map((question, index) =>
         index === questionIndex
           ? { ...question, ...updates }
@@ -640,7 +736,7 @@ export default function SurveyBuilder() {
     questionIndex: number,
     type: QuestionType
   ) {
-    const question = questions[questionIndex];
+    const question = activeQuestions[questionIndex];
 
     const updated: Question = {
       ...question,
@@ -662,7 +758,7 @@ export default function SurveyBuilder() {
   }
 
   function addOption(questionIndex: number) {
-    const question = questions[questionIndex];
+    const question = activeQuestions[questionIndex];
 
     updateQuestion(questionIndex, {
       options: [...(question.options || []), "New Option"],
@@ -674,7 +770,7 @@ export default function SurveyBuilder() {
     optionIndex: number,
     value: string
   ) {
-    const question = questions[questionIndex];
+    const question = activeQuestions[questionIndex];
     const options = [...(question.options || [])];
 
     options[optionIndex] = value;
@@ -686,7 +782,7 @@ export default function SurveyBuilder() {
     questionIndex: number,
     optionIndex: number
   ) {
-    const question = questions[questionIndex];
+    const question = activeQuestions[questionIndex];
 
     const options = (question.options || []).filter(
       (_, index) => index !== optionIndex
@@ -703,7 +799,7 @@ export default function SurveyBuilder() {
     option: string,
     programId: number | null
   ) {
-    const question = questions[questionIndex];
+    const question = activeQuestions[questionIndex];
     const nextMap = { ...(question.option_program_ids || {}) };
 
     if (programId === null) {
@@ -715,10 +811,52 @@ export default function SurveyBuilder() {
     updateQuestion(questionIndex, { option_program_ids: nextMap });
   }
 
+  // Removing a Form A item that has a Form B pair asks first, then
+  // removes both, so no Form B item is left pointing at nothing.
   function removeQuestion(questionId: string | number) {
-    setQuestions((previous) =>
+    if (activeForm === "A") {
+      const question = questions.find((q) => q.id === questionId);
+      const hasPair = questionsPost.some((q) => String(q.pairs_with) === String(questionId));
+      if (question && hasPair) {
+        setPendingRemoveA(question);
+        return;
+      }
+    }
+
+    setActiveQuestions((previous) =>
       previous.filter((question) => question.id !== questionId)
     );
+  }
+
+  function confirmRemoveFormAItem() {
+    if (!pendingRemoveA) return;
+    const id = pendingRemoveA.id;
+    setQuestions((previous) => previous.filter((q) => q.id !== id));
+    setQuestionsPost((previous) => previous.filter((q) => String(q.pairs_with) !== String(id)));
+    setPendingRemoveA(null);
+  }
+
+  // Form B starts as a copy of Form A: new ids, each copy paired with
+  // the Form A item it came from. The admin then rewrites each copy.
+  function copyFormAToFormB() {
+    setQuestionsPost(
+      questions
+        .filter((q) => q.text.trim().length > 0)
+        .map((q) => ({ ...q, id: newQuestionId(), pairs_with: q.id }))
+    );
+    setConfirmCopyToB(false);
+    setActiveForm("B");
+  }
+
+  // A new Form B item pairs with the first Form A item that has no pair.
+  function addQuestionToActiveForm() {
+    if (activeForm === "B") {
+      const paired = new Set(questionsPost.map((q) => String(q.pairs_with)));
+      const firstUnpaired = questions.find((q) => q.text.trim() && !paired.has(String(q.id)));
+      setQuestionsPost([...questionsPost, { ...createQuestion(), pairs_with: firstUnpaired?.id ?? null }]);
+      return;
+    }
+    setQuestions([...questions, createQuestion()]);
   }
 
   function getStatusLabel(status: Survey["status"]) {
@@ -951,22 +1089,93 @@ export default function SurveyBuilder() {
           {/* QUESTIONS */}
           <div className="space-y-5 pb-20">
 
-            <div className="flex items-center justify-between">
+            {/* Knowledge assessments have two parallel forms: Form A is
+                the pre-test, Form B the post-test. Item N of Form B is
+                paired (by id) with an item of Form A. */}
+            {editingSurvey.type === "knowledge" && (() => {
+              const problem = formPairingProblem(
+                questions.filter((q) => q.text.trim()),
+                questionsPost.filter((q) => q.text.trim())
+              );
+              return (
+                <div className="bg-white rounded-3xl p-4 md:p-5 shadow-sm space-y-3">
+                  <div role="tablist" aria-label="Assessment forms" className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-slate-100">
+                    {([
+                      { key: "A" as FormKey, label: "Form A", sub: "Pre-test", count: questions.length },
+                      { key: "B" as FormKey, label: "Form B", sub: "Post-test", count: questionsPost.length },
+                    ]).map((tab) => (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeForm === tab.key}
+                        onClick={() => setActiveForm(tab.key)}
+                        className={`h-12 rounded-xl text-xs font-black transition-colors ${
+                          activeForm === tab.key ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        {tab.label} <span className="font-bold text-slate-400">· {tab.sub} · {tab.count} items</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className={`text-xs font-bold ${questionsPost.length === 0 ? "text-slate-500" : problem ? "text-amber-600" : "text-emerald-600"}`}>
+                    {questionsPost.length === 0
+                      ? "No Form B yet: the post-test will reuse Form A."
+                      : problem
+                        ? `Not ready to publish: ${problem}`
+                        : `Forms are paired: ${questions.filter((q) => q.text.trim()).length} items each.`}
+                  </p>
+                </div>
+              );
+            })()}
+
+            <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <h2 className="text-xl font-black text-slate-900">
-                  Survey Questions
+                  {editingSurvey.type === "knowledge"
+                    ? activeForm === "A"
+                      ? "Form A (pre-test) questions"
+                      : "Form B (post-test) questions"
+                    : "Survey Questions"}
                 </h2>
                 <p className="text-xs font-medium text-slate-400">
-                  Create the questionnaire students will answer.
+                  {editingSurvey.type === "knowledge" && activeForm === "B"
+                    ? "Each item measures the same point as its paired Form A item, with its own text, options, and answer."
+                    : "Create the questionnaire students will answer."}
                 </p>
               </div>
 
-              <div className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-black">
-                {questions.length} Questions
+              <div className="flex items-center gap-2">
+                {editingSurvey.type === "knowledge" && activeForm === "B" && (
+                  <Button
+                    variant="outline"
+                    onClick={() => (questionsPost.length > 0 ? setConfirmCopyToB(true) : copyFormAToFormB())}
+                    className="h-10 rounded-xl text-xs font-black"
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy Form A to Form B
+                  </Button>
+                )}
+                <div className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-black">
+                  {activeQuestions.length} Questions
+                </div>
               </div>
             </div>
 
-            {questions.map((question, index) => (
+            {activeForm === "B" && questionsPost.length === 0 && (
+              <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-white p-8 text-center">
+                <p className="font-black text-slate-700">Form B is empty</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Start from a copy of Form A and rewrite each item, or add items one by one.
+                </p>
+                <Button onClick={copyFormAToFormB} className="mt-4 h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs">
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copy Form A to Form B
+                </Button>
+              </div>
+            )}
+
+            {activeQuestions.map((question, index) => (
               <Card
                 key={question.id}
                 className="p-5 md:p-7 rounded-3xl border-none shadow-sm bg-white"
@@ -986,7 +1195,7 @@ export default function SurveyBuilder() {
                         </div>
 
                         <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                          Question {index + 1}
+                          {editingSurvey.type === "knowledge" ? `${activeForm}${index + 1} · ` : ""}Question {index + 1}
                         </span>
                       </div>
 
@@ -1000,6 +1209,41 @@ export default function SurveyBuilder() {
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
+
+                    {/* Form B: which Form A item this one is the parallel of. */}
+                    {editingSurvey.type === "knowledge" && activeForm === "B" && (() => {
+                      const pairIndex = questions.findIndex((q) => String(q.id) === String(question.pairs_with));
+                      const takenByOthers = new Set(
+                        questionsPost.filter((q) => q.id !== question.id).map((q) => String(q.pairs_with))
+                      );
+                      return (
+                        <div className={`rounded-xl p-3 ${pairIndex >= 0 ? "bg-indigo-50" : "bg-amber-50"}`}>
+                          <label className="text-[9px] font-black uppercase text-indigo-500">
+                            Pairs with
+                          </label>
+                          <select
+                            value={pairIndex >= 0 ? String(question.pairs_with) : ""}
+                            onChange={(e) => {
+                              const target = questions.find((q) => String(q.id) === e.target.value);
+                              updateQuestion(index, { pairs_with: target ? target.id : null });
+                            }}
+                            className="mt-1 w-full h-11 rounded-xl bg-white border border-indigo-100 px-3 text-xs font-bold text-slate-700 outline-none"
+                          >
+                            <option value="">Choose the Form A item...</option>
+                            {questions.map((q, aIndex) => (
+                              <option key={String(q.id)} value={String(q.id)}>
+                                A{aIndex + 1}: {q.text || "(empty)"}{takenByOthers.has(String(q.id)) ? " — already paired" : ""}
+                              </option>
+                            ))}
+                          </select>
+                          <p className={`mt-1.5 text-[10px] font-bold ${pairIndex >= 0 ? "text-indigo-600" : "text-amber-700"}`}>
+                            {pairIndex >= 0
+                              ? `Pairs with item ${pairIndex + 1} of Form A`
+                              : "Not paired yet"}
+                          </p>
+                        </div>
+                      );
+                    })()}
 
                     <Input
                       value={question.text}
@@ -1319,19 +1563,56 @@ export default function SurveyBuilder() {
 
             <Button
               variant="outline"
-              onClick={() =>
-                setQuestions([
-                  ...questions,
-                  createQuestion(),
-                ])
-              }
+              onClick={addQuestionToActiveForm}
               className="w-full h-16 rounded-2xl border-dashed border-2 font-black uppercase text-xs text-indigo-600 hover:bg-indigo-50"
             >
               <Plus className="mr-2 h-5 w-5" />
-              Add Question
+              {editingSurvey.type === "knowledge" ? `Add Question to Form ${activeForm}` : "Add Question"}
             </Button>
           </div>
         </div>
+
+        {/* Removing a Form A item also removes its Form B pair. */}
+        <Dialog open={!!pendingRemoveA} onOpenChange={(open) => !open && setPendingRemoveA(null)}>
+          <DialogContent className="max-w-md rounded-3xl">
+            <DialogHeader>
+              <DialogTitle className="font-black">Remove this item and its pair?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-slate-600">
+              Form A item {questions.findIndex((q) => q.id === pendingRemoveA?.id) + 1} has a paired item in Form B. Removing it
+              will remove its Form B pair too. Changes apply when you save.
+            </p>
+            <div className="grid grid-cols-2 gap-3 mt-2">
+              <Button variant="ghost" onClick={() => setPendingRemoveA(null)} className="rounded-xl font-black">
+                Cancel
+              </Button>
+              <Button onClick={confirmRemoveFormAItem} className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black">
+                Remove both
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Copying over a non-empty Form B replaces it. */}
+        <Dialog open={confirmCopyToB} onOpenChange={setConfirmCopyToB}>
+          <DialogContent className="max-w-md rounded-3xl">
+            <DialogHeader>
+              <DialogTitle className="font-black">Replace Form B?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-slate-600">
+              Form B already has {questionsPost.length} item{questionsPost.length === 1 ? "" : "s"}. Copying Form A replaces
+              them with fresh copies of the Form A items. Changes apply when you save.
+            </p>
+            <div className="grid grid-cols-2 gap-3 mt-2">
+              <Button variant="ghost" onClick={() => setConfirmCopyToB(false)} className="rounded-xl font-black">
+                Cancel
+              </Button>
+              <Button onClick={copyFormAToFormB} className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black">
+                Replace Form B
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -1578,6 +1859,9 @@ export default function SurveyBuilder() {
                     </p>
                     <p className="font-black text-slate-700 mt-1">
                       {survey.questions_data?.length || 0}
+                      {(survey.questions_data_post?.length || 0) > 0 && (
+                        <span title="Form A + Form B"> + {survey.questions_data_post!.length}</span>
+                      )}
                     </p>
                   </div>
 
@@ -1911,12 +2195,32 @@ export default function SurveyBuilder() {
                     {isExpanded && (
                       <div className="p-5 grid md:grid-cols-2 gap-4">
 
-                        {viewingResponses?.questions_data?.map(
-                          (question) => (
+                        {(() => {
+                          // A post-test answered on Form B is shown against
+                          // Form B, each item labelled with its Form A pair.
+                          const formA = viewingResponses?.questions_data || [];
+                          const formB = viewingResponses?.questions_data_post || [];
+                          const onFormB = response.attempt_type === "post" && formB.length > 0;
+                          return (onFormB ? formB : formA).map((question, qIndex) => ({
+                            question,
+                            label: onFormB
+                              ? (() => {
+                                  const pairIndex = formA.findIndex((a) => String(a.id) === String(question.pairs_with));
+                                  return `B${qIndex + 1}${pairIndex >= 0 ? ` · pairs with A${pairIndex + 1}` : ""}`;
+                                })()
+                              : response.attempt_type
+                                ? `A${qIndex + 1}`
+                                : null,
+                          }));
+                        })().map(
+                          ({ question, label }) => (
                             <div
                               key={question.id}
                               className="bg-slate-50 rounded-xl p-4"
                             >
+                              {label && (
+                                <p className="text-[9px] font-black text-indigo-500 mb-1">{label}</p>
+                              )}
                               <p className="text-[9px] font-black uppercase text-slate-400">
                                 {question.text}
                               </p>

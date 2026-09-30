@@ -119,6 +119,8 @@ interface Survey {
   type?: string | null;
   iec_category?: string | null;
   questions_data?: any[];
+  // Form B, the parallel post-test form (PHASE 27).
+  questions_data_post?: any[] | null;
   created_at?: string | null;
 }
 
@@ -132,6 +134,7 @@ interface SurveyResponse {
   score?: number | null;
   total_scored?: number | null;
   percentage?: number | null;
+  attempt_type?: "pre" | "post" | null;
 }
 
 // Bridges survey_responses.user_id (a bigint FK to users.id) to
@@ -442,6 +445,18 @@ function isWithinRange(dateStr: string | null | undefined, start: string, end: s
   if (end && d > new Date(`${end}T23:59:59`).getTime()) return false;
 
   return true;
+}
+
+// The form a response was answered on: Form B for a post-test when the
+// assessment has one (PHASE 27), otherwise Form A. Answers are keyed by
+// question id, so a Form B answer only matches Form B questions.
+function questionsForResponse(
+  survey: Survey | undefined,
+  response: { attempt_type?: "pre" | "post" | null }
+): any[] {
+  const formB = Array.isArray(survey?.questions_data_post) ? survey!.questions_data_post! : [];
+  if (response.attempt_type === "post" && formB.length > 0) return formB;
+  return Array.isArray(survey?.questions_data) ? survey!.questions_data : [];
 }
 
 function average(values: number[]): number | null {
@@ -1319,9 +1334,7 @@ export default function AnalyticsDashboard() {
         (s) => safeString(s.id) === safeString(response.survey_id)
       );
 
-      const questions = Array.isArray(survey?.questions_data)
-        ? survey!.questions_data
-        : [];
+      const questions = questionsForResponse(survey, response);
 
       questions.forEach((question: any) => {
         if (
@@ -1389,9 +1402,7 @@ export default function AnalyticsDashboard() {
         (s) => safeString(s.id) === safeString(response.survey_id)
       );
 
-      const questions = Array.isArray(survey?.questions_data)
-        ? survey!.questions_data
-        : [];
+      const questions = questionsForResponse(survey, response);
 
       questions.forEach((question: any) => {
         if (
@@ -1448,9 +1459,7 @@ export default function AnalyticsDashboard() {
       const survey = surveys.find(
         (s) => safeString(s.id) === safeString(response.survey_id)
       );
-      const questions = Array.isArray(survey?.questions_data)
-        ? survey!.questions_data
-        : [];
+      const questions = questionsForResponse(survey, response);
 
       questions.forEach((question: any) => {
         const optionProgramIds = question?.option_program_ids;
@@ -2166,7 +2175,7 @@ export default function AnalyticsDashboard() {
 
     reportScoredResponses.forEach((response) => {
       const survey = surveys.find((s) => safeString(s.id) === safeString(response.survey_id));
-      const questions = Array.isArray(survey?.questions_data) ? survey!.questions_data : [];
+      const questions = questionsForResponse(survey, response);
 
       questions.forEach((question: any) => {
         if (question?.type !== "mcq" || !question?.correct_option || !question?.related_program_id) {
@@ -2235,7 +2244,7 @@ export default function AnalyticsDashboard() {
     const scoreBuckets: Record<string, number[]> = {};
     reportScoredResponses.forEach((response) => {
       const survey = surveys.find((s) => safeString(s.id) === safeString(response.survey_id));
-      const questions = Array.isArray(survey?.questions_data) ? survey!.questions_data : [];
+      const questions = questionsForResponse(survey, response);
 
       questions.forEach((question: any) => {
         if (question?.type !== "mcq" || !question?.correct_option || !question?.related_program_id) {

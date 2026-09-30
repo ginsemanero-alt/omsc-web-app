@@ -48,6 +48,9 @@ interface Survey {
   title: string;
   description?: string | null;
   questions_data?: Question[];
+  // Form B, the parallel post-test form (PHASE 27). Empty/null: the
+  // post-test reuses questions_data.
+  questions_data_post?: Question[] | null;
   status?: string;
   type?: 'knowledge' | 'opinion';
   program_id?: number | null;
@@ -61,6 +64,21 @@ interface Survey {
 }
 
 type AttemptType = 'pre' | 'post';
+
+// Which form a student gets for their next attempt: Form B for a
+// knowledge post-test when the assessment has one, otherwise Form A
+// (so single-form assessments keep working unchanged).
+function formForAttempt(survey: Survey): 'A' | 'B' {
+  return survey.type === 'knowledge' &&
+    survey.next_attempt === 'post' &&
+    (survey.questions_data_post?.length ?? 0) > 0
+    ? 'B'
+    : 'A';
+}
+
+function questionsForAttempt(survey: Survey): Question[] {
+  return formForAttempt(survey) === 'B' ? survey.questions_data_post || [] : survey.questions_data || [];
+}
 
 const ATTEMPT_LABEL: Record<AttemptType, string> = {
   pre: 'Pre-Test',
@@ -371,6 +389,8 @@ export default function QuizzesSurveys() {
     return `Pre-test ${preText}, post-test ${postText}, ${change}`;
   };
 
+  const [activeForm, setActiveForm] = useState<'A' | 'B'>('A');
+
   const activeSurvey = useMemo(() => {
     if (activeSurveyId === null) return null;
 
@@ -381,11 +401,18 @@ export default function QuizzesSurveys() {
     );
   }, [activeSurveyId, surveys]);
 
+  // The form being taken, fixed when the assessment starts: Form B (the
+  // parallel post-test form, PHASE 27) for a post-test when the
+  // assessment has one, otherwise Form A. Scoring and the review use the
+  // same form, so each is marked against its own answer key.
   const questions: Question[] = useMemo(() => {
+    if (activeForm === 'B' && activeSurvey?.questions_data_post?.length) {
+      return activeSurvey.questions_data_post;
+    }
     if (!activeSurvey?.questions_data) return [];
 
     return activeSurvey.questions_data;
-  }, [activeSurvey]);
+  }, [activeSurvey, activeForm]);
 
   const currentQuestion = questions[currentQuestionIndex];
 
@@ -404,6 +431,7 @@ export default function QuizzesSurveys() {
   const handleStartSurvey = (survey: Survey) => {
     if (survey.is_completed) return;
 
+    setActiveForm(formForAttempt(survey));
     setActiveSurveyId(survey.id);
     setAnswers({});
     setCurrentQuestionIndex(0);
@@ -1210,8 +1238,8 @@ export default function QuizzesSurveys() {
                     <ClipboardList className="w-4 h-4" />
 
                     <span>
-                      {survey.questions_data?.length || 0} question
-                      {(survey.questions_data?.length || 0) !== 1
+                      {questionsForAttempt(survey).length} question
+                      {questionsForAttempt(survey).length !== 1
                         ? 's'
                         : ''}
                     </span>
