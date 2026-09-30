@@ -11,7 +11,6 @@ import ProgramEntryTimeline from '../shared/ProgramEntryTimeline';
 import PhotoViewer, { collectProgramPhotos, viewerAt, type PhotoViewerState } from '../shared/PhotoViewer';
 import { useAuth } from '../../hooks/useAuth';
 import { usePagination } from '../../hooks/usePagination';
-import { Card } from '../../components/ui/card';
 import { PaginationControls } from '../../components/ui/pagination-controls';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -25,8 +24,8 @@ import {
 } from '../../components/ui/dialog';
 import { Label } from '../../components/ui/label';
 import {
-  Plus, Search, Edit, Trash2, Calendar, MapPin,
-  Loader2, Camera, FileText, ChevronDown, ChevronUp, Download, Clock, AlertCircle, ZoomIn, Eye, HardDrive,
+  Plus, Search, Edit, Trash2,
+  Loader2, Camera, FileText, ChevronDown, ChevronUp, Download, AlertCircle, Eye, HardDrive,
   Star, X
 } from 'lucide-react';
 
@@ -40,13 +39,40 @@ const PdfPreview = lazy(() => import('../shared/PdfPreview'));
 
 const PROGRAMS_PAGE_SIZE = 8;
 
-export default function ProgramManagement() {
+const focusRing =
+  'focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]';
+
+// A request from the Content page header (New program) or its
+// "Needs attention" list (open one program). n changes on every request.
+type OpenRequest = { n: number; id?: number };
+
+interface ProgramManagementProps {
+  newRequest?: OpenRequest | null;
+  editRequest?: OpenRequest | null;
+  onChanged?: () => void;
+}
+
+const STATUS_BADGE: Record<string, { label: string; className: string }> = {
+  upcoming: { label: 'Upcoming', className: 'bg-[#FEF3C7] text-[#92400E]' },
+  ongoing: { label: 'Ongoing', className: 'bg-[#D1FAE5] text-[#065F46]' },
+  completed: { label: 'Completed', className: 'bg-[#E2E8F0] text-[#1E293B]' },
+};
+
+const CHECK_BADGE: Record<string, { label: string; className: string }> = {
+  active: { label: 'Active', className: 'bg-[#D1FAE5] text-[#065F46]' },
+  draft: { label: 'Draft', className: 'bg-[#FEF3C7] text-[#92400E]' },
+  closed: { label: 'Closed', className: 'bg-[#E2E8F0] text-[#1E293B]' },
+  none: { label: 'None', className: 'bg-[#F1F5F9] text-[#64748B]' },
+};
+
+export default function ProgramManagement({ newRequest, editRequest, onChanged }: ProgramManagementProps = {}) {
   const { toast } = useToast();
   const { user, userName } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const materialRef = useRef<HTMLInputElement>(null);
 
   const [programs, setPrograms] = useState<any[]>([]);
+  const [checkStatusByProgram, setCheckStatusByProgram] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -101,7 +127,7 @@ export default function ProgramManagement() {
   const entryFileInputRef = useRef<HTMLInputElement>(null);
 
   // Thumbnails for the photos picked in the entry form (not uploaded
-  // until Add/Update Entry), same idea as the cover photo grid.
+  // until Add/Update entry), same idea as the cover photo grid.
   const entryFilePreviews = useMemo(() => entryFiles.map((file) => URL.createObjectURL(file)), [entryFiles]);
   useEffect(() => () => entryFilePreviews.forEach((url) => URL.revokeObjectURL(url)), [entryFilePreviews]);
 
@@ -190,6 +216,18 @@ export default function ProgramManagement() {
 
       if (error) throw error;
       setPrograms(data || []);
+
+      // Read-only: each program's knowledge check status, for the list.
+      const { data: checks } = await supabase
+        .from('surveys')
+        .select('program_id, status')
+        .eq('type', 'knowledge')
+        .not('program_id', 'is', null)
+        .is('archived_at', null);
+      const byProgram: Record<number, string> = {};
+      (checks || []).forEach((c: any) => { byProgram[c.program_id] = c.status; });
+      setCheckStatusByProgram(byProgram);
+      onChanged?.();
     } catch (err: any) {
       toast({ variant: "destructive", title: "Fetch Error", description: err.message });
     } finally {
@@ -198,6 +236,23 @@ export default function ProgramManagement() {
   };
 
   useEffect(() => { fetchPrograms(); }, []);
+
+  // Header "New program" and "Needs attention" links open the dialog here.
+  const handledRequests = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    if (!newRequest || handledRequests.current.has(newRequest.n)) return;
+    handledRequests.current.add(newRequest.n);
+    handleOpenDialog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newRequest]);
+  useEffect(() => {
+    if (!editRequest || handledRequests.current.has(editRequest.n)) return;
+    const program = programs.find((p) => p.id === editRequest.id);
+    if (!program) return; // waits for the list to load
+    handledRequests.current.add(editRequest.n);
+    handleOpenDialog(program);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editRequest, programs]);
 
   // Handouts open in an in-app preview first (see previewHandout below) —
   // this is the actual download action, triggered only when the admin
@@ -330,7 +385,7 @@ export default function ProgramManagement() {
   };
 
   const handleSave = async () => {
-    // An entry typed into the entry form but never "Add Entry"-ed used to
+    // An entry typed into the entry form but never "Add entry"-ed used to
     // be silently dropped on save. Include it instead — or stop if it
     // can't be (no label) rather than lose it.
     let entryList = entries;
@@ -771,165 +826,204 @@ export default function ProgramManagement() {
   }, [searchQuery]);
 
   return (
-    <div className="space-y-6 md:space-y-8 p-4 md:p-6 pb-20 max-w-[1400px] mx-auto font-sans w-full overflow-hidden animate-in fade-in duration-300">
-      
-      {/* HEADER ROW ACTIONS */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4 border-slate-100">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight uppercase">
-            Programs <span className="text-indigo-600">Portal</span>
-          </h1>
-          <p className="text-slate-400 font-bold uppercase text-[9px] tracking-widest mt-1">Institutional Admin Deck</p>
-        </div>
-        
-        <Button
-          onClick={() => handleOpenDialog()}
-          className="rounded-xl md:rounded-2xl h-12 px-6 md:px-8 font-black uppercase text-[10px] tracking-wider transition-all w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white"
-        >
-          <Plus className="w-4 h-4 mr-2 shrink-0" /> Create New Program
-        </Button>
-      </div>
+    <div className="flex flex-col gap-5 w-full font-figtree text-[#1E293B]">
 
-      {/* FILTER SEARCH */}
-      <div className="relative group">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-        <Input 
-          placeholder="Filter guidance tracks, categories or seminars..." 
-          className="pl-12 h-14 rounded-2xl bg-white border-none shadow-sm font-medium text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-100 transition-all"
+      {/* SEARCH (New program lives in the Content page header) */}
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#6B7285] pointer-events-none" aria-hidden="true" />
+        <label htmlFor="program-search" className="sr-only">Search programs</label>
+        <input
+          id="program-search"
+          type="search"
+          placeholder="Search programs by title"
+          className={`w-full h-[52px] pl-12 pr-4 rounded-2xl bg-white border-[1.5px] border-[#DDE1EE] text-[15px] text-[#1E293B] placeholder:text-[#8A91A6] ${focusRing}`}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
       </div>
 
-      {/* GRID */}
-      <div className="grid grid-cols-1 gap-4 md:gap-6">
-        {pagedPrograms.map((program) => {
-          const effectiveStatus = getEffectiveProgramStatus(program);
-          const normalHandouts = program.materials?.filter((m: any) => !m.title?.startsWith('CERTIFICATE_TEMPLATE:')) || [];
+      {/* PROGRAM LIST: a table from md up, cards below. */}
+      <div className="rounded-[32px] bg-white overflow-hidden">
+        <table className="hidden md:table w-full border-collapse text-sm">
+          <thead>
+            <tr className="bg-[#F5F6FB] text-left text-[#5B6477]">
+              <th scope="col" className="py-4 pl-6 pr-3 font-semibold">Program</th>
+              <th scope="col" className="py-4 px-3 font-semibold">Status</th>
+              <th scope="col" className="py-4 px-3 font-semibold">Timeline</th>
+              <th scope="col" className="py-4 px-3 font-semibold">Handouts</th>
+              <th scope="col" className="py-4 px-3 font-semibold">Knowledge check</th>
+              <th scope="col" className="py-4 pl-3 pr-6 font-semibold text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pagedPrograms.map((program) => {
+              const effectiveStatus = getEffectiveProgramStatus(program);
+              const statusBadge = STATUS_BADGE[effectiveStatus] || { label: effectiveStatus, className: 'bg-[#F1F5F9] text-[#475569]' };
+              const checkBadge = CHECK_BADGE[checkStatusByProgram[program.id] || 'none'] || CHECK_BADGE.none;
+              const normalHandouts = program.materials?.filter((m: any) => !m.title?.startsWith('CERTIFICATE_TEMPLATE:')) || [];
+              const entryCount = program.program_entries?.length || 0;
+              const expanded = expandedId === program.id;
+              const poster = program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop';
 
-          return (
-            <Card key={program.id} className="overflow-hidden rounded-2xl md:rounded-[2rem] border-none shadow-sm bg-white hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col md:flex-row">
-              <div
-                className="md:w-64 h-44 md:h-auto md:min-h-[11rem] bg-slate-900 relative shrink-0 cursor-pointer group/poster"
-                onClick={() => setPhotoViewer(viewerAt(
-                  collectProgramPhotos(program),
-                  program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop',
-                  program.title,
-                ))}
-              >
-                <img src={program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop'} className="absolute inset-0 w-full h-full object-cover" alt="" />
-                <div className="absolute inset-0 bg-black/0 group-hover/poster:bg-black/30 transition-colors flex items-center justify-center">
-                  <ZoomIn className="w-7 h-7 text-white opacity-0 group-hover/poster:opacity-100 transition-opacity" />
-                </div>
-                <div className="absolute top-4 left-4">
-                  <span className={`text-white text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-md ${
-                    effectiveStatus === 'ongoing' ? 'bg-emerald-500 animate-pulse' : effectiveStatus === 'completed' ? 'bg-slate-700' : 'bg-indigo-600'
-                  }`}>
-                    {effectiveStatus}
-                  </span>
-                </div>
-              </div>
+              return (
+                <FragmentRows key={program.id}>
+                  <tr className="border-t border-[#EEF0FA] align-middle">
+                    <td className="py-3.5 pl-6 pr-3">
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => setPhotoViewer(viewerAt(collectProgramPhotos(program), poster, program.title))}
+                          aria-label={`View photos of ${program.title}`}
+                          className={`w-14 h-14 shrink-0 rounded-2xl overflow-hidden bg-[#E0E7FF] ${focusRing}`}
+                        >
+                          <img src={poster} alt="" className="w-full h-full object-cover" />
+                        </button>
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <span className="font-bold text-[15px] text-[#1E1B4B] line-clamp-2">{program.title}</span>
+                          <span className="text-[13px] text-[#5B6477]">
+                            {formatProgramDate(program)}{program.duration_label && ` · ${program.duration_label}`} · {campusLabel(program.campus)}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <span className={`inline-block px-[11px] py-[5px] rounded-full font-bold text-xs whitespace-nowrap ${statusBadge.className}`}>{statusBadge.label}</span>
+                    </td>
+                    <td className="py-3.5 px-3 text-[#334155] whitespace-nowrap">{entryCount} {entryCount === 1 ? 'entry' : 'entries'}</td>
+                    <td className="py-3.5 px-3 text-[#334155]">{normalHandouts.length}</td>
+                    <td className="py-3.5 px-3">
+                      <span className={`inline-block px-[11px] py-[5px] rounded-full font-bold text-xs ${checkBadge.className}`}>{checkBadge.label}</span>
+                    </td>
+                    <td className="py-3.5 pl-3 pr-6 text-right">
+                      <div className="inline-flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedId(expanded ? null : program.id)}
+                          aria-expanded={expanded}
+                          aria-label={`${expanded ? 'Hide' : 'Show'} details of ${program.title}`}
+                          className={`w-11 h-11 rounded-xl border-[1.5px] border-[#DDE1EE] bg-white flex items-center justify-center text-[#1E1B4B] hover:border-[#A5B4FC] ${focusRing}`}
+                        >
+                          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDialog(program)}
+                          aria-label={`Edit ${program.title}`}
+                          className={`h-11 px-4 rounded-xl border-[1.5px] border-[#DDE1EE] bg-white text-[#1E1B4B] font-bold text-[13px] hover:border-[#A5B4FC] ${focusRing}`}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => triggerDeleteConfirm(program.id, program.title)}
+                          aria-label={`Archive ${program.title}`}
+                          className={`w-11 h-11 rounded-xl border-[1.5px] border-[#DDE1EE] bg-white flex items-center justify-center text-rose-500 hover:border-rose-300 hover:bg-rose-50 ${focusRing}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {expanded && (
+                    <tr className="bg-[#F5F6FB]/60">
+                      <td colSpan={6} className="px-6 py-5">
+                        <ProgramDetails program={program} handouts={normalHandouts} onPreview={setPreviewHandout} />
+                      </td>
+                    </tr>
+                  )}
+                </FragmentRows>
+              );
+            })}
+          </tbody>
+        </table>
 
-              <div className="p-6 md:p-8 flex-1 flex flex-col gap-4">
-                <div>
-                  <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                    <div>
-                      <div className="flex flex-wrap gap-2 mb-1">
-                        <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 font-black uppercase text-[8px] tracking-wider rounded">
-                          {program.program_component || 'Group Guidance'}
-                        </span>
-                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 font-black uppercase text-[8px] tracking-wider rounded">
-                          {program.guidance_service || 'Career Orientation'}
-                        </span>
-                        <span className="px-2 py-0.5 bg-slate-100 text-slate-500 font-black uppercase text-[8px] tracking-wider rounded">
-                          {campusLabel(program.campus)}
-                        </span>
-                      </div>
-                      <h3 className="text-xl md:text-2xl font-black text-slate-800 uppercase tracking-tight mt-1 mb-2 leading-tight">
-                        {program.title}
-                      </h3>
-                      <div className="flex flex-wrap gap-x-4 gap-y-2 text-slate-400 text-[9px] md:text-[10px] font-bold uppercase tracking-wider">
-                        <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {formatProgramDate(program)}{program.duration_label && ` · ${program.duration_label}`}</span>
-                        <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {program.time_range || 'N/A'}</span>
-                        <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0" /> {program.location}</span>
-                      </div>
+        {/* Cards below md */}
+        <ul className="md:hidden m-0 p-0 list-none divide-y divide-[#EEF0FA]">
+          {pagedPrograms.map((program) => {
+            const effectiveStatus = getEffectiveProgramStatus(program);
+            const statusBadge = STATUS_BADGE[effectiveStatus] || { label: effectiveStatus, className: 'bg-[#F1F5F9] text-[#475569]' };
+            const checkBadge = CHECK_BADGE[checkStatusByProgram[program.id] || 'none'] || CHECK_BADGE.none;
+            const normalHandouts = program.materials?.filter((m: any) => !m.title?.startsWith('CERTIFICATE_TEMPLATE:')) || [];
+            const entryCount = program.program_entries?.length || 0;
+            const expanded = expandedId === program.id;
+            const poster = program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop';
+            return (
+              <li key={program.id} className="p-4 flex flex-col gap-3">
+                <div className="flex gap-3 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => setPhotoViewer(viewerAt(collectProgramPhotos(program), poster, program.title))}
+                    aria-label={`View photos of ${program.title}`}
+                    className={`w-16 h-16 shrink-0 rounded-2xl overflow-hidden bg-[#E0E7FF] ${focusRing}`}
+                  >
+                    <img src={poster} alt="" className="w-full h-full object-cover" />
+                  </button>
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <span className="font-bold text-[15px] text-[#1E1B4B] break-words">{program.title}</span>
+                    <span className="text-[13px] text-[#5B6477]">{formatProgramDate(program)} · {campusLabel(program.campus)}</span>
+                    <div className="flex flex-wrap gap-1.5 mt-0.5">
+                      <span className={`px-2.5 py-1 rounded-full font-bold text-xs ${statusBadge.className}`}>{statusBadge.label}</span>
+                      <span className={`px-2.5 py-1 rounded-full font-bold text-xs ${checkBadge.className}`}>Check: {checkBadge.label}</span>
                     </div>
-                    
-                    <div className="flex gap-1 self-end sm:self-auto">
-                      <Button size="icon" variant="ghost" className="h-9 w-9 rounded-xl hover:bg-slate-50" onClick={() => handleOpenDialog(program)} aria-label={`Edit ${program.title}`}>
-                        <Edit className="w-4 h-4 text-slate-600"/>
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-9 w-9 rounded-xl hover:bg-rose-50 text-rose-500" onClick={() => triggerDeleteConfirm(program.id, program.title)} aria-label={`Delete ${program.title}`}>
-                        <Trash2 className="w-4 h-4"/>
-                      </Button>
-                    </div>
+                    <span className="text-[13px] text-[#5B6477]">
+                      {entryCount} timeline {entryCount === 1 ? 'entry' : 'entries'} · {normalHandouts.length} {normalHandouts.length === 1 ? 'handout' : 'handouts'}
+                    </span>
                   </div>
                 </div>
-
-                <div>
-                  <Button 
-                    variant="ghost" 
-                    className="w-full border-t border-dashed rounded-none pt-4 justify-between text-indigo-600 hover:text-indigo-700 hover:bg-transparent px-0 font-black text-[9px] md:text-[10px] uppercase tracking-widest transition-colors"
-                    onClick={() => setExpandedId(expandedId === program.id ? null : program.id)}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId(expanded ? null : program.id)}
+                    aria-expanded={expanded}
+                    className={`flex-1 h-11 rounded-xl border-[1.5px] border-[#DDE1EE] bg-white text-[#1E1B4B] font-bold text-[13px] flex items-center justify-center gap-1.5 ${focusRing}`}
                   >
-                    {expandedId === program.id ? 'Hide Details' : 'View Details & Materials'}
-                    {expandedId === program.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </Button>
-
-                  {expandedId === program.id && (
-                    <div className="mt-4 space-y-4 animate-in slide-in-from-top-2 duration-300">
-                      <div className="bg-slate-50/70 p-4 md:p-6 rounded-2xl text-slate-600 text-xs md:text-sm leading-relaxed border border-slate-100/40">
-                        <Label className="text-[8px] md:text-[9px] font-black uppercase text-indigo-500 block mb-2 tracking-widest">Description Manual Context</Label>
-                        <p className="font-medium whitespace-pre-wrap">{program.content || "No extended descriptions mapped for this entry."}</p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-[8px] md:text-[9px] font-black uppercase text-indigo-500 block mb-1 tracking-widest">Downloadable Handouts Ledger</Label>
-                        {normalHandouts.length > 0 ? (
-                          <div className="space-y-2">
-                            {normalHandouts.map((mat: any) => (
-                              <button
-                                key={mat.id}
-                                type="button"
-                                onClick={() => setPreviewHandout({ url: mat.file_url, title: mat.title.replace('HANDOUT: ', '') })}
-                                className="w-full flex items-center justify-between p-3.5 bg-white border border-slate-100 hover:border-indigo-500 rounded-xl transition-all shadow-sm group/item text-left"
-                              >
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <FileText className="w-4 h-4 text-indigo-500 shrink-0" />
-                                  <span className="text-[11px] font-black text-slate-700 truncate max-w-[180px] uppercase tracking-tight">{mat.title.replace('HANDOUT: ', '')}</span>
-                                </div>
-                                <Eye className="w-3.5 h-3.5 text-slate-400 group-hover/item:text-indigo-600 transition-colors shrink-0" />
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider ml-1">No file attachments bound to slot.</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                    Details {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenDialog(program)}
+                    className={`flex-1 h-11 rounded-xl border-[1.5px] border-[#DDE1EE] bg-white text-[#1E1B4B] font-bold text-[13px] ${focusRing}`}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => triggerDeleteConfirm(program.id, program.title)}
+                    aria-label={`Archive ${program.title}`}
+                    className={`w-11 h-11 rounded-xl border-[1.5px] border-[#DDE1EE] bg-white flex items-center justify-center text-rose-500 ${focusRing}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
-              </div>
-            </Card>
-          );
-        })}
+                {expanded && <ProgramDetails program={program} handouts={normalHandouts} onPreview={setPreviewHandout} />}
+              </li>
+            );
+          })}
+        </ul>
+
+        {pagedPrograms.length === 0 && (
+          <p className="m-0 px-6 py-10 text-center text-[15px] text-[#5B6477]">
+            {loading ? 'Loading programs...' : searchQuery ? 'No programs match your search.' : 'No programs yet.'}
+          </p>
+        )}
       </div>
 
       <PaginationControls
+        variant="admin"
         page={programsPage}
         totalPages={programsTotalPages}
         totalItems={filteredPrograms.length}
         pageSize={PROGRAMS_PAGE_SIZE}
         onPageChange={setProgramsPage}
-        className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100"
+        className="bg-white p-4 rounded-[24px]"
       />
 
       {/* CREATE MODAL */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl bg-white rounded-2xl md:rounded-[2.5rem] p-5 md:p-8 max-h-[92vh] overflow-y-auto border-none shadow-2xl font-sans">
+        <DialogContent className="max-w-2xl bg-white rounded-[2rem] p-5 md:p-8 max-h-[92vh] overflow-y-auto border-none shadow-2xl font-figtree text-[#1E293B]">
           <DialogHeader>
-            <DialogTitle className="text-2xl md:text-3xl font-black uppercase tracking-tight text-slate-900">
-              Setup <span className="text-indigo-600">Program Manual</span>
+            <DialogTitle className="font-bricolage font-extrabold text-2xl md:text-3xl tracking-[-0.02em] text-[#1E1B4B]">
+              {editingId ? 'Edit program' : 'New program'}
             </DialogTitle>
           </DialogHeader>
           
@@ -937,7 +1031,7 @@ export default function ProgramManagement() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Poster &amp; Photos</Label>
+                  <Label className="text-[13px] font-semibold ml-1 text-slate-400">Poster &amp; photos</Label>
                   <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={(e) => {
                     addCoverFiles(Array.from(e.target.files || []));
                     e.target.value = '';
@@ -950,15 +1044,15 @@ export default function ProgramManagement() {
                   >
                   {dragTarget === 'cover' && (
                     <div className="absolute inset-0 z-10 rounded-xl md:rounded-2xl bg-indigo-50/90 border-2 border-dashed border-indigo-400 flex items-center justify-center pointer-events-none">
-                      <span className="text-[9px] font-black uppercase text-indigo-600 tracking-widest">Drop photos here</span>
+                      <span className="text-[13px] font-semibold text-indigo-600">Drop photos here</span>
                     </div>
                   )}
                   {coverPhotos.length === 0 ? (
                     <div onClick={() => fileInputRef.current?.click()} className="aspect-video bg-slate-50 hover:bg-slate-100/70 rounded-xl md:rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden relative transition-colors">
                       <div className="text-center p-4">
                         <Camera className="mx-auto text-slate-300 mb-1 w-6 h-6"/>
-                        <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest block">Upload Event Poster</span>
-                        <span className="text-[8px] font-bold text-slate-400 block mt-0.5">or drag photos here</span>
+                        <span className="text-[13px] font-semibold text-slate-400 block">Upload event poster</span>
+                        <span className="text-[13px] font-bold text-slate-400 block mt-0.5">or drag photos here</span>
                       </div>
                     </div>
                   ) : (
@@ -968,7 +1062,7 @@ export default function ProgramManagement() {
                           <img src={photo.url} className="w-full h-full object-cover" alt="" />
 
                           {index === 0 ? (
-                            <span className="absolute left-1 top-1 px-1.5 py-0.5 rounded-md bg-indigo-600 text-white text-[8px] font-black uppercase tracking-wider">
+                            <span className="absolute left-1 top-1 px-1.5 py-0.5 rounded-md bg-indigo-600 text-white text-[13px] font-semibold">
                               Cover
                             </span>
                           ) : (
@@ -997,7 +1091,7 @@ export default function ProgramManagement() {
                           </button>
 
                           {photo.file && (
-                            <span className="absolute left-1 bottom-1 px-1.5 py-0.5 rounded-md bg-amber-400 text-amber-950 text-[7px] font-black uppercase tracking-wider">
+                            <span className="absolute left-1 bottom-1 px-1.5 py-0.5 rounded-md bg-amber-400 text-amber-950 text-[13px] font-semibold">
                               New
                             </span>
                           )}
@@ -1010,60 +1104,60 @@ export default function ProgramManagement() {
                         className="aspect-square rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-slate-100 flex flex-col items-center justify-center text-slate-400 transition-colors"
                       >
                         <Plus className="w-5 h-5" />
-                        <span className="text-[8px] font-black uppercase tracking-widest mt-1">Add</span>
+                        <span className="text-[13px] font-semibold mt-1">Add</span>
                       </button>
                     </div>
                   )}
                   </div>
 
-                  <p className="text-[9px] font-bold text-slate-400 ml-1 leading-relaxed">
+                  <p className="text-[13px] font-bold text-slate-400 ml-1 leading-relaxed">
                     The first photo is the cover shown on cards; the rest are the gallery. You can also drag photos in.
                     {' '}<Star className="inline w-2.5 h-2.5 -mt-0.5" /> makes a photo the cover. Changes apply when you save.
                   </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Activity Title</Label>
-                  <Input value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="rounded-xl bg-slate-50 border-none h-12 font-bold px-4 text-slate-700 text-sm focus-visible:ring-2 focus-visible:ring-indigo-100" placeholder="e.g., Mental Health Orientation" />
+                  <Label className="text-[13px] font-semibold ml-1 text-slate-400">Activity title</Label>
+                  <Input value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-4 text-slate-700 text-sm focus-visible:ring-2 focus-visible:ring-[#A5B4FC]" placeholder="e.g., Mental Health Orientation" />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Extended Description Logistics</Label>
+                <Label className="text-[13px] font-semibold ml-1 text-slate-400">Extended description logistics</Label>
                 <Textarea 
                   value={formData.content} 
                   onChange={(e) => setFormData({...formData, content: e.target.value})}
                   placeholder="Outline full timeline coordinates, scope context information notes here..."
-                  className="h-[150px] md:h-[210px] rounded-xl md:rounded-2xl bg-slate-50 border-none p-4 font-medium text-slate-600 text-xs md:text-sm resize-none focus-visible:ring-2 focus-visible:ring-indigo-100 leading-relaxed"
+                  className="h-[150px] md:h-[210px] rounded-xl md:rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] p-4 font-medium text-slate-600 text-xs md:text-sm resize-none focus-visible:ring-2 focus-visible:ring-[#A5B4FC] leading-relaxed"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div className="space-y-1.5">
-                <Label className={`text-[9px] md:text-[10px] font-black uppercase tracking-wider ml-1 ${isDateOccupied ? 'text-rose-500' : 'text-slate-400'}`}>Target Calendar Date</Label>
-                <Input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} className={`rounded-xl bg-slate-50 border-none h-12 font-bold px-3 text-xs text-slate-700 transition-all focus-visible:ring-2 focus-visible:ring-indigo-100 ${isDateOccupied ? 'ring-2 ring-rose-500 bg-rose-50/60' : ''}`} />
-                {isDateOccupied && <p className="text-[8px] text-rose-500 font-black uppercase flex items-center gap-1 ml-1 tracking-wider animate-bounce"><AlertCircle className="w-3 h-3 shrink-0" /> Date occupied</p>}
-                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider block pt-1">Display Date (Optional)</Label>
-                <Input value={formData.date_display} onChange={(e) => setFormData({...formData, date_display: e.target.value})} placeholder="e.g. February 18-19, 2026" className="rounded-xl bg-slate-50 border-none h-12 font-bold px-3 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-100" />
-                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider block pt-1">Duration Label (Optional)</Label>
-                <Input value={formData.duration_label} onChange={(e) => setFormData({...formData, duration_label: e.target.value})} placeholder="e.g. 1 Month" className="rounded-xl bg-slate-50 border-none h-12 font-bold px-3 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-100" />
+                <Label className={`text-[13px] font-semibold ml-1 ${isDateOccupied ? 'text-rose-500' : 'text-slate-400'}`}>Target calendar date</Label>
+                <Input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} className={`rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-3 text-xs text-slate-700 transition-all focus-visible:ring-2 focus-visible:ring-[#A5B4FC] ${isDateOccupied ? 'ring-2 ring-rose-500 bg-rose-50/60' : ''}`} />
+                {isDateOccupied && <p className="text-[13px] text-rose-500 font-semibold flex items-center gap-1 ml-1 animate-bounce"><AlertCircle className="w-3 h-3 shrink-0" /> Date occupied</p>}
+                <Label className="text-[13px] font-semibold ml-1 text-slate-400 block pt-1">Display date (optional)</Label>
+                <Input value={formData.date_display} onChange={(e) => setFormData({...formData, date_display: e.target.value})} placeholder="e.g. February 18-19, 2026" className="rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-3 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-[#A5B4FC]" />
+                <Label className="text-[13px] font-semibold ml-1 text-slate-400 block pt-1">Duration label (optional)</Label>
+                <Input value={formData.duration_label} onChange={(e) => setFormData({...formData, duration_label: e.target.value})} placeholder="e.g. 1 Month" className="rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-3 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-[#A5B4FC]" />
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Start Event</Label>
-                <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="rounded-xl bg-slate-50 border-none h-12 font-bold px-3 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-100" />
+                <Label className="text-[13px] font-semibold ml-1 text-slate-400">Start event</Label>
+                <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-3 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-[#A5B4FC]" />
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">End Session</Label>
-                <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="rounded-xl bg-slate-50 border-none h-12 font-bold px-3 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-100" />
+                <Label className="text-[13px] font-semibold ml-1 text-slate-400">End session</Label>
+                <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-3 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-[#A5B4FC]" />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Program Component</Label>
-                <select value={formData.program_component} onChange={(e) => setFormData({...formData, program_component: e.target.value})} className="w-full h-12 rounded-xl bg-slate-50 border-none px-4 font-bold text-xs uppercase text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+                <Label className="text-[13px] font-semibold ml-1 text-slate-400">Program component</Label>
+                <select value={formData.program_component} onChange={(e) => setFormData({...formData, program_component: e.target.value})} className="w-full h-12 rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] px-4 font-bold text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100">
                   <option value="Group Guidance">Group Guidance</option>
                   <option value="Individual Student Planning">Individual Student Planning</option>
                   <option value="Responsive Services">Responsive Services</option>
@@ -1072,8 +1166,8 @@ export default function ProgramManagement() {
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Guidance Service</Label>
-                <select value={formData.guidance_service} onChange={(e) => setFormData({...formData, guidance_service: e.target.value})} className="w-full h-12 rounded-xl bg-slate-50 border-none px-4 font-bold text-xs uppercase text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+                <Label className="text-[13px] font-semibold ml-1 text-slate-400">Guidance service</Label>
+                <select value={formData.guidance_service} onChange={(e) => setFormData({...formData, guidance_service: e.target.value})} className="w-full h-12 rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] px-4 font-bold text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100">
                   <option value="Information Services">Information Services</option>
                   <option value="Individual Inventory">Individual Inventory</option>
                   <option value="Research and Evaluation">Research and Evaluation</option>
@@ -1086,18 +1180,18 @@ export default function ProgramManagement() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Location Venue Anchor</Label>
-                <Input value={formData.location} onChange={(e) => setFormData({...formData, location: e.target.value})} className="rounded-xl bg-slate-50 border-none h-12 font-bold px-4 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-100" placeholder="e.g., Campus Gym / Social Hall" />
+                <Label className="text-[13px] font-semibold ml-1 text-slate-400">Location venue anchor</Label>
+                <Input value={formData.location} onChange={(e) => setFormData({...formData, location: e.target.value})} className="rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-4 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-[#A5B4FC]" placeholder="e.g., Campus Gym / Social Hall" />
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Seat Capacity Limit</Label>
-                <Input type="number" value={formData.capacity} onChange={(e) => setFormData({...formData, capacity: Number(e.target.value)})} className="rounded-xl bg-slate-50 border-none h-12 font-bold px-4 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-100" />
+                <Label className="text-[13px] font-semibold ml-1 text-slate-400">Seat capacity limit</Label>
+                <Input type="number" value={formData.capacity} onChange={(e) => setFormData({...formData, capacity: Number(e.target.value)})} className="rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-4 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-[#A5B4FC]" />
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Session Handouts File</Label>
+              <Label className="text-[13px] font-semibold ml-1 text-slate-400">Session handouts file</Label>
 
               {/* Handouts already on this program. Remove marks one; it is
                   deleted (row and file) when the program is saved. */}
@@ -1115,11 +1209,11 @@ export default function ProgramManagement() {
                         <span className={`truncate flex-1 font-bold ${removing ? 'line-through text-slate-400' : 'text-slate-600'}`}>{title}</span>
                         {removing ? (
                           <>
-                            <span className="text-[8px] font-black uppercase text-rose-500 tracking-wider shrink-0">Removed on save</span>
+                            <span className="text-[13px] font-semibold text-rose-500 shrink-0">Removed on save</span>
                             <button
                               type="button"
                               onClick={() => setHandoutsToRemove((previous) => previous.filter((id) => id !== mat.id))}
-                              className="h-9 px-3 rounded-lg text-[9px] font-black uppercase tracking-wider text-slate-600 hover:bg-white shrink-0"
+                              className="h-9 px-3 rounded-lg text-[13px] font-semibold text-slate-600 hover:bg-white shrink-0"
                             >
                               Undo
                             </button>
@@ -1144,7 +1238,7 @@ export default function ProgramManagement() {
               <div onClick={() => materialRef.current?.click()} className="h-12 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center pl-4 pr-1.5 cursor-pointer border-none text-slate-600 text-xs">
                 <FileText className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
                 <span className="truncate flex-1 font-bold">
-                  {materialFile ? materialFile.name : currentHandouts.length > 0 ? 'Add another handout...' : 'Choose Handouts...'}
+                  {materialFile ? materialFile.name : currentHandouts.length > 0 ? 'Add another handout...' : 'Choose a handout...'}
                 </span>
                 {materialFile && (
                   <button
@@ -1164,15 +1258,15 @@ export default function ProgramManagement() {
                 <input type="file" ref={materialRef} className="hidden" accept=".pdf,.doc,.docx,image/*" onChange={(e) => setMaterialFile(e.target.files?.[0] || null)} />
               </div>
               {handoutsToRemove.length > 0 && (
-                <p className="text-[9px] font-bold text-rose-500 ml-1">
+                <p className="text-[13px] font-bold text-rose-500 ml-1">
                   {handoutsToRemove.length} handout{handoutsToRemove.length === 1 ? '' : 's'} will be deleted when you save.
                 </p>
               )}
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Campus</Label>
-              <select value={formData.campus} onChange={(e) => setFormData({...formData, campus: e.target.value})} className="w-full h-12 rounded-xl bg-slate-50 border-none px-4 font-bold text-xs uppercase text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+              <Label className="text-[13px] font-semibold ml-1 text-slate-400">Campus</Label>
+              <select value={formData.campus} onChange={(e) => setFormData({...formData, campus: e.target.value})} className="w-full h-12 rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] px-4 font-bold text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100">
                 <option value="">{ALL_CAMPUSES_LABEL}</option>
                 {CAMPUSES.map((campus) => (
                   <option key={campus} value={campus}>{campus} only</option>
@@ -1181,8 +1275,8 @@ export default function ProgramManagement() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Runtime Status Track</Label>
-              <select value={formData.status} onChange={(e) => setFormData({...formData, status: e.target.value})} className="w-full h-12 rounded-xl bg-slate-50 border-none px-4 font-bold text-xs uppercase text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+              <Label className="text-[13px] font-semibold ml-1 text-slate-400">Runtime status track</Label>
+              <select value={formData.status} onChange={(e) => setFormData({...formData, status: e.target.value})} className="w-full h-12 rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] px-4 font-bold text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100">
                 <option value="upcoming">Upcoming</option>
                 <option value="ongoing">Ongoing</option>
                 <option value="completed">Completed</option>
@@ -1193,8 +1287,8 @@ export default function ProgramManagement() {
                 program's entries are drafts, saved together with it. */}
             <div className="space-y-3 border-t border-slate-100 pt-5">
               <div>
-                <Label className="text-[9px] md:text-[10px] font-black uppercase ml-1 text-slate-400 tracking-wider">Entries (Timeline)</Label>
-                <p className="text-[9px] text-slate-400 ml-1 mt-0.5">
+                <Label className="text-[13px] font-semibold ml-1 text-slate-400">Entries (timeline)</Label>
+                <p className="text-[13px] text-slate-400 ml-1 mt-0.5">
                   For a multi-part program (e.g. a month-long campaign) — one entry per week, day, or milestone.
                   {!editingId && ' Entries you add here are saved when you publish the program.'}
                 </p>
@@ -1211,13 +1305,13 @@ export default function ProgramManagement() {
                         <p className="text-xs font-black text-slate-800 truncate">
                           {entry.label}
                           {isDraftEntry(entry) && (
-                            <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[8px] font-black uppercase tracking-wider align-middle">
+                            <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[13px] font-semibold align-middle">
                               Not saved yet
                             </span>
                           )}
                         </p>
                         {entry.description && (
-                          <p className="text-[10px] text-slate-500 line-clamp-2 mt-0.5">{entry.description}</p>
+                          <p className="text-[13px] text-slate-500 line-clamp-2 mt-0.5">{entry.description}</p>
                         )}
                         {entry.image_urls?.length > 0 ? (
                           <div className="flex flex-wrap gap-1.5 mt-2">
@@ -1237,7 +1331,7 @@ export default function ProgramManagement() {
                             ))}
                           </div>
                         ) : (
-                          <p className="text-[9px] font-bold text-amber-500 mt-0.5">No photos yet</p>
+                          <p className="text-[13px] font-bold text-amber-500 mt-0.5">No photos yet</p>
                         )}
                       </div>
                       <div className="flex flex-col gap-1 shrink-0">
@@ -1262,15 +1356,15 @@ export default function ProgramManagement() {
               <div className={`p-4 bg-white border-2 border-dashed rounded-xl space-y-2 ${editingEntryId ? 'border-indigo-300' : 'border-slate-200'}`}>
                 {editingEntryId && (
                   <div className="flex items-center justify-between">
-                    <p className="text-[9px] font-black uppercase text-indigo-500 tracking-widest">Editing entry</p>
-                    <button type="button" onClick={resetEntryForm} className="text-[9px] font-black uppercase text-slate-400 hover:text-slate-600 tracking-widest">
+                    <p className="text-[13px] font-semibold text-indigo-500">Editing entry</p>
+                    <button type="button" onClick={resetEntryForm} className="text-[13px] font-semibold text-slate-400 hover:text-slate-600">
                       Cancel
                     </button>
                   </div>
                 )}
-                <Input value={entryLabel} onChange={(e) => setEntryLabel(e.target.value)} placeholder='Label, e.g. "Week 1"' className="rounded-lg bg-slate-50 border-none h-10 font-bold px-3 text-xs" />
-                <Textarea value={entryDescription} onChange={(e) => setEntryDescription(e.target.value)} placeholder="Description (optional)" className="h-16 rounded-lg bg-slate-50 border-none p-3 text-xs resize-none" />
-                <Input value={entryCaption} onChange={(e) => setEntryCaption(e.target.value)} placeholder="Caption (optional)" className="rounded-lg bg-slate-50 border-none h-10 font-bold px-3 text-xs" />
+                <Input value={entryLabel} onChange={(e) => setEntryLabel(e.target.value)} placeholder='Label, e.g. "Week 1"' className="rounded-lg bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-10 font-bold px-3 text-xs" />
+                <Textarea value={entryDescription} onChange={(e) => setEntryDescription(e.target.value)} placeholder="Description (optional)" className="h-16 rounded-lg bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] p-3 text-xs resize-none" />
+                <Input value={entryCaption} onChange={(e) => setEntryCaption(e.target.value)} placeholder="Caption (optional)" className="rounded-lg bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-10 font-bold px-3 text-xs" />
                 {/* Photos: thumbnails like the cover grid. Picking more
                     adds to the selection instead of replacing it. */}
                 <input
@@ -1291,7 +1385,7 @@ export default function ProgramManagement() {
                 >
                 {dragTarget === 'entry' && (
                   <div className="absolute inset-0 z-10 min-h-10 rounded-xl bg-indigo-50/90 border-2 border-dashed border-indigo-400 flex items-center justify-center pointer-events-none">
-                    <span className="text-[9px] font-black uppercase text-indigo-600 tracking-widest">Drop photos here</span>
+                    <span className="text-[13px] font-semibold text-indigo-600">Drop photos here</span>
                   </div>
                 )}
                 {(() => {
@@ -1340,7 +1434,7 @@ export default function ProgramManagement() {
                             >
                               <X className="w-3 h-3" />
                             </button>
-                            <span className="absolute left-1 bottom-1 px-1.5 py-0.5 rounded-md bg-amber-400 text-amber-950 text-[7px] font-black uppercase tracking-wider">
+                            <span className="absolute left-1 bottom-1 px-1.5 py-0.5 rounded-md bg-amber-400 text-amber-950 text-[13px] font-semibold">
                               New
                             </span>
                           </div>
@@ -1352,25 +1446,25 @@ export default function ProgramManagement() {
                           className="aspect-square rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-slate-100 flex flex-col items-center justify-center text-slate-400 transition-colors"
                         >
                           <Plus className="w-5 h-5" />
-                          <span className="text-[8px] font-black uppercase tracking-widest mt-1">Add</span>
+                          <span className="text-[13px] font-semibold mt-1">Add</span>
                         </button>
                       </div>
                       {entryFiles.length > 0 && (
-                        <p className="text-[9px] font-bold text-slate-400 ml-1">
-                          New photos are added when you click {editingEntryId ? 'Update Entry' : 'Add Entry'}.
+                        <p className="text-[13px] font-bold text-slate-400 ml-1">
+                          New photos are added when you click {editingEntryId ? 'Update entry' : 'Add entry'}.
                         </p>
                       )}
                     </div>
                   );
                 })()}
                 </div>
-                <Button type="button" onClick={handleSaveEntry} disabled={isSavingEntry} variant="outline" className="w-full h-10 rounded-lg font-black uppercase text-[10px]">
+                <Button type="button" onClick={handleSaveEntry} disabled={isSavingEntry} variant="outline" className="w-full h-10 rounded-lg font-semibold text-[13px]">
                   {isSavingEntry ? (
                     <Loader2 className="animate-spin h-4 w-4 mx-auto" />
                   ) : editingEntryId ? (
-                    <><Edit className="w-3.5 h-3.5 mr-2" /> Update Entry</>
+                    <><Edit className="w-3.5 h-3.5 mr-2" /> Update entry</>
                   ) : (
-                    <><Plus className="w-3.5 h-3.5 mr-2" /> Add Entry</>
+                    <><Plus className="w-3.5 h-3.5 mr-2" /> Add entry</>
                   )}
                 </Button>
               </div>
@@ -1384,10 +1478,10 @@ export default function ProgramManagement() {
                     type="button"
                     variant="ghost"
                     onClick={() => setShowStudentPreview(!showStudentPreview)}
-                    className="w-full h-10 rounded-lg font-black uppercase text-[10px] text-indigo-600 hover:bg-indigo-50"
+                    className="w-full h-10 rounded-lg font-semibold text-[13px] text-indigo-600 hover:bg-indigo-50"
                   >
                     <Eye className="w-3.5 h-3.5 mr-2" />
-                    {showStudentPreview ? 'Hide' : 'Preview as Student Sees It'}
+                    {showStudentPreview ? 'Hide' : 'Preview as students see it'}
                   </Button>
                   {showStudentPreview && (
                     <div className="mt-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
@@ -1404,8 +1498,8 @@ export default function ProgramManagement() {
             </div>
 
             <div className="pt-2">
-              <Button onClick={handleSave} disabled={loading || isDateOccupied} className="w-full h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-xs shadow-md">
-                {loading ? <Loader2 className="animate-spin h-5 h-5 mx-auto" /> : isDateOccupied ? 'Date Conflict Lock Active' : (editingId ? 'Save & Sync Updates' : 'Confirm & Publish Event')}
+              <Button onClick={handleSave} disabled={loading || isDateOccupied} className="w-full h-14 bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-2xl font-bold text-[15px]">
+                {loading ? <Loader2 className="animate-spin h-5 h-5 mx-auto" /> : isDateOccupied ? 'Date conflict: choose another date' : (editingId ? 'Save changes' : 'Publish program')}
               </Button>
             </div>
           </div>
@@ -1418,11 +1512,11 @@ export default function ProgramManagement() {
           <div className="mx-auto w-14 h-14 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-4">
             <AlertCircle className="w-8 h-8" />
           </div>
-          <DialogHeader><DialogTitle className="text-xl font-black text-slate-900 uppercase tracking-tight text-center">Move to Archive?</DialogTitle></DialogHeader>
-          <div className="mt-3 text-slate-500 text-xs font-medium leading-relaxed px-2">You are about to archive <span className="font-bold text-slate-800 uppercase">"{deleteTargetTitle}"</span>. It will disappear from this list, but you can restore it or delete it permanently from the Archive screen.</div>
+          <DialogHeader><DialogTitle className="text-xl font-semibold text-slate-900 tracking-tight text-center">Move to archive?</DialogTitle></DialogHeader>
+          <div className="mt-3 text-slate-500 text-xs font-medium leading-relaxed px-2">You are about to archive <span className="font-bold text-slate-800">"{deleteTargetTitle}"</span>. It will disappear from this list, but you can restore it or delete it permanently from the Archive screen.</div>
           <div className="grid grid-cols-2 gap-3 mt-6">
-            <Button variant="ghost" onClick={() => setIsDeleteOpen(false)} className="h-12 rounded-xl font-black uppercase text-[10px] tracking-wider text-slate-500 bg-slate-50 hover:bg-slate-100">Cancel</Button>
-            <Button onClick={handleExecuteDelete} className="h-12 rounded-xl font-black uppercase text-[10px] tracking-wider bg-rose-600 text-white shadow-md">Move to Archive</Button>
+            <Button variant="ghost" onClick={() => setIsDeleteOpen(false)} className="h-12 rounded-xl font-semibold text-[13px] text-slate-500 bg-slate-50 hover:bg-slate-100">Cancel</Button>
+            <Button onClick={handleExecuteDelete} className="h-12 rounded-xl font-semibold text-[13px] bg-rose-600 text-white shadow-md">Move to archive</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1435,7 +1529,7 @@ export default function ProgramManagement() {
       <Dialog open={!!previewHandout} onOpenChange={(open) => !open && setPreviewHandout(null)}>
         <DialogContent className="max-w-4xl w-[95vw] h-[85vh] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl flex flex-col">
           <DialogHeader className="p-5 bg-white border-b border-slate-100 flex flex-row items-center justify-between shrink-0">
-            <DialogTitle className="font-black uppercase tracking-tighter text-base text-slate-900 truncate pr-8">
+            <DialogTitle className="font-semibold tracking-tighter text-base text-slate-900 truncate pr-8">
               {previewHandout?.title}
             </DialogTitle>
           </DialogHeader>
@@ -1446,7 +1540,7 @@ export default function ProgramManagement() {
                 fallback={
                   <div className="flex flex-col items-center justify-center gap-3">
                     <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Loading PDF...</p>
+                    <p className="text-[13px] font-semibold text-slate-400">Loading PDF...</p>
                   </div>
                 }
               >
@@ -1457,17 +1551,17 @@ export default function ProgramManagement() {
             ) : (
               <div className="text-center px-6">
                 <HardDrive className="w-16 h-16 text-slate-700 mx-auto" />
-                <p className="font-bold text-slate-400 mt-4 uppercase text-xs">Preview not available for this file type</p>
-                <p className="text-slate-500 text-[10px] mt-1">Download it below to open it.</p>
+                <p className="font-bold text-slate-400 mt-4 text-xs">Preview not available for this file type</p>
+                <p className="text-slate-500 text-[13px] mt-1">Download it below to open it.</p>
               </div>
             )}
           </div>
 
           <div className="p-4 bg-white border-t border-slate-100 flex justify-end gap-3 shrink-0">
-            <Button variant="ghost" onClick={() => setPreviewHandout(null)} className="rounded-xl font-bold uppercase text-[10px]">Close</Button>
+            <Button variant="ghost" onClick={() => setPreviewHandout(null)} className="rounded-xl font-bold text-[13px]">Close</Button>
             <Button
               onClick={() => previewHandout && downloadHandout(previewHandout.url, previewHandout.title)}
-              className="bg-indigo-600 hover:bg-indigo-700 rounded-xl font-black uppercase text-[10px] px-6 text-white"
+              className="bg-[#4F46E5] hover:bg-[#4338CA] rounded-xl font-semibold text-[13px] px-6 text-white"
             >
               <Download className="w-3.5 h-3.5 mr-2" /> Download
             </Button>
@@ -1475,6 +1569,56 @@ export default function ProgramManagement() {
         </DialogContent>
       </Dialog>
 
+    </div>
+  );
+}
+
+// Groups a program's row and its optional details row in the table.
+function FragmentRows({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}
+
+// The expandable details of one program: description and handouts.
+function ProgramDetails({
+  program,
+  handouts,
+  onPreview,
+}: {
+  program: any;
+  handouts: any[];
+  onPreview: (handout: { url: string; title: string }) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-semibold text-[#5B6477]">Description</span>
+        <p className="m-0 text-sm leading-relaxed text-[#334155] whitespace-pre-wrap">
+          {program.content || 'No description yet.'}
+        </p>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-semibold text-[#5B6477]">Handouts</span>
+        {handouts.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            {handouts.map((mat: any) => (
+              <button
+                key={mat.id}
+                type="button"
+                onClick={() => onPreview({ url: mat.file_url, title: mat.title.replace('HANDOUT: ', '') })}
+                className="w-full min-h-[44px] flex items-center justify-between gap-3 px-3.5 py-2.5 bg-white border-[1.5px] border-[#DDE1EE] hover:border-[#A5B4FC] rounded-xl text-left focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
+              >
+                <span className="flex items-center gap-2.5 min-w-0">
+                  <FileText className="w-4 h-4 text-[#4F46E5] shrink-0" aria-hidden="true" />
+                  <span className="text-sm font-semibold text-[#1E1B4B] truncate">{mat.title.replace('HANDOUT: ', '')}</span>
+                </span>
+                <Eye className="w-4 h-4 text-[#5B6477] shrink-0" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="m-0 text-sm text-[#5B6477]">No handouts yet.</p>
+        )}
+      </div>
     </div>
   );
 }

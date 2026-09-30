@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { logActivity } from "../../lib/activityLog";
 import { notifyStudents } from "../../lib/notifyStudents";
@@ -166,7 +166,10 @@ function formPairingProblem(formA: Question[] | null | undefined, formB: Questio
   return null;
 }
 
-export default function SurveyBuilder() {
+// A request from the Content page ("Needs attention" opens one draft).
+type OpenRequest = { n: number; id?: number };
+
+export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?: OpenRequest | null; onChanged?: () => void } = {}) {
   const { toast } = useToast();
   const { user, userName } = useAuth();
 
@@ -239,6 +242,7 @@ export default function SurveyBuilder() {
       if (error) throw error;
 
       setSurveys((data || []) as Survey[]);
+      onChanged?.();
     } catch (err: any) {
       toast({
         title: "Database Error",
@@ -377,6 +381,18 @@ export default function SurveyBuilder() {
       setCreating(false);
     }
   }
+
+  // "Needs attention" on the Content page opens one assessment here,
+  // once the list has loaded.
+  const handledOpenRequest = useRef<number | null>(null);
+  useEffect(() => {
+    if (!openRequest || handledOpenRequest.current === openRequest.n) return;
+    const survey = surveys.find((s) => s.id === openRequest.id);
+    if (!survey) return;
+    handledOpenRequest.current = openRequest.n;
+    openEditor(survey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest, surveys]);
 
   function openEditor(survey: Survey) {
     setEditingSurvey(survey);

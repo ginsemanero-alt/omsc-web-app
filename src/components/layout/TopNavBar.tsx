@@ -34,7 +34,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '../../components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import StudentBottomNav from '../student/StudentBottomNav';
 
@@ -370,166 +369,197 @@ export default function TopNavBar({
           </div>
         </header>
       ) : (
-        /* ================= ADMIN HEADER (unchanged) ================= */
-        <header className="fixed top-0 left-0 right-0 h-[72px] bg-background/90 backdrop-blur-md border-b border-border z-50">
-          <div className="max-w-[1440px] mx-auto px-6 h-full flex items-center justify-between">
+        /* ================= ADMIN SHELL =================
+           Desktop (lg+): a dark ink sidebar inset 16px from the edges.
+           Below lg: a slim top bar whose menu button opens the drawer. */
+        <>
+          <aside
+            aria-label="Admin"
+            className="hidden lg:flex fixed top-4 bottom-4 left-4 w-[264px] z-40 flex-col gap-7 rounded-[2.5rem] bg-[#1E1B4B] text-white px-4 py-6 font-figtree"
+          >
+            <Link to="/admin" className={`min-h-[44px] flex items-center gap-3 px-2 rounded-2xl ${studentFocusRing}`}>
+              <img src="/guidance-logo.jpg" alt="" className="w-[42px] h-[42px] rounded-full object-cover bg-white shrink-0" />
+              <span className="flex flex-col min-w-0">
+                <span className="font-bricolage font-extrabold text-[17px] leading-tight">OMSU Guidance</span>
+                <span className="text-xs text-[#C7C9F2]">Admin</span>
+              </span>
+            </Link>
 
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="md:hidden text-foreground"
-                onClick={() => setIsSidebarOpen(true)}
-                aria-label="Open menu"
-              >
-                <Menu className="w-6 h-6" />
-              </Button>
-
-              <div className="flex items-center gap-3">
-                 <img
-                   src="/guidance-logo.jpg"
-                   alt="OMSU Guidance and Testing Center"
-                   className="w-10 h-10 rounded-full object-cover"
-                 />
-                 <div className="hidden sm:block">
-                   <h1 className="text-sm font-bold text-foreground leading-none">OMSU Guidance</h1>
-                   <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">{campus}</p>
-                 </div>
-              </div>
-            </div>
-
-            <nav className="hidden md:flex items-center gap-2">
+            <nav aria-label="Admin sections" className="flex flex-col gap-1 overflow-y-auto">
               {navigationItems.map((item: NavigationItem) => {
                 const ItemIcon = item.icon ? NAV_ICONS[item.icon] : null;
+                const active = currentPath === item.path;
                 return (
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm transition-colors ${
-                      currentPath === item.path
-                        ? 'bg-primary/10 text-primary font-medium border-b-2 border-primary rounded-none'
-                        : 'text-muted-foreground hover:bg-neutral-100 dark:hover:bg-white/5'
+                    aria-current={active ? 'page' : undefined}
+                    className={`h-[50px] px-4 rounded-2xl flex items-center gap-3 text-[15px] transition-colors ${studentFocusRing} ${
+                      active ? 'bg-white text-[#1E1B4B] font-bold' : 'text-[#C7C9F2] font-semibold hover:bg-white/10 hover:text-white'
                     }`}
                   >
-                    {ItemIcon && <ItemIcon className="w-4 h-4" />}
+                    {ItemIcon && <ItemIcon className="w-5 h-5 shrink-0" aria-hidden="true" />}
                     {item.label}
                   </Link>
                 );
               })}
             </nav>
 
-            <div className="flex items-center gap-2">
+            <div className="mt-auto flex flex-col gap-2">
               {onToggleTheme && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-foreground hover:bg-slate-100 dark:hover:bg-white/10"
+                <button
+                  type="button"
                   onClick={onToggleTheme}
                   aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                  className={`h-11 px-4 rounded-2xl flex items-center gap-3 text-sm font-semibold text-[#C7C9F2] hover:bg-white/10 ${studentFocusRing}`}
                 >
-                  {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-                </Button>
+                  {isDark ? <Sun className="w-5 h-5" aria-hidden="true" /> : <Moon className="w-5 h-5" aria-hidden="true" />}
+                  {isDark ? 'Light mode' : 'Dark mode'}
+                </button>
               )}
 
+              {/* Signed-in staff card: opens the account menu. */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="flex items-center gap-2 px-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl transition-all">
-                    <Avatar className="w-8 h-8 border-2 border-primary/20">
-                      <AvatarFallback className="bg-primary text-white text-[10px] font-bold">
-                        {initials}
-                      </AvatarFallback>
-                    </Avatar>
-                    {/* DITO LALABAS YUNG TOTOONG PANGALAN SA DESKTOP */}
-                    <span className="hidden lg:block text-xs font-bold text-slate-700 dark:text-slate-200 max-w-[100px] truncate">
-                      {displayName}
+                  <button
+                    type="button"
+                    aria-label={`Account menu for ${displayName}`}
+                    className={`w-full p-3.5 rounded-[22px] bg-white/[0.08] hover:bg-white/[0.14] flex items-center gap-3 text-left transition-colors ${studentFocusRing}`}
+                  >
+                    <span
+                      className="w-10 h-10 shrink-0 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-sm flex items-center justify-center"
+                      aria-hidden="true"
+                    >
+                      {initials}
                     </span>
-                    <ChevronDown className="w-4 h-4 opacity-50" />
-                  </Button>
+                    <span className="flex flex-col min-w-0 flex-1">
+                      <span className="font-bold text-sm truncate">{displayName}</span>
+                      <span className="text-xs text-[#C7C9F2] truncate">{campus}</span>
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-[#C7C9F2] shrink-0" aria-hidden="true" />
+                  </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64 rounded-2xl p-2 shadow-xl border-slate-100 dark:border-slate-800 dark:bg-slate-900">
-                  <DropdownMenuLabel className="font-black text-indigo-600 dark:text-indigo-400 px-3 py-2 uppercase tracking-tight">
+                <DropdownMenuContent side="top" align="start" className="w-60 rounded-3xl p-2 shadow-xl border-[#DDE1EE] font-figtree">
+                  <DropdownMenuLabel className="font-bold text-[15px] text-[#1E1B4B] px-3 py-2 truncate">
                     {displayName}
                   </DropdownMenuLabel>
-                  <DropdownMenuSeparator className="dark:bg-slate-800" />
-                  <DropdownMenuItem onClick={() => setShowLogoutConfirm(true)} className="text-red-600 focus:bg-red-50 dark:focus:bg-red-500/10 focus:text-red-700 dark:text-red-400 rounded-xl cursor-pointer p-3">
-                    <LogOut className="w-4 h-4 mr-2" /> <span className="font-bold uppercase text-[11px] tracking-widest">Sign Out Account</span>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setShowLogoutConfirm(true)}
+                    className="rounded-2xl cursor-pointer min-h-[44px] px-3 font-semibold text-sm text-red-600 focus:bg-red-50 focus:text-red-700"
+                  >
+                    <LogOut className="w-4 h-4 mr-2" aria-hidden="true" /> Sign out
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-          </div>
-        </header>
+          </aside>
+
+          <header className="lg:hidden fixed top-0 left-0 right-0 h-[72px] z-50 bg-[#EEF0FA]/90 backdrop-blur-md font-figtree">
+            <div className="h-full px-4 sm:px-6 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsSidebarOpen(true)}
+                aria-label="Open menu"
+                aria-expanded={isSidebarOpen}
+                className={`w-11 h-11 rounded-2xl bg-white text-[#1E1B4B] flex items-center justify-center ${studentFocusRing}`}
+              >
+                <Menu className="w-5 h-5" aria-hidden="true" />
+              </button>
+              <Link to="/admin" className={`min-h-[44px] flex items-center gap-3 min-w-0 rounded-2xl ${studentFocusRing}`}>
+                <img src="/guidance-logo.jpg" alt="" className="w-10 h-10 rounded-full object-cover bg-white shrink-0" />
+                <span className="flex flex-col min-w-0">
+                  <span className="font-bricolage font-extrabold text-base text-[#1E1B4B] leading-tight">OMSU Guidance</span>
+                  <span className="text-xs text-[#5B6477]">Admin</span>
+                </span>
+              </Link>
+            </div>
+          </header>
+        </>
       )}
 
-      {/* MOBILE SIDEBAR — admin only; students get the floating bottom bar
+      {/* ADMIN DRAWER — below lg; students get the floating bottom bar
           below instead (see STUDENT BOTTOM NAV). */}
       {role === 'admin' && (
-        <div className={`fixed top-0 left-0 h-full w-[280px] bg-white dark:bg-slate-900 z-[70] shadow-2xl transform transition-transform duration-300 ease-in-out md:hidden ${
-          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}>
-          <div className="p-6 flex flex-col h-full">
-            <div className="flex items-center justify-between gap-2 mb-8">
-              <div className="flex items-center gap-2 min-w-0">
-                 <Avatar className="w-10 h-10 shrink-0">
-                   <AvatarFallback className="bg-primary text-white font-bold">{initials}</AvatarFallback>
-                 </Avatar>
-                 <div className="flex flex-col min-w-0">
-                   <span className="font-bold text-sm truncate text-slate-900 dark:text-slate-100">{displayName}</span>
-                   <span className="text-[10px] text-slate-400 font-bold uppercase truncate">{campus}</span>
-                 </div>
+        <div
+          className={`fixed top-0 left-0 h-full w-[288px] max-w-[85vw] bg-[#1E1B4B] text-white z-[70] shadow-2xl transform transition-transform duration-300 ease-in-out lg:hidden font-figtree ${
+            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+          aria-hidden={!isSidebarOpen}
+        >
+          <div className="p-5 flex flex-col h-full gap-6">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-3 min-w-0">
+                <span
+                  className="w-10 h-10 shrink-0 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-sm flex items-center justify-center"
+                  aria-hidden="true"
+                >
+                  {initials}
+                </span>
+                <div className="flex flex-col min-w-0">
+                  <span className="font-bold text-sm truncate">{displayName}</span>
+                  <span className="text-xs text-[#C7C9F2] truncate">{campus}</span>
+                </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 {onToggleTheme && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
+                  <button
+                    type="button"
                     onClick={onToggleTheme}
                     aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-                    className="text-slate-600 dark:text-slate-300"
+                    tabIndex={isSidebarOpen ? 0 : -1}
+                    className={`w-11 h-11 rounded-xl flex items-center justify-center text-[#C7C9F2] hover:bg-white/10 ${studentFocusRing}`}
                   >
                     {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-                  </Button>
+                  </button>
                 )}
-                <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(false)} aria-label="Close menu" className="text-slate-600 dark:text-slate-300">
+                <button
+                  type="button"
+                  onClick={() => setIsSidebarOpen(false)}
+                  aria-label="Close menu"
+                  tabIndex={isSidebarOpen ? 0 : -1}
+                  className={`w-11 h-11 rounded-xl flex items-center justify-center text-[#C7C9F2] hover:bg-white/10 ${studentFocusRing}`}
+                >
                   <X className="w-6 h-6" />
-                </Button>
+                </button>
               </div>
             </div>
 
-            <nav className="flex flex-col gap-2">
-              {/* Re-mounted (not just hidden) each time the sidebar opens, so
+            <nav aria-label="Admin sections" className="flex flex-col gap-1">
+              {/* Re-mounted (not just hidden) each time the drawer opens, so
                   the fade/slide-in replays instead of only playing once ever. */}
               {isSidebarOpen &&
                 navigationItems.map((item: NavigationItem, index) => {
                   const ItemIcon = item.icon ? NAV_ICONS[item.icon] : null;
+                  const active = currentPath === item.path;
                   return (
                     <Link
                       key={item.path}
                       to={item.path}
                       onClick={() => setIsSidebarOpen(false)}
+                      aria-current={active ? 'page' : undefined}
                       style={{ animationDelay: `${index * 40}ms` }}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-xl text-base transition-all animate-in fade-in slide-in-from-left-4 duration-300 fill-mode-both ${
-                        currentPath === item.path
-                          ? 'bg-primary text-white shadow-lg font-bold'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5'
+                      className={`h-[50px] px-4 rounded-2xl flex items-center gap-3 text-[15px] transition-colors motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-300 fill-mode-both ${studentFocusRing} ${
+                        active ? 'bg-white text-[#1E1B4B] font-bold' : 'text-[#C7C9F2] font-semibold hover:bg-white/10 hover:text-white'
                       }`}
                     >
-                      {ItemIcon && <ItemIcon className="w-5 h-5 shrink-0" />}
+                      {ItemIcon && <ItemIcon className="w-5 h-5 shrink-0" aria-hidden="true" />}
                       {item.label}
                     </Link>
                   );
                 })}
             </nav>
 
-            <div className="mt-auto pt-6 border-t dark:border-slate-800">
-              <Button
-                variant="ghost"
-                className="w-full justify-start text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 font-bold rounded-xl"
+            <div className="mt-auto pt-4 border-t border-white/10">
+              <button
+                type="button"
                 onClick={() => setShowLogoutConfirm(true)}
+                tabIndex={isSidebarOpen ? 0 : -1}
+                className={`w-full h-12 px-4 rounded-2xl flex items-center gap-3 text-[15px] font-semibold text-rose-300 hover:bg-white/10 ${studentFocusRing}`}
               >
-                <LogOut className="w-5 h-5 mr-3" />
-                SIGN OUT
-              </Button>
+                <LogOut className="w-5 h-5" aria-hidden="true" />
+                Sign out
+              </button>
             </div>
           </div>
         </div>
@@ -537,7 +567,7 @@ export default function TopNavBar({
 
       {role === 'admin' && isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-[60] md:hidden backdrop-blur-sm"
+          className="fixed inset-0 bg-[#1E1B4B]/50 z-[60] lg:hidden backdrop-blur-sm"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}

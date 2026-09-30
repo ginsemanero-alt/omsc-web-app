@@ -35,23 +35,19 @@ import { useToast } from '../../hooks/use-toast';
 import {
   FileText,
   Download,
-  Eye,
   Loader2,
   HardDrive,
   Search,
-  Calendar,
   Maximize2,
   Youtube,
   Video,
   Music,
   Link as LinkIcon,
-  Plus,
   Edit,
   Trash2,
   Camera,
   AlertCircle,
   Tag,
-  Filter,
 } from 'lucide-react';
 
 type MaterialType = 'PDF' | 'Image' | 'Video' | 'Audio' | 'Link';
@@ -99,7 +95,11 @@ const DEFAULT_FORM: FormData = {
   campus: '',
 };
 
-export default function IECMaterials() {
+// A request from the Content page header (Upload material). n changes on
+// every request, so asking twice still opens the dialog.
+type OpenRequest = { n: number; id?: number };
+
+export default function IECMaterials({ uploadRequest, onChanged }: { uploadRequest?: OpenRequest | null; onChanged?: () => void } = {}) {
   const { toast } = useToast();
   const { user, userName } = useAuth();
 
@@ -196,6 +196,7 @@ export default function IECMaterials() {
       }
 
       setMaterials((data || []) as Material[]);
+      onChanged?.();
     } catch (error: any) {
       toast({
         variant: 'destructive',
@@ -949,83 +950,57 @@ export default function IECMaterials() {
   // RENDER
   // =========================================================
 
+  // Header "Upload material" opens the upload dialog here.
+  const handledUploadRequest = useRef<number | null>(null);
+  useEffect(() => {
+    if (!uploadRequest || handledUploadRequest.current === uploadRequest.n) return;
+    handledUploadRequest.current = uploadRequest.n;
+    handleOpenDialog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadRequest]);
+
   return (
-    <div className="space-y-8 p-6 max-w-7xl mx-auto animate-in fade-in duration-700">
+    <div className="flex flex-col gap-5 font-figtree text-[#1E293B]">
 
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-
-        <div className="space-y-1">
-          <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">
-            IEC{' '}
-            <span className="text-indigo-600">
-              Materials
-            </span>
-          </h1>
-
-          <p className="text-slate-500 font-medium flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-indigo-400" />
-            Guidance Resources Library
-          </p>
+      {/* SEARCH AND FILTERS (Upload material lives in the Content page header) */}
+      <div className="bg-white rounded-[28px] p-4 md:p-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#6B7285] pointer-events-none" aria-hidden="true" />
+          <label htmlFor="material-search" className="sr-only">Search materials</label>
+          <input
+            id="material-search"
+            type="search"
+            placeholder="Search materials"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            className="w-full h-12 pl-11 pr-4 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B] placeholder:text-[#8A91A6] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
+          />
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-center">
+        <label className="sr-only" htmlFor="material-category">IEC category</label>
+        <select id="material-category" value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)} className="w-full h-12 px-4 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm font-semibold text-[#1E293B] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]">
+          <option value="All">All IEC categories</option>
+          {IEC_CATEGORIES.map((category) => (
+            <option key={category} value={category}>{category}</option>
+          ))}
+        </select>
 
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <label className="sr-only" htmlFor="material-component">Program component</label>
+        <select id="material-component" value={selectedComponent} onChange={(event) => setSelectedComponent(event.target.value)} className="w-full h-12 px-4 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm font-semibold text-[#1E293B] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]">
+          <option value="All">All program components</option>
+          {PROGRAM_COMPONENTS.map((component) => (
+            <option key={component} value={component}>{component}</option>
+          ))}
+        </select>
 
-            <Input
-              placeholder="Search materials..."
-              value={searchQuery}
-              onChange={(event) =>
-                setSearchQuery(event.target.value)
-              }
-              className="pl-11 h-12 bg-slate-50 border-none rounded-2xl"
-            />
-          </div>
-
-          <Button
-            onClick={() => handleOpenDialog()}
-            className="h-12 w-full sm:w-auto px-6 rounded-2xl font-black bg-indigo-600 hover:bg-indigo-700 text-white uppercase text-[10px] tracking-wider"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Upload Material
-          </Button>
-        </div>
+        <label className="sr-only" htmlFor="material-tag">Tag</label>
+        <select id="material-tag" value={selectedTag} onChange={(event) => setSelectedTag(event.target.value)} className="w-full h-12 px-4 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm font-semibold text-[#1E293B] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]">
+          <option value="All">All tags</option>
+          {allTags.map((tag) => (
+            <option key={tag} value={tag}>{tag}</option>
+          ))}
+        </select>
       </div>
-
-      {/* FILTERS */}
-      <Card className="p-5 bg-white border-none shadow-sm rounded-[2rem]">
-        <div className="flex items-center gap-2 mb-4">
-          <Filter className="w-4 h-4 text-indigo-600" />
-          <h2 className="text-xs font-black uppercase tracking-widest text-slate-700">
-            Filter IEC Materials
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)} className="select-field">
-            <option value="All">All IEC Categories</option>
-            {IEC_CATEGORIES.map((category) => (
-              <option key={category} value={category}>{category}</option>
-            ))}
-          </select>
-
-          <select value={selectedComponent} onChange={(event) => setSelectedComponent(event.target.value)} className="select-field">
-            <option value="All">All Program Components</option>
-            {PROGRAM_COMPONENTS.map((component) => (
-              <option key={component} value={component}>{component}</option>
-            ))}
-          </select>
-
-          <select value={selectedTag} onChange={(event) => setSelectedTag(event.target.value)} className="select-field">
-            <option value="All">All Tags</option>
-            {allTags.map((tag) => (
-              <option key={tag} value={tag}>{tag}</option>
-            ))}
-          </select>
-        </div>
-      </Card>
 
       {/* TABS */}
 
@@ -1034,20 +1009,20 @@ export default function IECMaterials() {
         onValueChange={setActiveTab}
         className="w-full"
       >
-        <TabsList className="bg-slate-100/50 p-1.5 rounded-2xl mb-8 border border-slate-100">
+        <TabsList className="h-auto bg-white p-[5px] rounded-full mb-5 gap-1">
 
           <TabsTrigger
             value="infographics"
-            className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs"
+            className="h-11 px-[18px] rounded-full text-sm font-semibold text-[#334155] data-[state=active]:bg-[#1E1B4B] data-[state=active]:text-white data-[state=active]:font-bold data-[state=active]:shadow-none"
           >
             Infographics
           </TabsTrigger>
 
           <TabsTrigger
             value="videos"
-            className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 uppercase text-xs"
+            className="h-11 px-[18px] rounded-full text-sm font-semibold text-[#334155] data-[state=active]:bg-[#1E1B4B] data-[state=active]:text-white data-[state=active]:font-bold data-[state=active]:shadow-none"
           >
-            Video / Audio / Links
+            Video / audio / links
           </TabsTrigger>
 
         </TabsList>
@@ -1056,8 +1031,8 @@ export default function IECMaterials() {
           <div className="h-64 flex flex-col items-center justify-center gap-4">
             <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
 
-            <p className="text-slate-400 font-bold uppercase text-xs tracking-widest">
-              Loading Materials
+            <p className="text-slate-400 font-bold text-xs">
+              Loading materials
             </p>
           </div>
         ) : (
@@ -1082,7 +1057,7 @@ export default function IECMaterials() {
                   return (
                     <Card
                       key={item.id}
-                      className="overflow-hidden bg-white border-none shadow-sm rounded-[2.5rem] group hover:shadow-2xl transition-all duration-500 relative"
+                      className="overflow-hidden bg-white border-none shadow-sm rounded-[28px] group hover:shadow-2xl transition-all duration-500 relative"
                     >
 
                       <MaterialActions
@@ -1136,7 +1111,7 @@ export default function IECMaterials() {
                         />
                         <MaterialMeta item={item} />
 
-                        <h3 className="font-black text-slate-800 truncate uppercase mt-1 mb-4">
+                        <h3 className="font-semibold text-slate-800 truncate mt-1 mb-4">
                           {item.title}
                         </h3>
 
@@ -1148,7 +1123,7 @@ export default function IECMaterials() {
                                 item.title
                               )
                             }
-                            className="w-full h-12 bg-slate-900 hover:bg-indigo-600 rounded-2xl font-black uppercase text-xs text-white"
+                            className="w-full h-12 bg-slate-900 hover:bg-indigo-600 rounded-2xl font-semibold text-xs text-white"
                           >
                             <Download className="w-4 h-4 mr-2" />
                             Download Image
@@ -1164,6 +1139,7 @@ export default function IECMaterials() {
               )}
             </div>
             <PaginationControls
+        variant="admin"
               page={infographicsPage}
               totalPages={infographicsTotalPages}
               totalItems={infographics.length}
@@ -1186,7 +1162,7 @@ export default function IECMaterials() {
                 pagedVideos.map((item) => (
                   <Card
                     key={item.id}
-                    className="p-8 bg-white border-none shadow-sm rounded-[2.5rem] group relative"
+                    className="p-8 bg-white border-none shadow-sm rounded-[28px] group relative"
                   >
 
                     <MaterialActions
@@ -1203,13 +1179,7 @@ export default function IECMaterials() {
 
                     <div className="flex items-center gap-6">
 
-                      <div className={`w-20 h-20 rounded-3xl flex items-center justify-center shrink-0 ${
-                        item.type === 'Audio'
-                          ? 'bg-purple-50'
-                          : item.type === 'Link'
-                          ? 'bg-indigo-50'
-                          : 'bg-red-50'
-                      }`}>
+                      <div className={`w-20 h-20 rounded-3xl flex items-center justify-center shrink-0 ${ item.type === 'Audio' ? 'bg-purple-50' : item.type === 'Link' ? 'bg-indigo-50' : 'bg-red-50' }`}>
                         {item.type === 'Audio' ? (
                           <Music className="w-10 h-10 text-purple-600" />
                         ) : item.type === 'Link' ? (
@@ -1226,7 +1196,7 @@ export default function IECMaterials() {
                         />
                         <MaterialMeta item={item} />
 
-                        <h3 className="text-xl font-black text-slate-800 uppercase mt-1 mb-4 truncate">
+                        <h3 className="text-xl font-semibold text-slate-800 mt-1 mb-4 truncate">
                           {item.title}
                         </h3>
 
@@ -1234,13 +1204,7 @@ export default function IECMaterials() {
                           onClick={() =>
                             handlePreview(item)
                           }
-                          className={`h-12 px-8 rounded-2xl font-black uppercase text-xs text-white ${
-                            item.type === 'Audio'
-                              ? 'bg-purple-600 hover:bg-purple-700'
-                              : item.type === 'Link'
-                              ? 'bg-indigo-600 hover:bg-indigo-700'
-                              : 'bg-red-600 hover:bg-red-700'
-                          }`}
+                          className={`h-12 px-8 rounded-2xl font-semibold text-xs text-white ${ item.type === 'Audio' ? 'bg-purple-600 hover:bg-purple-700' : item.type === 'Link' ? 'bg-[#4F46E5] hover:bg-[#4338CA]' : 'bg-red-600 hover:bg-red-700' }`}
                         >
                           {item.type === 'Audio'
                             ? 'Play Audio'
@@ -1258,6 +1222,7 @@ export default function IECMaterials() {
               )}
             </div>
             <PaginationControls
+        variant="admin"
               page={videosPage}
               totalPages={videosTotalPages}
               totalItems={videos.length}
@@ -1278,14 +1243,11 @@ export default function IECMaterials() {
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
       >
-        <DialogContent className="max-w-2xl bg-white rounded-3xl p-6 md:p-8 max-h-[92vh] overflow-y-auto border-none shadow-2xl">
+        <DialogContent className="max-w-2xl bg-white rounded-[2rem] p-6 md:p-8 max-h-[92vh] overflow-y-auto border-none shadow-2xl font-figtree text-[#1E293B]">
 
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black uppercase tracking-tight text-slate-900">
-              {editingId ? 'Edit' : 'Upload'}{' '}
-              <span className="text-indigo-600">
-                Guidance Material
-              </span>
+            <DialogTitle className="font-bricolage font-extrabold text-2xl md:text-3xl tracking-[-0.02em] text-[#1E1B4B]">
+              {editingId ? 'Edit material' : 'Upload material'}
             </DialogTitle>
           </DialogHeader>
 
@@ -1323,7 +1285,7 @@ export default function IECMaterials() {
                       setAttachedVideo(null);
                       setVideoSourceMode('link');
                     }}
-                    className="select-field"
+                    className="w-full h-12 px-4 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm font-semibold text-[#1E293B] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
                   >
                     <option value="Image">
                       Infographic Graphic Image
@@ -1357,7 +1319,7 @@ export default function IECMaterials() {
                         title: event.target.value,
                       })
                     }
-                    className="rounded-xl bg-slate-50 border-none h-12 font-bold px-4 text-slate-700"
+                    className="rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-4 text-slate-700"
                     placeholder="e.g., Guide to Stress Management"
                   />
 
@@ -1381,7 +1343,7 @@ export default function IECMaterials() {
                     })
                   }
                   placeholder="Outline context details/notes here..."
-                  className="h-32 md:h-[114px] rounded-xl bg-slate-50 border-none p-4 font-medium text-slate-600 text-xs resize-none"
+                  className="h-32 md:h-[114px] rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] p-4 font-medium text-slate-600 text-xs resize-none"
                 />
 
               </div>
@@ -1401,7 +1363,7 @@ export default function IECMaterials() {
                   onChange={(event) =>
                     setFormData({ ...formData, category: event.target.value })
                   }
-                  className="select-field"
+                  className="w-full h-12 px-4 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm font-semibold text-[#1E293B] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
                 >
                   {IEC_CATEGORIES.map((category) => (
                     <option key={category} value={category}>
@@ -1421,7 +1383,7 @@ export default function IECMaterials() {
                   onChange={(event) =>
                     setFormData({ ...formData, program_component: event.target.value })
                   }
-                  className="select-field"
+                  className="w-full h-12 px-4 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm font-semibold text-[#1E293B] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
                 >
                   {PROGRAM_COMPONENTS.map((component) => (
                     <option key={component} value={component}>
@@ -1441,7 +1403,7 @@ export default function IECMaterials() {
                   onChange={(event) =>
                     setFormData({ ...formData, campus: event.target.value })
                   }
-                  className="select-field"
+                  className="w-full h-12 px-4 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm font-semibold text-[#1E293B] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
                 >
                   <option value="">{ALL_CAMPUSES_LABEL}</option>
                   {CAMPUSES.map((campus) => (
@@ -1462,10 +1424,10 @@ export default function IECMaterials() {
                   onChange={(event) =>
                     setFormData({ ...formData, tags: event.target.value })
                   }
-                  className="rounded-xl bg-slate-50 border-none h-12 font-bold px-4 text-slate-700"
+                  className="rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-4 text-slate-700"
                   placeholder="e.g. study skills, academic success, learning strategies"
                 />
-                <p className="text-[10px] text-slate-400 font-medium">
+                <p className="text-[13px] text-slate-400 font-medium">
                   Separate multiple tags with commas.
                 </p>
               </div>
@@ -1565,24 +1527,16 @@ export default function IECMaterials() {
                     <button
                       type="button"
                       onClick={() => setVideoSourceMode('link')}
-                      className={`flex-1 h-10 rounded-xl font-black uppercase text-[10px] tracking-wider transition-colors ${
-                        videoSourceMode === 'link'
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
-                      }`}
+                      className={`flex-1 h-10 rounded-xl font-semibold text-[13px] transition-colors ${ videoSourceMode === 'link' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100' }`}
                     >
-                      YouTube Link
+                      YouTube link
                     </button>
                     <button
                       type="button"
                       onClick={() => setVideoSourceMode('upload')}
-                      className={`flex-1 h-10 rounded-xl font-black uppercase text-[10px] tracking-wider transition-colors ${
-                        videoSourceMode === 'upload'
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
-                      }`}
+                      className={`flex-1 h-10 rounded-xl font-semibold text-[13px] transition-colors ${ videoSourceMode === 'upload' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100' }`}
                     >
-                      Upload Video File
+                      Upload video file
                     </button>
                   </div>
 
@@ -1601,7 +1555,7 @@ export default function IECMaterials() {
                               event.target.value,
                           })
                         }
-                        className="rounded-xl bg-slate-50 border-none h-12 font-bold px-4 text-slate-700"
+                        className="rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-4 text-slate-700"
                         placeholder="https://www.youtube.com/watch?v=..."
                       />
                     </div>
@@ -1635,7 +1589,7 @@ export default function IECMaterials() {
                           onChange={handleVideoSelect}
                         />
                       </div>
-                      <p className="text-[10px] text-slate-400 px-1">
+                      <p className="text-[13px] text-slate-400 px-1">
                         Self-hosted — no YouTube branding or ads, but uses
                         this app's own storage instead of YouTube's.
                       </p>
@@ -1703,7 +1657,7 @@ export default function IECMaterials() {
                           event.target.value,
                       })
                     }
-                    className="rounded-xl bg-slate-50 border-none h-12 font-bold px-4 text-slate-700"
+                    className="rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-4 text-slate-700"
                     placeholder="https://..."
                   />
 
@@ -1768,7 +1722,7 @@ export default function IECMaterials() {
               <Button
                 onClick={handleSave}
                 disabled={loading}
-                className="w-full h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-xs shadow-md overflow-hidden relative"
+                className="w-full h-14 bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-xl font-semibold text-xs shadow-md overflow-hidden relative"
               >
                 {isUploading ? (
                   <span className="flex items-center gap-2">
@@ -1810,12 +1764,12 @@ export default function IECMaterials() {
 
           <DialogHeader className="p-6 bg-white border-b border-slate-100 shrink-0">
 
-            <DialogTitle className="font-black uppercase tracking-tighter text-xl text-slate-900">
+            <DialogTitle className="font-semibold tracking-tighter text-xl text-slate-900">
               {previewItem?.title}
             </DialogTitle>
 
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
-              Material Preview Mode
+            <p className="text-[13px] font-bold text-slate-400">
+              Material preview mode
             </p>
 
           </DialogHeader>
@@ -1855,7 +1809,7 @@ export default function IECMaterials() {
                 fallback={
                   <div className="flex flex-col items-center justify-center gap-3">
                     <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    <p className="text-[13px] font-semibold text-slate-500">
                       Loading PDF...
                     </p>
                   </div>
@@ -1911,9 +1865,9 @@ export default function IECMaterials() {
                   href={previewItem.file_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center h-12 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-xs"
+                  className="inline-flex items-center justify-center h-12 px-8 rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-semibold text-xs"
                 >
-                  Open in New Tab
+                  Open in new tab
                 </a>
               </div>
             ) : (
@@ -1921,7 +1875,7 @@ export default function IECMaterials() {
 
                 <HardDrive className="w-16 h-16 text-slate-700 mx-auto" />
 
-                <p className="font-bold text-slate-500 mt-4 uppercase text-xs">
+                <p className="font-bold text-slate-500 mt-4 text-xs">
                   Format not supported for preview
                 </p>
 
@@ -1937,7 +1891,7 @@ export default function IECMaterials() {
               onClick={() =>
                 setIsPreviewOpen(false)
               }
-              className="rounded-xl font-bold uppercase text-[10px]"
+              className="rounded-xl font-bold text-[13px]"
             >
               Close
             </Button>
@@ -1953,9 +1907,9 @@ export default function IECMaterials() {
                       previewItem.title
                     )
                   }
-                  className="bg-indigo-600 rounded-xl font-black uppercase text-[10px] px-6 text-white"
+                  className="bg-indigo-600 rounded-xl font-semibold text-[13px] px-6 text-white"
                 >
-                  Download Resource
+                  Download resource
                 </Button>
               )}
 
@@ -1979,8 +1933,8 @@ export default function IECMaterials() {
 
           <DialogHeader>
 
-            <DialogTitle className="text-xl font-black text-slate-900 uppercase tracking-tight text-center">
-              Move to Archive?
+            <DialogTitle className="text-xl font-semibold text-slate-900 tracking-tight text-center">
+              Move to archive?
             </DialogTitle>
 
           </DialogHeader>
@@ -1989,7 +1943,7 @@ export default function IECMaterials() {
 
             You are about to archive{' '}
 
-            <span className="font-bold text-slate-800 uppercase">
+            <span className="font-bold text-slate-800">
               "{deleteTargetTitle}"
             </span>
 
@@ -2004,7 +1958,7 @@ export default function IECMaterials() {
               onClick={() =>
                 setIsDeleteOpen(false)
               }
-              className="h-12 rounded-xl font-black uppercase text-[10px] text-slate-500 bg-slate-50"
+              className="h-12 rounded-xl font-semibold text-[13px] text-slate-500 bg-slate-50"
             >
               Cancel
             </Button>
@@ -2012,7 +1966,7 @@ export default function IECMaterials() {
             <Button
               onClick={handleExecuteDelete}
               disabled={loading}
-              className="h-12 rounded-xl font-black uppercase text-[10px] bg-rose-600 hover:bg-rose-700 text-white"
+              className="h-12 rounded-xl font-semibold text-[13px] bg-rose-600 hover:bg-rose-700 text-white"
             >
               {loading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -2078,7 +2032,7 @@ function MaterialCategory({
   category?: string | null;
 }) {
   return (
-    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 font-black uppercase text-[8px] tracking-wider rounded">
+    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 font-semibold text-[13px] rounded">
       {category || 'General Guidance'}
     </span>
   );
@@ -2088,24 +2042,24 @@ function MaterialMeta({ item }: { item: Material }) {
   return (
     <div className="mt-2 space-y-1.5">
       {item.program_component && (
-        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+        <p className="text-[13px] font-bold text-slate-400">
           {item.program_component}
         </p>
       )}
 
-      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+      <p className="text-[13px] font-bold text-slate-400">
         {campusLabel(item.campus)}
       </p>
 
       {item.tags && item.tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {item.tags.slice(0, 4).map((tag) => (
-            <span key={tag} className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[8px] font-bold">
+            <span key={tag} className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[13px] font-bold">
               #{tag}
             </span>
           ))}
           {item.tags.length > 4 && (
-            <span className="text-[8px] font-bold text-slate-400">
+            <span className="text-[13px] font-bold text-slate-400">
               +{item.tags.length - 4} more
             </span>
           )}
@@ -2125,7 +2079,7 @@ function EmptyState({
 
       <HardDrive className="w-16 h-16 text-slate-200 mx-auto mb-4" />
 
-      <p className="text-slate-400 font-black uppercase text-xl tracking-tighter">
+      <p className="text-slate-400 font-semibold text-xl tracking-tighter">
         {message}
       </p>
 

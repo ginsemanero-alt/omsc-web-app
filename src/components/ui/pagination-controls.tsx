@@ -8,6 +8,9 @@ interface PaginationControlsProps {
   pageSize: number;
   onPageChange: (page: number) => void;
   className?: string;
+  // "admin": the redesigned admin screens (sentence case, 44px buttons).
+  // Anything that doesn't pass it keeps the original look.
+  variant?: 'default' | 'admin';
 }
 
 // Shared by every paginated list in the app (Users, Materials, Programs,
@@ -22,11 +25,35 @@ export function PaginationControls({
   pageSize,
   onPageChange,
   className = '',
+  variant = 'default',
 }: PaginationControlsProps) {
   if (totalItems === 0 || totalPages <= 1) return null;
 
   const start = (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, totalItems);
+
+  if (variant === 'admin') {
+    const buttonClass =
+      'h-11 px-4 rounded-xl border-[1.5px] border-[#DDE1EE] bg-white text-[#1E1B4B] font-bold text-sm flex items-center gap-1.5 hover:border-[#A5B4FC] disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]';
+    return (
+      <nav aria-label="Pagination" className={`flex flex-col sm:flex-row items-center justify-between gap-3 font-figtree ${className}`}>
+        <p className="m-0 text-sm text-[#5B6477]">
+          Showing {start}&ndash;{end} of {totalItems}
+        </p>
+        <div className="flex items-center gap-2">
+          <button type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)} className={buttonClass}>
+            <ChevronLeft className="w-4 h-4" aria-hidden="true" /> Previous
+          </button>
+          <span className="text-sm font-semibold text-[#334155] px-2 whitespace-nowrap">
+            Page {page} of {totalPages}
+          </span>
+          <button type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} className={buttonClass}>
+            Next <ChevronRight className="w-4 h-4" aria-hidden="true" />
+          </button>
+        </div>
+      </nav>
+    );
+  }
 
   return (
     <div className={`flex flex-col sm:flex-row items-center justify-between gap-3 ${className}`}>
