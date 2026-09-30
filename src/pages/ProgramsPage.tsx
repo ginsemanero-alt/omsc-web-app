@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Calendar, ChevronDown, Loader2, MapPin, Search } from "lucide-react";
+import { ArrowRight, Calendar, ChevronDown, Loader2, MapPin, Search } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { formatProgramDate } from "../lib/formatProgramDate";
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from "../lib/programStatus";
 import { usePagination } from "../hooks/usePagination";
 import { useAuth } from "../hooks/useAuth";
+import SitePagination from "../components/shared/SitePagination";
 
 const PROGRAMS_PAGE_SIZE = 9;
 
@@ -50,20 +51,6 @@ interface Program {
 
 function statusLabel(status: string): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
-// Page numbers to show: all when few, otherwise first, last, and the
-// current page's neighbours, with null marking a gap.
-function pageList(current: number, total: number): (number | null)[] {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-  const pages = new Set([1, total, current - 1, current, current + 1]);
-  const sorted = [...pages].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
-  const result: (number | null)[] = [];
-  sorted.forEach((page, index) => {
-    if (index > 0 && page - sorted[index - 1] > 1) result.push(null);
-    result.push(page);
-  });
-  return result;
 }
 
 const ProgramsPage = () => {
@@ -187,13 +174,6 @@ const ProgramsPage = () => {
     } else {
       navigate(`/login?redirect=${encodeURIComponent(STUDENT_PROGRAMS_PATH)}`);
     }
-  };
-
-  const pages = useMemo(() => pageList(programsPage, programsTotalPages), [programsPage, programsTotalPages]);
-
-  const goToPage = (page: number) => {
-    setProgramsPage(page);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const chipClass = (selected: boolean) =>
@@ -414,47 +394,7 @@ const ProgramsPage = () => {
                 })}
               </div>
 
-              {/* ================= PAGINATION ================= */}
-              {programsTotalPages > 1 && (
-                <nav aria-label="Pagination" className="pt-4 lg:pt-4 flex flex-wrap justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => goToPage(programsPage - 1)}
-                    disabled={programsPage === 1}
-                    className={`h-11 px-4 rounded-[14px] bg-white text-[#1E1B4B] font-bold text-[15px] flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${focusRing}`}
-                  >
-                    <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Previous
-                  </button>
-                  {pages.map((page, index) =>
-                    page === null ? (
-                      <span key={`gap-${index}`} className="w-8 h-11 flex items-center justify-center text-[#5B6477]" aria-hidden="true">
-                        …
-                      </span>
-                    ) : (
-                      <button
-                        key={page}
-                        type="button"
-                        onClick={() => goToPage(page)}
-                        aria-current={page === programsPage ? "page" : undefined}
-                        aria-label={`Page ${page}`}
-                        className={`w-11 h-11 rounded-[14px] font-bold text-[15px] ${focusRing} ${
-                          page === programsPage ? "bg-[#4F46E5] text-white" : "bg-white text-[#1E1B4B] hover:bg-[#E0E7FF]"
-                        }`}
-                      >
-                        {page}
-                      </button>
-                    )
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => goToPage(programsPage + 1)}
-                    disabled={programsPage === programsTotalPages}
-                    className={`h-11 px-4 rounded-[14px] bg-white text-[#1E1B4B] font-bold text-[15px] flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${focusRing}`}
-                  >
-                    Next <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                  </button>
-                </nav>
-              )}
+              <SitePagination page={programsPage} totalPages={programsTotalPages} onPageChange={setProgramsPage} />
             </>
           )}
         </section>
