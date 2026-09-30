@@ -28,7 +28,7 @@ export default function StudentDashboard({ onLogout }: StudentDashboardProps) {
     { label: 'Dashboard', path: '/student', icon: 'Home' },
     { label: 'Programs', path: '/student/programs', icon: 'Calendar' },
     { label: 'IEC Library', path: '/student/materials', icon: 'BookOpen' },
-    { label: 'Survey', path: '/student/survey', icon: 'ClipboardList' },
+    { label: 'Assessment', path: '/student/survey', icon: 'ClipboardList' },
     { label: 'Profile', path: '/student/profile', icon: 'MessageSquare' },
     { label: 'About', path: '/student/about', icon: 'Info' },
   ];

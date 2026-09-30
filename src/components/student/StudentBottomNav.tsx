@@ -51,13 +51,13 @@ export default function StudentBottomNav({ items, currentPath }: StudentBottomNa
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-40 md:hidden pointer-events-none"
+      className="fixed inset-x-0 bottom-0 z-40 md:hidden pointer-events-none font-figtree"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       <nav
         aria-label="Primary"
         aria-hidden={keyboardOpen}
-        className={`mx-[10px] mb-[10px] pointer-events-auto flex items-stretch rounded-2xl bg-white dark:bg-slate-900 shadow-[0_-4px_24px_rgba(15,23,42,0.12)] transition-transform duration-200 ease-out ${
+        className={`mx-3 mb-3 p-1.5 pointer-events-auto flex gap-1 rounded-[28px] bg-[#1E1B4B] shadow-[0_16px_40px_-12px_rgba(30,27,75,0.5)] transition-transform duration-200 ease-out ${
           keyboardOpen ? 'translate-y-[150%]' : 'translate-y-0'
         }`}
       >
@@ -70,23 +70,13 @@ export default function StudentBottomNav({ items, currentPath }: StudentBottomNa
               key={item.path}
               to={item.path}
               tabIndex={keyboardOpen ? -1 : 0}
-              className="flex flex-1 min-h-[44px] flex-col items-center justify-center gap-0.5 py-2.5 rounded-2xl"
+              aria-current={isActive ? 'page' : undefined}
+              className={`flex flex-1 min-w-0 h-[58px] flex-col items-center justify-center gap-1 rounded-[20px] px-1 text-[11px] leading-none font-bold transition-colors focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC] ${
+                isActive ? 'bg-[#4F46E5] text-white' : 'text-[#C7C9F2] hover:bg-white/10'
+              }`}
             >
-              {ItemIcon && (
-                <ItemIcon
-                  className={`w-5 h-5 ${isActive ? 'text-indigo-600' : 'text-slate-400 dark:text-slate-500'}`}
-                  strokeWidth={2}
-                />
-              )}
-              <span
-                className={`text-[11px] leading-none ${
-                  isActive
-                    ? 'text-indigo-600 font-semibold'
-                    : 'text-slate-400 dark:text-slate-500 font-normal'
-                }`}
-              >
-                {item.label}
-              </span>
+              {ItemIcon && <ItemIcon className="w-5 h-5 shrink-0" strokeWidth={2} aria-hidden="true" />}
+              <span className="truncate max-w-full">{item.label}</span>
             </Link>
           );
         })}

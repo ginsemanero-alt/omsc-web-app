@@ -250,7 +250,7 @@ export default function QuizzesSurveys() {
         return {
           id: response.id,
           survey_id: response.survey_id,
-          title: survey?.title || 'Guidance Survey Response',
+          title: survey?.title || 'Guidance Assessment Response',
           category: survey?.category || null,
           created_at: response.created_at,
           score: response.score,
@@ -333,7 +333,7 @@ export default function QuizzesSurveys() {
       setSurveysLoadFailed(true);
 
       toast({
-        title: 'Unable to Load Surveys',
+        title: 'Unable to Load Assessments',
         description:
           error?.message || 'Failed to load available assessments.',
         variant: 'destructive',
@@ -944,11 +944,11 @@ export default function QuizzesSurveys() {
           </p>
 
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 dark:text-white tracking-tight">
-            Assessments <span className="text-indigo-600">&</span> Surveys
+            Assessment
           </h1>
 
           <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
-            Take part in guidance assessments and surveys to help us
+            Take part in guidance assessments to help us
             understand student awareness and experiences.
           </p>
         </div>
@@ -965,7 +965,7 @@ export default function QuizzesSurveys() {
               : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
           }`}
         >
-          Available Surveys
+          Available Assessments
         </button>
         <button
           type="button"
@@ -1010,10 +1010,10 @@ export default function QuizzesSurveys() {
           <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 dark:bg-slate-800 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 px-6">
             <FileCheck2 className="w-12 h-12 text-slate-300 mb-4" />
             <h2 className="text-lg sm:text-xl font-black text-slate-700 dark:text-slate-200">
-              No Completed Surveys Yet
+              No Completed Assessments Yet
             </h2>
             <p className="text-sm text-slate-400 mt-2 max-w-md">
-              Once you complete a survey, your results will appear here.
+              Once you complete an assessment, your results will appear here.
             </p>
           </div>
         ) : (
@@ -1113,7 +1113,7 @@ export default function QuizzesSurveys() {
               </h2>
 
               <p className="text-sm text-slate-400 mt-2 max-w-md">
-                There are currently no active surveys available.
+                There are currently no active assessments available.
                 Please check again later.
               </p>
             </div>
@@ -1693,7 +1693,7 @@ export default function QuizzesSurveys() {
                       Next Step
                     </p>
                     <p className="mt-2 text-sm sm:text-base font-semibold text-slate-700 leading-relaxed">
-                      Read the program's IEC materials, then return to Quizzes &amp; Surveys to take the Post-Test.
+                      Read the program's IEC materials, then return to Assessment to take the Post-Test.
                     </p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <Button
