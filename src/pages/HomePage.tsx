@@ -2,16 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { formatProgramDate } from "../lib/formatProgramDate";
 import { getEffectiveProgramStatus } from "../lib/programStatus";
-import {
-  ArrowRight,
-  BookOpen,
-  Calendar,
-  Home,
-  Info,
-  MapPin,
-  Menu,
-  X,
-} from "lucide-react";
+import { ArrowRight, Calendar, Info, MapPin } from "lucide-react";
+import { SYSTEM_TITLE } from "../components/layout/SiteFooter";
 
 type NavTarget = "Home" | "Programs" | "Materials" | "About" | "Login";
 
@@ -30,16 +22,6 @@ interface Program {
   image_url?: string;
   date_display?: string;
 }
-
-const SYSTEM_TITLE =
-  "Web-Based Guidance Program Dissemination and Awareness Assessment System for the Higher Education Students of Occidental Mindoro State University";
-
-const NAV_LINKS: { label: string; page: NavTarget; icon: React.ElementType }[] = [
-  { label: "Home", page: "Home", icon: Home },
-  { label: "Programs", page: "Programs", icon: Calendar },
-  { label: "IEC Materials", page: "Materials", icon: BookOpen },
-  { label: "About", page: "About", icon: Info },
-];
 
 const STEPS = [
   { title: "Choose a program", text: "Pick any program the Center has held, including ones you missed." },
@@ -63,7 +45,6 @@ const focusRing =
 
 const linkClass = `font-bold text-[#4338CA] hover:text-[#312E81] hover:underline rounded ${focusRing}`;
 
-const goToLogin = () => (window.location.href = "/login");
 const goToRegister = () => (window.location.href = "/login?mode=register");
 
 function statusLabel(status: string): string {
@@ -73,13 +54,9 @@ function statusLabel(status: string): string {
 const HomePage = ({ onNavigate }: HomePageProps) => {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activePage, setActivePage] = useState("home");
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleNavigation = (page: NavTarget) => {
-    setActivePage(page.toLowerCase());
     onNavigate(page);
-    setIsMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -133,129 +110,9 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
     </a>
   );
 
-  const logo = (size: string) => (
-    <img
-      src="/guidance-logo.jpg"
-      alt=""
-      className={`${size} rounded-full object-cover bg-white shrink-0`}
-    />
-  );
-
   return (
-    <div id="top" className="w-full min-h-screen bg-[#EEF0FA] font-figtree text-[#1E293B]">
-      {/* ================= NAVBAR ================= */}
-      <header className="sticky top-0 z-50 bg-[#EEF0FA]/90 backdrop-blur-md">
-        <div className="max-w-[1440px] mx-auto h-[72px] lg:h-[88px] pl-5 pr-4 lg:px-12 flex items-center gap-2.5 lg:gap-8">
-          <button
-            type="button"
-            onClick={() => handleNavigation("Home")}
-            className={`min-h-[44px] flex items-center gap-2.5 lg:gap-3 text-left text-[#1E1B4B] rounded-2xl min-w-0 ${focusRing}`}
-            aria-label="OMSU Guidance home"
-          >
-            {logo("w-10 h-10 lg:w-11 lg:h-11")}
-            <span className="flex flex-col gap-px min-w-0">
-              <span className="font-bricolage font-extrabold text-[17px] lg:text-lg tracking-[-0.3px] leading-tight">
-                OMSU Guidance
-              </span>
-              <span className="text-xs lg:text-[13px] font-medium text-[#5B6477] truncate">
-                Guidance and Testing Center
-              </span>
-            </span>
-          </button>
-
-          <nav aria-label="Main" className="hidden lg:flex gap-1.5 ml-6">
-            {NAV_LINKS.map(({ label, page }) => {
-              const active = activePage === page.toLowerCase();
-              return (
-                <button
-                  key={page}
-                  type="button"
-                  onClick={() => handleNavigation(page)}
-                  aria-current={active ? "page" : undefined}
-                  className={`h-11 px-4 rounded-full text-[15px] transition-colors ${focusRing} ${
-                    active
-                      ? "bg-white text-[#1E1B4B] font-bold"
-                      : "text-[#334155] font-semibold hover:bg-white/60"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </nav>
-
-          <div className="ml-auto flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={goToLogin}
-              className={`hidden sm:flex h-[46px] px-5 rounded-2xl items-center text-[15px] font-bold text-[#1E1B4B] hover:bg-white/60 transition-colors ${focusRing}`}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              onClick={goToRegister}
-              className={`hidden sm:flex h-[46px] px-[22px] rounded-2xl items-center text-[15px] font-bold bg-[#4F46E5] hover:bg-[#4338CA] text-white transition-colors ${focusRing}`}
-            >
-              Create account
-            </button>
-            <button
-              type="button"
-              className={`lg:hidden w-[46px] h-[46px] rounded-2xl bg-white flex items-center justify-center text-[#1E1B4B] ${focusRing}`}
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              aria-label={isMenuOpen ? "Close menu" : "Open menu"}
-              aria-expanded={isMenuOpen}
-              aria-controls="home-mobile-menu"
-            >
-              {isMenuOpen ? <X className="w-[22px] h-[22px]" /> : <Menu className="w-[22px] h-[22px]" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile menu */}
-        {isMenuOpen && (
-          <div
-            id="home-mobile-menu"
-            className="lg:hidden absolute top-[72px] left-3 right-3 bg-white rounded-[28px] p-3 shadow-[0_24px_60px_-24px_rgba(30,27,75,0.45)] flex flex-col gap-1 animate-in fade-in slide-in-from-top-2 duration-200"
-          >
-            {NAV_LINKS.map(({ label, page, icon: Icon }) => {
-              const active = activePage === page.toLowerCase();
-              return (
-                <button
-                  key={page}
-                  type="button"
-                  onClick={() => handleNavigation(page)}
-                  aria-current={active ? "page" : undefined}
-                  className={`h-12 px-4 rounded-2xl flex items-center gap-3 text-left text-base transition-colors ${focusRing} ${
-                    active ? "bg-[#EEF0FA] text-[#1E1B4B] font-bold" : "text-[#334155] font-semibold hover:bg-[#F5F6FB]"
-                  }`}
-                >
-                  <Icon className="w-5 h-5 text-[#4338CA] shrink-0" aria-hidden="true" />
-                  {label}
-                </button>
-              );
-            })}
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              <button
-                type="button"
-                onClick={goToLogin}
-                className={`h-12 rounded-2xl border-[1.5px] border-[#DDE1EE] text-[#1E1B4B] font-bold text-[15px] ${focusRing}`}
-              >
-                Sign in
-              </button>
-              <button
-                type="button"
-                onClick={goToRegister}
-                className={`h-12 rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] ${focusRing}`}
-              >
-                Create account
-              </button>
-            </div>
-          </div>
-        )}
-      </header>
-
-      <main className="max-w-[1440px] mx-auto">
+    <div id="top" className="w-full font-figtree text-[#1E293B]">
+      <div className="max-w-[1440px] mx-auto">
         {/* ================= HERO ================= */}
         <section className="px-3 pt-1 lg:px-6 lg:pt-2">
           <div className="relative overflow-hidden rounded-[40px] lg:rounded-[3.5rem] bg-[#1E1B4B] text-white">
@@ -506,7 +363,7 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
               </button>
               <button
                 type="button"
-                onClick={goToLogin}
+                onClick={() => (window.location.href = "/login")}
                 className={`h-[54px] lg:h-[58px] px-[30px] rounded-[18px] border-2 border-white/50 hover:bg-white/10 text-white font-bold text-base transition-colors ${focusRing}`}
               >
                 Sign in
@@ -514,53 +371,8 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
             </div>
           </div>
         </section>
-      </main>
+      </div>
 
-      {/* ================= FOOTER ================= */}
-      <footer className="max-w-[1440px] mx-auto px-5 pt-11 pb-8 lg:px-[72px] lg:pt-14 lg:pb-10 flex flex-col gap-6 lg:gap-8">
-        <div className="flex flex-col lg:flex-row lg:justify-between gap-7 lg:gap-12">
-          <div className="flex gap-3 lg:gap-3.5 max-w-[560px]">
-            {logo("w-10 h-10 lg:w-12 lg:h-12")}
-            <div className="flex flex-col gap-1.5">
-              <span className="font-bold text-[15px] lg:text-base text-[#1E1B4B]">Guidance and Testing Center</span>
-              <span className="text-sm leading-[1.5] text-[#5B6477]">
-                Occidental Mindoro State University, San Jose, Labangan, and Murtha campuses
-              </span>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-x-16 gap-y-6">
-            <nav aria-label="Explore" className="flex flex-col gap-1">
-              <span className="font-bold text-sm text-[#1E1B4B] mb-1">Explore</span>
-              {NAV_LINKS.filter((link) => link.page !== "Home").map(({ label, page }) => (
-                <button
-                  key={page}
-                  type="button"
-                  onClick={() => handleNavigation(page)}
-                  className={`min-h-[44px] text-left font-medium text-sm text-[#334155] hover:text-[#4338CA] hover:underline rounded ${focusRing}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </nav>
-            <div className="flex flex-col gap-1">
-              <span className="font-bold text-sm text-[#1E1B4B] mb-1">Contact</span>
-              <a
-                href="mailto:guidance@omsc.edu.ph"
-                className={`min-h-[44px] self-start inline-flex items-center font-medium text-sm text-[#334155] hover:text-[#4338CA] hover:underline rounded ${focusRing}`}
-              >
-                guidance@omsc.edu.ph
-              </a>
-              <span className="min-h-[44px] flex items-center text-sm text-[#334155]">Facebook: OMSU Guidance and Testing Center</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="pt-4 lg:pt-[22px] border-t border-[#D5D9EA] flex flex-col sm:flex-row sm:justify-between gap-2 sm:gap-8 text-xs lg:text-[13px] leading-[1.5] text-[#5B6477]">
-          <span>{SYSTEM_TITLE}</span>
-          <span className="shrink-0">© {new Date().getFullYear()}</span>
-        </div>
-      </footer>
     </div>
   );
 };
