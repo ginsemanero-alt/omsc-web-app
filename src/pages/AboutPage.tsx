@@ -1,11 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { Facebook, Mail, Phone, Users } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import { Card } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
-import {
-  ShieldCheck, Users, Target, BookOpen, Heart,
-  Layers, Mail, Facebook, Phone, Award, ClipboardCheck
-} from "lucide-react";
 
 interface AboutContent {
   heading_title: string;
@@ -39,6 +34,41 @@ function getInitials(name: string): string {
   return (parts[0][0] + (parts[parts.length - 1][0] || "")).toUpperCase();
 }
 
+const focusRing =
+  "focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]";
+
+const components = [
+  {
+    title: "Group Guidance",
+    desc: "Structured group and classroom presentations aimed at collective proactive student growth.",
+    dot: "bg-[#4F46E5]",
+  },
+  {
+    title: "Individual Student Planning",
+    desc: "Student appraisal, educational and career planning, and assistance with course selection and placement.",
+    dot: "bg-[#7C3AED]",
+  },
+  {
+    title: "Responsive Services",
+    desc: "Individual and small-group counseling, peer support, crisis response, and referral to other professionals.",
+    dot: "bg-[#F472B6]",
+  },
+  {
+    title: "System Support",
+    desc: "Program management, staff development, community outreach, and research and evaluation.",
+    dot: "bg-[#FBBF24]",
+  },
+];
+
+const objectives = [
+  "To maintain the highest quality of assistance and support to the academic community by providing relevant and timely programs, services, and information in the area of students' personal, social, educational and career development in all educational levels of the colleges.",
+  "To provide high-quality placement and diagnostic services to students of their aptitudes and interests toward better degree selection and career decision-making.",
+  "To develop relevant and responsive student-oriented programs aimed at the mental and social health of students to promote healthy and harmonious relationship among students, teachers and administrative staff.",
+];
+
+const sectionHeading =
+  "m-0 font-bricolage font-extrabold text-[28px] sm:text-[32px] lg:text-[40px] leading-[1.1] tracking-[-0.02em] text-[#1E1B4B]";
+
 const AboutPage: React.FC = () => {
   const [content, setContent] = useState<AboutContent>(FALLBACK_CONTENT);
 
@@ -56,180 +86,160 @@ const AboutPage: React.FC = () => {
     fetchContent();
   }, []);
 
-  const components = [
-    {
-      title: "Group Guidance",
-      desc: "Structured group and classroom presentations aimed at collective proactive student growth.",
-      color: "bg-blue-50 text-blue-600"
-    },
-    {
-      title: "Individual Student Planning",
-      desc: "Student appraisal, educational and career planning, and assistance with course selection and placement.",
-      color: "bg-indigo-50 text-indigo-600"
-    },
-    {
-      title: "Responsive Services",
-      desc: "Individual and small-group counseling, peer support, crisis response, and referral to other professionals.",
-      color: "bg-rose-50 text-rose-600"
-    },
-    {
-      title: "System Support",
-      desc: "Program management, staff development, community outreach, and research and evaluation.",
-      color: "bg-amber-50 text-amber-600"
-    }
-  ];
-
-  const objectives = [
-    "To maintain the highest quality of assistance and support to the academic community by providing relevant and timely programs, services, and information in the area of students' personal, social, educational and career development in all educational levels of the colleges.",
-    "To provide high-quality placement and diagnostic services to students of their aptitudes and interests toward better degree selection and career decision-making.",
-    "To develop relevant and responsive student-oriented programs aimed at the mental and social health of students to promote healthy and harmonious relationship among students, teachers and administrative staff."
-  ];
+  // "043-491-0925 / 09632086253" -> one number per line.
+  const phoneNumbers = (content.contact_phone || "")
+    .split("/")
+    .map((n) => n.trim())
+    .filter(Boolean);
 
   return (
-    <div className="w-full bg-slate-50 min-h-screen pb-16 md:pb-24 font-sans">
-      
-      {/* --- HERO SECTION --- */}
-      <section className="relative overflow-hidden pt-12 pb-12 md:pt-24 md:pb-20 bg-white border-b border-slate-100">
-        <div className="max-w-[1200px] mx-auto px-4 md:px-6 relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
-            
-            <div className="space-y-6 lg:col-span-7 text-center lg:text-left">
-              <Badge className="bg-indigo-100 text-indigo-600 border-none font-black px-4 py-1 rounded-full uppercase text-[9px] md:text-[10px] tracking-widest inline-block">
+    <div className="w-full font-figtree text-[#1E293B] pb-16 lg:pb-24">
+      <div className="max-w-[1440px] mx-auto">
+        {/* ================= HEADER ================= */}
+        <section className="px-3 pt-3 lg:px-6 lg:pt-2">
+          <div className="rounded-[40px] lg:rounded-[3.5rem] bg-[#1E1B4B] text-white px-[22px] py-9 sm:px-10 lg:px-[72px] lg:py-16 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-8 lg:gap-14 items-center">
+            <div className="flex flex-col gap-4 lg:gap-5 min-w-0">
+              <span className="self-start px-3.5 py-1.5 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-bold text-sm">
                 About the Center
-              </Badge>
-              <h1 className="text-3xl md:text-6xl font-black uppercase text-slate-900 tracking-tighter leading-tight">
+              </span>
+              <h1 className="m-0 font-bricolage font-extrabold text-[36px] sm:text-5xl lg:text-[60px] leading-[1.04] tracking-[-0.02em] break-words">
                 {content.heading_title}
               </h1>
+              <p className="m-0 text-base lg:text-lg leading-[1.6] text-[#C7C9F2]">{content.hero_intro}</p>
+            </div>
 
-              {/* Director Profile Display */}
-              <div className="bg-slate-50 p-4 md:p-6 rounded-2xl border border-slate-100/80 flex items-center gap-4 max-w-md mx-auto lg:mx-0">
-                <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center font-black text-white shrink-0 shadow-md">
+            <div className="rounded-[28px] lg:rounded-[32px] bg-white text-[#1E293B] p-6 lg:p-7 flex flex-col gap-4">
+              <span className="text-sm font-semibold text-[#5B6477]">Led by</span>
+              <div className="flex items-center gap-4 min-w-0">
+                <div
+                  className="w-16 h-16 rounded-2xl bg-[#4F46E5] text-white font-bricolage font-extrabold text-2xl flex items-center justify-center shrink-0"
+                  aria-hidden="true"
+                >
                   {getInitials(content.director_name)}
                 </div>
-                <div className="text-left">
-                  <h3 className="font-black text-slate-900 uppercase tracking-tight text-sm md:text-base leading-none">{content.director_name}</h3>
-                  <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mt-1.5">{content.director_title}</p>
+                <div className="flex flex-col gap-1 min-w-0">
+                  <span className="font-bold text-lg leading-[1.25] text-[#1E1B4B] break-words">
+                    {content.director_name}
+                  </span>
+                  <span className="text-sm leading-[1.4] text-[#4338CA] font-semibold break-words">
+                    {content.director_title}
+                  </span>
                 </div>
               </div>
-
-              <p className="text-xs md:text-sm font-medium text-slate-500 leading-relaxed">
-                {content.hero_intro}
-              </p>
             </div>
-            
-            {/* Hero Image Container */}
-            <div className="relative group lg:col-span-5 px-4 md:px-0">
-              <div className="absolute inset-0 bg-indigo-600 rounded-[2rem] md:rounded-[2.5rem] rotate-2 scale-105 opacity-10" />
-              <img
-                src="https://i.ibb.co/SDCTBBY7/download-4.jpg"
-                alt="OMSU Institutional Core Banner"
-                className="relative w-full h-[260px] md:h-[380px] object-cover rounded-[2rem] md:rounded-[2.5rem] shadow-xl z-10"
-              />
-            </div>
-
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* --- EXTENDED MISSION STATEMENT & SERVICE COMPONENTS --- */}
-      <section className="py-16 max-w-[1200px] mx-auto px-4 md:px-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-          
-          <div className="lg:col-span-1 space-y-4 sticky top-24 bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100">
-            <h3 className="text-xl font-black uppercase tracking-tight text-slate-900">A Collaborative Approach</h3>
-            <p className="text-xs md:text-sm text-slate-500 leading-relaxed">
+        {/* ================= COLLABORATIVE APPROACH + COMPONENTS ================= */}
+        <section className="px-3 pt-12 sm:px-5 lg:px-[72px] lg:pt-20 grid grid-cols-1 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-8 lg:gap-14 items-start">
+          <div className="flex flex-col gap-4 px-2 sm:px-0">
+            <h2 className={sectionHeading}>A collaborative approach</h2>
+            <p className="m-0 text-base lg:text-[17px] leading-[1.65] text-[#5B6477]">
               {content.collaborative_approach_text}
             </p>
           </div>
 
-          <div className="lg:col-span-2 space-y-6">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Core Service Components</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {components.map((c, i) => (
-                <Card key={i} className="p-5 bg-white border-none shadow-sm rounded-2xl md:rounded-[2rem] flex flex-col justify-between border border-slate-100/40">
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <Layers className="w-4 h-4 text-indigo-600 shrink-0" />
-                      <h4 className="font-black uppercase text-xs md:text-sm tracking-tight text-slate-900 leading-none">{c.title}</h4>
-                    </div>
-                    <p className="text-[11px] md:text-xs font-medium text-slate-400 leading-relaxed">{c.desc}</p>
+          <div className="flex flex-col gap-4">
+            <h3 className="m-0 px-2 sm:px-0 font-bold text-lg text-[#1E1B4B]">The four program components</h3>
+            <ul className="m-0 p-0 list-none grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {components.map((c) => (
+                <li key={c.title} className="rounded-[28px] bg-white p-6 flex flex-col gap-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <span className={`w-3 h-3 rounded-full shrink-0 ${c.dot}`} aria-hidden="true" />
+                    <span className="font-bold text-[17px] leading-[1.3] text-[#1E1B4B]">{c.title}</span>
                   </div>
-                </Card>
+                  <p className="m-0 text-[15px] leading-[1.55] text-[#5B6477]">{c.desc}</p>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
+        </section>
 
-        </div>
-      </section>
-
-      {/* --- QUALITY POLICY OBJECTIVES --- */}
-      <section className="py-16 bg-white rounded-[2rem] md:rounded-[4rem] mx-2 md:mx-4 border border-slate-100 shadow-inner">
-        <div className="max-w-[1000px] mx-auto px-4 md:px-6">
-          <div className="text-center mb-10 space-y-2">
-            <h2 className="text-2xl md:text-4xl font-black uppercase text-slate-900 tracking-tighter">Quality Policy Objectives</h2>
-            <div className="w-12 h-1.5 bg-indigo-600 mx-auto rounded-full" />
-          </div>
-
-          <div className="space-y-4">
-            {objectives.map((obj, index) => (
-              <div key={index} className="flex gap-4 p-5 bg-slate-50/50 rounded-2xl border border-slate-100/60 items-start">
-                <div className="w-6 h-6 rounded-md bg-indigo-600 text-white font-black text-[10px] flex items-center justify-center shrink-0 mt-0.5">
-                  0{index + 1}
-                </div>
-                <p className="text-xs md:text-sm font-medium text-slate-600 leading-relaxed">
-                  {obj}
-                </p>
-              </div>
+        {/* ================= QUALITY POLICY OBJECTIVES ================= */}
+        <section className="px-3 pt-12 sm:px-5 lg:px-[72px] lg:pt-20 flex flex-col gap-6">
+          <h2 className={`${sectionHeading} px-2 sm:px-0`}>Quality policy objectives</h2>
+          <ol className="m-0 p-0 list-none grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5">
+            {objectives.map((text, index) => (
+              <li key={index} className="rounded-[28px] bg-white p-6 lg:p-7 flex flex-col gap-4">
+                <span
+                  className="w-11 h-11 rounded-[14px] bg-[#E0E7FF] text-[#4338CA] font-bricolage font-extrabold text-lg flex items-center justify-center"
+                  aria-hidden="true"
+                >
+                  {index + 1}
+                </span>
+                <p className="m-0 text-[15px] leading-[1.6] text-[#334155]">{text}</p>
+              </li>
             ))}
-          </div>
-        </div>
-      </section>
+          </ol>
+        </section>
 
-      {/* --- ORGANIZATIONAL CHART --- */}
-      <section className="py-16 max-w-[900px] mx-auto px-4 md:px-6 text-center">
-        <div className="mb-8 space-y-2">
-          <h2 className="text-2xl md:text-4xl font-black uppercase text-slate-900 tracking-tighter">Organizational Chart</h2>
-          <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Guidance and Testing Center Structure</p>
-        </div>
-        <Card className="p-4 md:p-6 bg-white border-dashed border-2 border-slate-200 rounded-[2rem] shadow-sm group overflow-hidden">
-          <div className="relative overflow-hidden rounded-xl bg-slate-50 min-h-[160px] flex items-center justify-center">
-            <Users className="w-12 h-12 text-slate-200 absolute group-hover:scale-125 transition-transform duration-700" />
-            <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest z-10">Organizational chart coming soon</p>
+        {/* ================= ORGANIZATIONAL CHART ================= */}
+        <section className="px-3 pt-12 sm:px-5 lg:px-[72px] lg:pt-20 flex flex-col gap-6">
+          <h2 className={`${sectionHeading} px-2 sm:px-0`}>Organizational chart</h2>
+          <div className="rounded-[28px] lg:rounded-[32px] bg-white border-2 border-dashed border-[#C9CEE3] px-6 py-12 lg:py-16 flex flex-col items-center text-center gap-3">
+            <div className="w-14 h-14 rounded-2xl bg-[#EEF0FA] text-[#4338CA] flex items-center justify-center">
+              <Users className="w-7 h-7" aria-hidden="true" />
+            </div>
+            <p className="m-0 font-bold text-lg text-[#1E1B4B]">Organizational chart coming soon</p>
+            <p className="m-0 text-[15px] text-[#5B6477]">The Center's structure will be posted here once approved.</p>
           </div>
-        </Card>
-      </section>
+        </section>
 
-      {/* --- CONTACT --- */}
-      <section className="mt-8 max-w-[900px] mx-auto px-4 md:px-6">
-        <div className="bg-slate-950 rounded-[2rem] md:rounded-[3rem] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-600/20 rounded-full -mr-16 -mt-16 blur-2xl" />
-          
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
-            <div className="space-y-2 flex-1 text-center md:text-left">
-              <h2 className="text-2xl md:text-4xl font-black uppercase text-white tracking-tighter leading-none">Get in Touch</h2>
-              <p className="text-slate-400 font-medium text-xs md:text-sm">Reach the Guidance and Testing Center through any of the channels below.</p>
+        {/* ================= GET IN TOUCH ================= */}
+        <section className="px-3 pt-12 lg:px-6 lg:pt-20">
+          <div className="rounded-[40px] lg:rounded-[3.5rem] bg-[#1E1B4B] text-white px-[22px] py-9 sm:px-10 lg:px-[72px] lg:py-16 flex flex-col gap-7 lg:gap-10">
+            <div className="flex flex-col gap-3 max-w-[640px]">
+              <h2 className="m-0 font-bricolage font-extrabold text-[32px] sm:text-[40px] lg:text-5xl leading-[1.05] tracking-[-0.02em]">
+                Get in touch
+              </h2>
+              <p className="m-0 text-base lg:text-lg leading-[1.55] text-[#C7C9F2]">
+                Reach the Guidance and Testing Center through any of these channels.
+              </p>
             </div>
 
-            {/* Contact details */}
-            <div className="space-y-3.5 shrink-0 min-w-[280px] bg-white/5 p-5 rounded-2xl border border-white/10">
-              <div className="flex items-center gap-3 text-xs font-mono font-bold text-slate-200 lowercase">
-                <Mail className="w-4 h-4 text-indigo-400 shrink-0" />
-                <span>{content.contact_email}</span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <a
+                href={`mailto:${content.contact_email}`}
+                className={`group rounded-[24px] bg-white/10 hover:bg-white/15 p-5 lg:p-6 flex gap-4 min-w-0 transition-colors ${focusRing}`}
+              >
+                <span className="w-11 h-11 rounded-[14px] bg-[#FBBF24] text-[#1E1B4B] flex items-center justify-center shrink-0">
+                  <Mail className="w-5 h-5" aria-hidden="true" />
+                </span>
+                <span className="flex flex-col gap-1 min-w-0">
+                  <span className="text-sm font-semibold text-[#C7C9F2]">Email</span>
+                  <span className="font-bold text-[15px] text-white break-all group-hover:underline">
+                    {content.contact_email}
+                  </span>
+                </span>
+              </a>
+
+              <div className="rounded-[24px] bg-white/10 p-5 lg:p-6 flex gap-4 min-w-0">
+                <span className="w-11 h-11 rounded-[14px] bg-[#34D399] text-[#1E1B4B] flex items-center justify-center shrink-0">
+                  <Phone className="w-5 h-5" aria-hidden="true" />
+                </span>
+                <span className="flex flex-col gap-1 min-w-0">
+                  <span className="text-sm font-semibold text-[#C7C9F2]">Phone</span>
+                  {phoneNumbers.map((number) => (
+                    <span key={number} className="font-bold text-[15px] text-white break-words">
+                      {number}
+                    </span>
+                  ))}
+                </span>
               </div>
-              <div className="flex items-center gap-3 text-xs font-bold text-slate-200 uppercase tracking-tight">
-                <Facebook className="w-4 h-4 text-indigo-400 shrink-0" />
-                <span className="text-[11px]">{content.contact_facebook}</span>
-              </div>
-              <div className="flex items-center gap-3 text-xs font-mono font-bold text-slate-200">
-                <Phone className="w-4 h-4 text-indigo-400 shrink-0" />
-                <span className="text-[10px]">{content.contact_phone}</span>
+
+              <div className="rounded-[24px] bg-white/10 p-5 lg:p-6 flex gap-4 min-w-0">
+                <span className="w-11 h-11 rounded-[14px] bg-[#A5B4FC] text-[#1E1B4B] flex items-center justify-center shrink-0">
+                  <Facebook className="w-5 h-5" aria-hidden="true" />
+                </span>
+                <span className="flex flex-col gap-1 min-w-0">
+                  <span className="text-sm font-semibold text-[#C7C9F2]">Facebook</span>
+                  <span className="font-bold text-[15px] text-white break-words">{content.contact_facebook}</span>
+                </span>
               </div>
             </div>
           </div>
-
-        </div>
-      </section>
-
+        </section>
+      </div>
     </div>
   );
 };
