@@ -183,8 +183,12 @@ function detailText(item: ProgramProgress): string {
   }
 }
 
-function ctaPath(status: ProgramStatus): string {
-  return status === 'not_taken' || status === 'completed' ? ASSESSMENT_PATH : PROGRAMS_PATH;
+// Where each program's button goes: straight into its assessment, to My
+// results, or to the program itself (?program=<id>).
+function ctaPath(item: ProgramProgress): string {
+  if (item.status === 'not_taken' && item.surveyId != null) return `${ASSESSMENT_PATH}?survey=${item.surveyId}`;
+  if (item.status === 'completed') return `${ASSESSMENT_PATH}?view=results`;
+  return `${PROGRAMS_PATH}?program=${item.program.id}`;
 }
 
 // Works out each program's status from the student's own responses. A
@@ -480,7 +484,7 @@ export default function DashboardOverview() {
       { label: 'Your results', sub: 'Pre-test and post-test scores', state: 'next' },
     ];
     continueNote = 'Then take the post-test in Assessment.';
-    continueCta = { label: 'Open the materials', path: PROGRAMS_PATH };
+    continueCta = { label: 'Open the materials', path: ctaPath(continueItem) };
   } else if (continueItem?.status === 'not_taken') {
     continueSteps = [
       { label: 'Pre-test', sub: 'Take it before the materials', state: 'now' },
@@ -489,7 +493,7 @@ export default function DashboardOverview() {
       { label: 'Your results', sub: 'Pre-test and post-test scores', state: 'next' },
     ];
     continueNote = 'Take it before you open the materials.';
-    continueCta = { label: 'Take pre-test', path: ASSESSMENT_PATH };
+    continueCta = { label: 'Take pre-test', path: ctaPath(continueItem) };
   }
 
   /* ------------------------------ render ----------------------------- */
@@ -613,7 +617,7 @@ export default function DashboardOverview() {
 
                       <button
                         type="button"
-                        onClick={() => navigate(ctaPath(item.status))}
+                        onClick={() => navigate(ctaPath(item))}
                         aria-label={`${style.cta}: ${item.program.title}`}
                         className={`col-span-2 sm:col-span-1 sm:col-start-3 sm:row-start-1 sm:row-span-2 xl:col-start-4 xl:row-span-1 h-[46px] rounded-[14px] font-bold text-sm flex items-center justify-center transition-colors ${focusRing} ${
                           style.primary

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -192,6 +192,47 @@ export default function QuizzesSurveys() {
   const [materialTitles, setMaterialTitles] = useState<Record<number, string>>({});
 
   const { toast } = useToast();
+
+  // Deep links from the dashboard and program pages:
+  //   ?survey=<id>   opens that assessment (or its results if done)
+  //   ?view=results  opens My results
+  // The parameters are cleared once handled, so Back and refresh don't
+  // reopen the assessment.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const wantSurvey = searchParams.get('survey');
+    const wantView = searchParams.get('view');
+    if (!wantSurvey && !wantView) return;
+    if (wantSurvey && loading) return; // wait for the list
+
+    if (wantView === 'results') setView('results');
+
+    if (wantSurvey && !surveysLoadFailed) {
+      const survey = surveys.find((s) => String(s.id) === wantSurvey);
+      if (survey && !survey.is_completed) {
+        setView('available');
+        handleStartSurvey(survey);
+      } else if (survey) {
+        setView('results');
+      } else {
+        toast({
+          title: 'Assessment not available',
+          description: 'It may be closed or not open yet. Here are the assessments you can take now.',
+        });
+      }
+    }
+
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('survey');
+        next.delete('view');
+        return next;
+      },
+      { replace: true }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, loading, surveys, surveysLoadFailed]);
 
   useEffect(() => {
     if (!dbUserId) return;

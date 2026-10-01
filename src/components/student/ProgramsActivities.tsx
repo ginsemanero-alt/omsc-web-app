@@ -101,6 +101,7 @@ type AssessmentStatus = 'coming_soon' | 'not_taken' | 'in_progress' | 'completed
 
 interface ProgramAssessment {
   status: AssessmentStatus;
+  surveyId: number | null;
   pre: ResponseRow | null;
   post: ResponseRow | null;
 }
@@ -117,7 +118,7 @@ function resolveAssessment(programId: number, surveys: KnowledgeSurveyRow[], res
 
   const answered = programSurveys.find((s) => attemptsFor(s.id).length > 0);
   const survey = answered || programSurveys.find((s) => s.status === 'active');
-  if (!survey) return { status: 'coming_soon', pre: null, post: null };
+  if (!survey) return { status: 'coming_soon', surveyId: null, pre: null, post: null };
 
   const latest = (type: 'pre' | 'post') =>
     attemptsFor(survey.id)
@@ -125,7 +126,7 @@ function resolveAssessment(programId: number, surveys: KnowledgeSurveyRow[], res
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] || null;
   const pre = latest('pre');
   const post = latest('post');
-  return { status: pre && post ? 'completed' : pre ? 'in_progress' : 'not_taken', pre, post };
+  return { status: pre && post ? 'completed' : pre ? 'in_progress' : 'not_taken', surveyId: survey.id, pre, post };
 }
 
 // TODO: return true/false once material_views exists (a row per student
@@ -625,7 +626,7 @@ export default function ProgramsActivities() {
                   {assessment.status === 'not_taken' && (
                     <button
                       type="button"
-                      onClick={() => navigate(ASSESSMENT_PATH)}
+                      onClick={() => navigate(`${ASSESSMENT_PATH}?survey=${assessment.surveyId}`)}
                       className={`h-[52px] rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-[#1E1B4B] font-extrabold text-[15px] transition-colors ${focusRing}`}
                     >
                       Take pre-test
@@ -645,7 +646,7 @@ export default function ProgramsActivities() {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => navigate(ASSESSMENT_PATH)}
+                          onClick={() => navigate(`${ASSESSMENT_PATH}?survey=${assessment.surveyId}`)}
                           className={`h-[52px] rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-[#1E1B4B] font-extrabold text-[15px] transition-colors ${focusRing}`}
                         >
                           Take post-test
@@ -660,7 +661,7 @@ export default function ProgramsActivities() {
                   {assessment.status === 'completed' && (
                     <button
                       type="button"
-                      onClick={() => navigate(ASSESSMENT_PATH)}
+                      onClick={() => navigate(`${ASSESSMENT_PATH}?view=results`)}
                       className={`h-[52px] rounded-2xl bg-white hover:bg-[#E0E7FF] text-[#1E1B4B] font-extrabold text-[15px] transition-colors ${focusRing}`}
                     >
                       See results
