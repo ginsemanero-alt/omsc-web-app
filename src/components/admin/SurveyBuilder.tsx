@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { supabase } from "../../lib/supabase";
 import { logActivity } from "../../lib/activityLog";
 import { notifyStudents } from "../../lib/notifyStudents";
@@ -13,24 +13,19 @@ import {
   Trash2,
   Save,
   Loader2,
-  ChevronLeft,
+  ChevronRight,
   ChevronDown,
   ChevronUp,
   ClipboardList,
   X,
   Copy,
   Search,
-  Filter,
   CheckCircle2,
   AlertCircle,
   Eye,
   EyeOff,
-  FileText,
   Users,
-  BarChart3,
-  CalendarDays,
-  GripVertical,
-  Settings2,
+  Check,
 } from "lucide-react";
 import { useToast } from "../../hooks/use-toast";
 import {
@@ -183,12 +178,21 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
   // form in view.
   const [questionsPost, setQuestionsPost] = useState<Question[]>([]);
   const [activeForm, setActiveForm] = useState<FormKey>("A");
+  // Editor: the item shown side by side, and side-by-side vs full list.
+  const [selectedItem, setSelectedItem] = useState(0);
+  const [viewMode, setViewMode] = useState<"pairs" | "list">("pairs");
+  // Opening an assessment brings its editor into view (it sits below the
+  // Content page header and stats).
+  const editorTopRef = useRef<HTMLElement>(null);
+  const editingSurveyId = editingSurvey?.id;
+  useEffect(() => {
+    if (editingSurveyId != null) editorTopRef.current?.scrollIntoView({ block: "start" });
+  }, [editingSurveyId]);
   const [pendingRemoveA, setPendingRemoveA] = useState<Question | null>(null);
   const [confirmCopyToB, setConfirmCopyToB] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const activeQuestions = activeForm === "B" ? questionsPost : questions;
-  const setActiveQuestions = activeForm === "B" ? setQuestionsPost : setQuestions;
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
@@ -408,6 +412,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
         : []
     );
     setActiveForm("A");
+    setSelectedItem(0);
   }
 
   async function saveSurveyContent() {
@@ -735,11 +740,17 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
     }
   }
 
+  // The editing helpers act on one form: the form in view by default, or
+  // the one passed (the side-by-side view edits Form A and Form B at once).
+  const listFor = (form: FormKey) => (form === "B" ? questionsPost : questions);
+  const setterFor = (form: FormKey) => (form === "B" ? setQuestionsPost : setQuestions);
+
   function updateQuestion(
     questionIndex: number,
-    updates: Partial<Question>
+    updates: Partial<Question>,
+    form: FormKey = activeForm
   ) {
-    setActiveQuestions((previous) =>
+    setterFor(form)((previous) =>
       previous.map((question, index) =>
         index === questionIndex
           ? { ...question, ...updates }
@@ -750,9 +761,10 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
 
   function changeQuestionType(
     questionIndex: number,
-    type: QuestionType
+    type: QuestionType,
+    form: FormKey = activeForm
   ) {
-    const question = activeQuestions[questionIndex];
+    const question = listFor(form)[questionIndex];
 
     const updated: Question = {
       ...question,
@@ -770,41 +782,43 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
       delete updated.option_program_ids;
     }
 
-    updateQuestion(questionIndex, updated);
+    updateQuestion(questionIndex, updated, form);
   }
 
-  function addOption(questionIndex: number) {
-    const question = activeQuestions[questionIndex];
+  function addOption(questionIndex: number, form: FormKey = activeForm) {
+    const question = listFor(form)[questionIndex];
 
     updateQuestion(questionIndex, {
       options: [...(question.options || []), "New Option"],
-    });
+    }, form);
   }
 
   function updateOption(
     questionIndex: number,
     optionIndex: number,
-    value: string
+    value: string,
+    form: FormKey = activeForm
   ) {
-    const question = activeQuestions[questionIndex];
+    const question = listFor(form)[questionIndex];
     const options = [...(question.options || [])];
 
     options[optionIndex] = value;
 
-    updateQuestion(questionIndex, { options });
+    updateQuestion(questionIndex, { options }, form);
   }
 
   function removeOption(
     questionIndex: number,
-    optionIndex: number
+    optionIndex: number,
+    form: FormKey = activeForm
   ) {
-    const question = activeQuestions[questionIndex];
+    const question = listFor(form)[questionIndex];
 
     const options = (question.options || []).filter(
       (_, index) => index !== optionIndex
     );
 
-    updateQuestion(questionIndex, { options });
+    updateQuestion(questionIndex, { options }, form);
   }
 
   // checkbox questions only — maps one option's text to a program id (or
@@ -813,9 +827,10 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
   function setOptionProgram(
     questionIndex: number,
     option: string,
-    programId: number | null
+    programId: number | null,
+    form: FormKey = activeForm
   ) {
-    const question = activeQuestions[questionIndex];
+    const question = listFor(form)[questionIndex];
     const nextMap = { ...(question.option_program_ids || {}) };
 
     if (programId === null) {
@@ -824,13 +839,13 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
       nextMap[option] = programId;
     }
 
-    updateQuestion(questionIndex, { option_program_ids: nextMap });
+    updateQuestion(questionIndex, { option_program_ids: nextMap }, form);
   }
 
   // Removing a Form A item that has a Form B pair asks first, then
   // removes both, so no Form B item is left pointing at nothing.
-  function removeQuestion(questionId: string | number) {
-    if (activeForm === "A") {
+  function removeQuestion(questionId: string | number, form: FormKey = activeForm) {
+    if (form === "A") {
       const question = questions.find((q) => q.id === questionId);
       const hasPair = questionsPost.some((q) => String(q.pairs_with) === String(questionId));
       if (question && hasPair) {
@@ -839,9 +854,14 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
       }
     }
 
-    setActiveQuestions((previous) =>
+    setterFor(form)((previous) =>
       previous.filter((question) => question.id !== questionId)
     );
+  }
+
+  // Side-by-side view: a Form B item for one Form A item that has none.
+  function addFormBPairFor(formAItem: Question) {
+    setQuestionsPost((previous) => [...previous, { ...createQuestion(), pairs_with: formAItem.id }]);
   }
 
   function confirmRemoveFormAItem() {
@@ -898,693 +918,785 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
   ========================================================= */
 
   if (editingSurvey) {
-    return (
-      <div className="min-h-screen bg-slate-50 p-4 md:p-8">
-        <div className="max-w-6xl mx-auto space-y-6">
+    const isKnowledge = editingSurvey.type === "knowledge";
+    const filledA = questions.filter((q) => q.text.trim());
+    const filledB = questionsPost.filter((q) => q.text.trim());
+    const pairingProblem = isKnowledge ? formPairingProblem(filledA, filledB) : null;
+    const pairOf = (a: Question) => questionsPost.find((b) => String(b.pairs_with) === String(a.id)) || null;
+    const pairIndexOf = (a: Question) => questionsPost.findIndex((b) => String(b.pairs_with) === String(a.id));
+    const isComplete = (q: Question | null) =>
+      !!q && !!q.text.trim() && (!isKnowledge || q.type !== "mcq" || !!q.correct_option);
+    const selectedIndex = Math.min(selectedItem, Math.max(questions.length - 1, 0));
+    const selectedA = questions[selectedIndex] || null;
+    const selectedBIndex = selectedA ? pairIndexOf(selectedA) : -1;
+    const selectedB = selectedBIndex >= 0 ? questionsPost[selectedBIndex] : null;
+    const missingAnswers = [...filledA, ...filledB].filter((q) => q.type === "mcq" && !q.correct_option).length;
+    const unpairedB = questionsPost.filter(
+      (b) => b.pairs_with == null || !questions.some((a) => String(a.id) === String(b.pairs_with))
+    ).length;
+    const showPairs = isKnowledge && viewMode === "pairs";
 
-          {/* HEADER */}
-          <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-900 rounded-3xl shadow-xl p-6 md:p-10 text-white">
-            <Button
-              variant="ghost"
-              onClick={() => setEditingSurvey(null)}
-              className="text-indigo-100 hover:text-white hover:bg-white/10 mb-5"
+    // The same checks the builder already runs before publishing, shown
+    // as a list (formPairingProblem), plus whether every item has an
+    // answer marked. Display only: nothing new is enforced here.
+    const checklist = isKnowledge
+      ? [
+          {
+            ok: filledB.length === 0 || filledA.length === filledB.length,
+            label:
+              filledB.length === 0
+                ? "No Form B yet: the post-test reuses Form A"
+                : `Same number of items (Form A ${filledA.length}, Form B ${filledB.length})`,
+          },
+          {
+            ok: filledB.length === 0 || !pairingProblem,
+            label: "Every Form B item pairs with exactly one Form A item",
+            detail: filledB.length > 0 ? pairingProblem : null,
+          },
+          {
+            ok: missingAnswers === 0,
+            label:
+              missingAnswers === 0
+                ? "Every item has a correct answer"
+                : `${missingAnswers} ${missingAnswers === 1 ? "item has" : "items have"} no correct answer`,
+          },
+        ]
+      : [];
+
+    const shortLabel = (text: string) => {
+      const words = text.trim().split(/\s+/).filter(Boolean);
+      if (words.length === 0) return "Untitled item";
+      return words.slice(0, 6).join(" ") + (words.length > 6 ? "…" : "");
+    };
+
+    const fieldClass =
+      "w-full h-11 rounded-[14px] bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] px-3.5 text-sm text-[#1E293B] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]";
+    const labelClass = "text-[13px] font-semibold text-[#334155]";
+    const ring =
+      "focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]";
+
+    // One question's editor. `form` says which form it belongs to, so the
+    // same card serves the list view and the side-by-side view.
+    const renderQuestionCard = (
+      question: Question,
+      index: number,
+      form: FormKey,
+      options: { heading?: ReactNode } = {}
+    ) => {
+      const prefix = isKnowledge ? `${form}${index + 1}` : `${index + 1}`;
+      const textId = `q-${form}-${String(question.id)}`;
+      return (
+        <div key={`${form}-${question.id}`} className="p-5 md:p-6 rounded-[32px] bg-white flex flex-col gap-4 min-w-0">
+          <div className="flex justify-between items-center gap-3">
+            {options.heading ?? (
+              <div className="flex items-center gap-3">
+                <span className="w-9 h-9 rounded-xl bg-[#EEF0FA] text-[#1E1B4B] flex items-center justify-center font-extrabold text-sm">
+                  {prefix}
+                </span>
+                <span className="text-sm font-semibold text-[#5B6477]">Question {index + 1}</span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => removeQuestion(question.id, form)}
+              aria-label={`Remove ${isKnowledge ? `item ${prefix}` : `question ${index + 1}`}`}
+              className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center text-rose-500 hover:bg-rose-50 ${ring}`}
             >
-              <ChevronLeft className="mr-2 h-4 w-4" />
-              Back to Survey Hub
-            </Button>
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
 
-            <div className="grid lg:grid-cols-[1fr_280px] gap-8">
-
-              <div>
-                <p className="text-indigo-200 text-[10px] font-black uppercase tracking-widest mb-2">
-                  Admin Survey Editor
+          {/* Form B: which Form A item this one is the parallel of. */}
+          {isKnowledge && form === "B" && (() => {
+            const pairIndex = questions.findIndex((q) => String(q.id) === String(question.pairs_with));
+            const takenByOthers = new Set(
+              questionsPost.filter((q) => q.id !== question.id).map((q) => String(q.pairs_with))
+            );
+            const selectId = `pair-${String(question.id)}`;
+            return (
+              <div className={`rounded-2xl p-3.5 flex flex-col gap-1.5 ${pairIndex >= 0 ? "bg-[#EEF0FA]" : "bg-[#FFFBEB]"}`}>
+                <label htmlFor={selectId} className={labelClass}>Pairs with</label>
+                <select
+                  id={selectId}
+                  value={pairIndex >= 0 ? String(question.pairs_with) : ""}
+                  onChange={(e) => {
+                    const target = questions.find((q) => String(q.id) === e.target.value);
+                    updateQuestion(index, { pairs_with: target ? target.id : null }, form);
+                  }}
+                  className={`${fieldClass} bg-white`}
+                >
+                  <option value="">Choose the Form A item...</option>
+                  {questions.map((q, aIndex) => (
+                    <option key={String(q.id)} value={String(q.id)}>
+                      A{aIndex + 1}: {q.text || "(empty)"}{takenByOthers.has(String(q.id)) ? " (already paired)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className={`m-0 text-[13px] font-semibold ${pairIndex >= 0 ? "text-[#4338CA]" : "text-[#92400E]"}`}>
+                  {pairIndex >= 0 ? `Pairs with item ${pairIndex + 1} of Form A` : "Not paired yet"}
                 </p>
+              </div>
+            );
+          })()}
 
-                <Input
-                  value={editingSurvey.title}
-                  onChange={(e) =>
-                    setEditingSurvey({
-                      ...editingSurvey,
-                      title: e.target.value,
-                    })
-                  }
-                  onBlur={() =>
-                    updateSurveyInfo(
-                      "title",
-                      editingSurvey.title
-                    )
-                  }
-                  className="bg-white/10 border-white/20 text-white text-2xl md:text-4xl font-black h-auto py-3 rounded-xl"
-                />
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={textId} className={labelClass}>Question</label>
+            <textarea
+              id={textId}
+              value={question.text}
+              onChange={(e) => updateQuestion(index, { text: e.target.value }, form)}
+              placeholder="Enter your question..."
+              rows={2}
+              className={`w-full px-3.5 py-3 rounded-[14px] bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-[15px] leading-normal text-[#1E293B] resize-y ${ring}`}
+            />
+          </div>
 
-                <textarea
-                  value={editingSurvey.description || ""}
-                  onChange={(e) =>
-                    setEditingSurvey({
-                      ...editingSurvey,
-                      description: e.target.value,
-                    })
-                  }
-                  onBlur={() =>
-                    updateSurveyInfo(
-                      "description",
-                      editingSurvey.description || ""
-                    )
-                  }
-                  placeholder="Add instructions or description for students..."
-                  className="mt-4 w-full min-h-[90px] bg-white/10 border border-white/20 rounded-xl p-4 text-sm text-white placeholder:text-indigo-200 outline-none resize-none"
-                />
+          <div className="flex flex-col gap-1.5">
+            <span className={labelClass}>Question type</span>
+            <div className="flex flex-wrap gap-2">
+              {QUESTION_TYPES.map((type) => (
+                <button
+                  key={type.value}
+                  type="button"
+                  aria-pressed={question.type === type.value}
+                  onClick={() => changeQuestionType(index, type.value, form)}
+                  className={`h-11 px-3.5 rounded-xl border-[1.5px] text-[13px] transition-colors ${ring} ${
+                    question.type === type.value
+                      ? "bg-[#1E1B4B] border-[#1E1B4B] text-white font-bold"
+                      : "bg-white border-[#DDE1EE] text-[#334155] font-semibold hover:border-[#A5B4FC]"
+                  }`}
+                >
+                  {type.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {(question.type === "mcq" || question.type === "checkbox") && (
+            <div className="flex flex-col gap-2">
+              <span className={labelClass}>
+                {isKnowledge && question.type === "mcq" ? "Choices (the correct one is marked green)" : "Choices"}
+              </span>
+              {(question.options || []).map((option, optionIndex) => {
+                const letter = String.fromCharCode(65 + optionIndex);
+                const correct =
+                  isKnowledge && question.type === "mcq" && !!question.correct_option && option === question.correct_option;
+                return (
+                  <div
+                    key={optionIndex}
+                    className={`min-h-[52px] pl-3.5 pr-1 rounded-[14px] border-[1.5px] flex items-center gap-2.5 ${
+                      correct ? "border-[#10B981] bg-[#ECFDF5]" : "border-[#DDE1EE] bg-white"
+                    }`}
+                  >
+                    <span className="font-bold text-sm text-[#5B6477] shrink-0 w-4">{letter}</span>
+                    <input
+                      value={option}
+                      aria-label={`Choice ${letter}`}
+                      onChange={(e) => updateOption(index, optionIndex, e.target.value, form)}
+                      className={`flex-1 min-w-0 h-11 bg-transparent text-sm text-[#1E293B] rounded-lg px-1 ${ring}`}
+                    />
+                    {correct && (
+                      <span className="shrink-0 px-2 py-1 rounded-full bg-[#10B981] text-white font-bold text-[11px]">Correct</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeOption(index, optionIndex, form)}
+                      aria-label={`Remove choice ${letter}`}
+                      className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center text-[#8A91A6] hover:text-rose-500 ${ring}`}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => addOption(index, form)}
+                className={`self-start h-11 px-3.5 rounded-xl text-sm font-bold text-[#4338CA] hover:bg-[#EEF0FA] flex items-center gap-1.5 ${ring}`}
+              >
+                <Plus className="w-4 h-4" /> Add choice
+              </button>
+            </div>
+          )}
+
+          {question.type === "mcq" && isKnowledge && (
+            <div className="flex flex-col gap-3 pt-3 border-t border-[#EEF0FA]">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor={`correct-${form}-${String(question.id)}`} className={labelClass}>Correct answer</label>
+                <select
+                  id={`correct-${form}-${String(question.id)}`}
+                  value={question.correct_option || ""}
+                  onChange={(e) => updateQuestion(index, { correct_option: e.target.value || undefined }, form)}
+                  className={fieldClass}
+                >
+                  <option value="">Select the correct choice...</option>
+                  {(question.options || []).map((option, optionIndex) => (
+                    <option key={optionIndex} value={option}>
+                      {String.fromCharCode(65 + optionIndex)}. {option}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div className="bg-white/10 rounded-2xl p-5">
-                <label className="text-[9px] font-black uppercase text-indigo-200">
-                  Survey Type
-                </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5 min-w-0">
+                  <label htmlFor={`program-${form}-${String(question.id)}`} className={labelClass}>Related program (optional)</label>
+                  <select
+                    id={`program-${form}-${String(question.id)}`}
+                    value={question.related_program_id ?? ""}
+                    onChange={(e) =>
+                      updateQuestion(index, { related_program_id: e.target.value ? Number(e.target.value) : null }, form)
+                    }
+                    className={fieldClass}
+                  >
+                    <option value="">None</option>
+                    {programOptions.map((program) => (
+                      <option key={program.id} value={program.id}>{program.title}</option>
+                    ))}
+                  </select>
+                </div>
 
-                <select
-                  value={editingSurvey.type || "opinion"}
-                  onChange={(e) =>
-                    updateSurveyInfo(
-                      "type",
-                      e.target.value
-                    )
-                  }
-                  className="mt-2 w-full h-11 rounded-xl bg-white text-slate-800 px-3 font-bold text-xs outline-none"
+                <div className="flex flex-col gap-1.5 min-w-0">
+                  <label htmlFor={`material-${form}-${String(question.id)}`} className={labelClass}>Related material (optional)</label>
+                  <select
+                    id={`material-${form}-${String(question.id)}`}
+                    value={question.related_material_id ?? ""}
+                    onChange={(e) =>
+                      updateQuestion(index, { related_material_id: e.target.value ? Number(e.target.value) : null }, form)
+                    }
+                    className={fieldClass}
+                  >
+                    <option value="">None</option>
+                    {materialOptions.map((material) => (
+                      <option key={material.id} value={material.id}>{material.title}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <p className="m-0 text-[13px] text-[#5B6477] leading-relaxed">
+                Shown to a student if they miss this question, so the assessment doubles as an awareness intervention.
+              </p>
+            </div>
+          )}
+
+          {question.type === "checkbox" && (
+            <div className="flex flex-col gap-3">
+              <label className="flex items-center gap-3 cursor-pointer w-fit min-h-[44px]">
+                <input
+                  type="checkbox"
+                  checked={question.allow_other === true}
+                  onChange={(e) => updateQuestion(index, { allow_other: e.target.checked }, form)}
+                  className="w-5 h-5 accent-[#4F46E5]"
+                />
+                <span className="text-sm font-semibold text-[#334155]">Allow "Other, please specify"</span>
+              </label>
+
+              {(question.options || []).length > 0 && (
+                <div className="flex flex-col gap-2 pt-3 border-t border-[#EEF0FA]">
+                  <span className={labelClass}>Link choices to programs (optional)</span>
+                  <p className="m-0 text-[13px] text-[#5B6477] leading-relaxed">
+                    Powers the Program Participation by Course report. Leave a choice unmapped (e.g. "None of the above")
+                    to count it as "did not participate."
+                  </p>
+                  {(question.options || []).map((option, optionIndex) => (
+                    <div key={optionIndex} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                      <span className="text-sm font-semibold text-[#334155] flex-1 truncate">{option}</span>
+                      <select
+                        aria-label={`Program for ${option}`}
+                        value={question.option_program_ids?.[option] ?? ""}
+                        onChange={(e) => setOptionProgram(index, option, e.target.value ? Number(e.target.value) : null, form)}
+                        className={`${fieldClass} sm:w-56`}
+                      >
+                        <option value="">Not a program</option>
+                        {programOptions.map((program) => (
+                          <option key={program.id} value={program.id}>{program.title}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {question.type === "scale" && (
+            <div className="bg-[#EEF0FA] rounded-2xl p-4">
+              <div className="flex justify-between text-[13px] font-semibold text-[#3730A3]">
+                <span>1 — Strongly disagree</span>
+                <span>5 — Strongly agree</span>
+              </div>
+              <div className="grid grid-cols-5 gap-2 mt-3">
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <div key={value} className="h-10 bg-white rounded-lg flex items-center justify-center font-bold text-[#4338CA]">
+                    {value}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {question.type === "text" && (
+            <div className="h-20 rounded-2xl bg-[#F5F6FB] border-2 border-dashed border-[#DDE1EE] flex items-center justify-center text-[#5B6477] text-sm">
+              Student text response field
+            </div>
+          )}
+
+          <label className="flex items-center gap-3 cursor-pointer w-fit min-h-[44px]">
+            <input
+              type="checkbox"
+              checked={question.required !== false}
+              onChange={(e) => updateQuestion(index, { required: e.target.checked }, form)}
+              className="w-5 h-5 accent-[#4F46E5]"
+            />
+            <span className="text-sm font-semibold text-[#334155]">Required question</span>
+          </label>
+        </div>
+      );
+    };
+
+    const statusBadge =
+      editingSurvey.status === "active"
+        ? "bg-[#D1FAE5] text-[#065F46]"
+        : editingSurvey.status === "closed"
+          ? "bg-[#E2E8F0] text-[#1E293B]"
+          : "bg-[#E0E7FF] text-[#3730A3]";
+
+    return (
+      <div className="font-figtree text-[#1E293B]">
+        <div className="flex flex-col gap-5 pb-16">
+
+          {/* BREADCRUMB */}
+          <nav aria-label="Breadcrumb" ref={editorTopRef} className="scroll-mt-24 lg:scroll-mt-6">
+            <ol className="m-0 p-0 list-none flex flex-wrap items-center gap-1 text-sm text-[#5B6477]">
+              <li>
+                <button
+                  type="button"
+                  onClick={() => setEditingSurvey(null)}
+                  className={`min-h-[44px] px-1 rounded-lg font-semibold text-[#4338CA] hover:underline ${ring}`}
                 >
-                  <option value="knowledge">Knowledge Assessment (scored)</option>
-                  <option value="opinion">Opinion Survey (unscored)</option>
-                </select>
+                  Assessments
+                </button>
+              </li>
+              <li aria-hidden="true"><ChevronRight className="w-4 h-4" /></li>
+              <li aria-current="page" className="truncate max-w-[60vw]">{editingSurvey.title}</li>
+            </ol>
+          </nav>
+
+          {/* HEADER: title, status, Save, Publish/Close */}
+          <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
+            <div className="flex flex-col gap-2 min-w-0 flex-1">
+              <div className="flex items-start gap-2.5">
+                <label htmlFor="survey-title" className="sr-only">Title</label>
+                <input
+                  id="survey-title"
+                  value={editingSurvey.title}
+                  onChange={(e) => setEditingSurvey({ ...editingSurvey, title: e.target.value })}
+                  onBlur={() => updateSurveyInfo("title", editingSurvey.title)}
+                  className={`flex-1 min-w-0 min-h-[44px] bg-transparent font-bricolage font-extrabold text-[28px] md:text-[34px] leading-tight tracking-[-0.02em] text-[#1E1B4B] rounded-xl px-1 -mx-1 hover:bg-white/60 ${ring}`}
+                />
+                <span className={`shrink-0 mt-2 px-3 py-1.5 rounded-full font-extrabold text-xs ${statusBadge}`}>
+                  {getStatusLabel(editingSurvey.status)}
+                </span>
+              </div>
+              <label htmlFor="survey-description" className="sr-only">Description</label>
+              <textarea
+                id="survey-description"
+                value={editingSurvey.description || ""}
+                onChange={(e) => setEditingSurvey({ ...editingSurvey, description: e.target.value })}
+                onBlur={() => updateSurveyInfo("description", editingSurvey.description || "")}
+                placeholder="Add instructions or a description for students..."
+                rows={2}
+                className={`w-full px-3.5 py-3 rounded-2xl bg-white border-[1.5px] border-[#DDE1EE] text-[15px] text-[#334155] placeholder:text-[#8A91A6] resize-y ${ring}`}
+              />
+              {isKnowledge && (
+                <p className="m-0 text-sm text-[#5B6477]">
+                  Form A is the pre-test. Form B is the post-test. Each Form B item measures the same point as its paired Form A item.
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={saveSurveyContent}
+                disabled={isSaving}
+                className={`h-12 px-5 rounded-2xl border-[1.5px] border-[#DDE1EE] bg-white text-[#1E1B4B] font-bold text-[15px] flex items-center gap-2 hover:border-[#A5B4FC] disabled:opacity-60 ${ring}`}
+              >
+                {isSaving ? <Loader2 className="animate-spin h-4 w-4" /> : <Save className="h-4 w-4" />}
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleSurveyStatus(editingSurvey)}
+                className={`h-12 px-[22px] rounded-2xl font-bold text-[15px] flex items-center gap-2 ${ring} ${
+                  editingSurvey.status === "active"
+                    ? "bg-[#1E1B4B] hover:bg-[#2B2F55] text-white"
+                    : "bg-[#4F46E5] hover:bg-[#4338CA] text-white"
+                }`}
+              >
+                {editingSurvey.status === "active" ? (
+                  <><EyeOff className="h-4 w-4" /> Close</>
+                ) : (
+                  <><Eye className="h-4 w-4" /> Publish</>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* View switch: side by side (wide screens) or the full list. */}
+          {isKnowledge && (
+            <div className="hidden xl:flex items-center gap-3">
+              <div role="tablist" aria-label="Editor view" className="flex gap-1 p-[5px] rounded-full bg-white">
+                {([
+                  { key: "pairs" as const, label: "Side by side" },
+                  { key: "list" as const, label: "Full list" },
+                ]).map((v) => (
+                  <button
+                    key={v.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={viewMode === v.key}
+                    onClick={() => setViewMode(v.key)}
+                    className={`h-11 px-[18px] rounded-full text-sm whitespace-nowrap ${ring} ${
+                      viewMode === v.key ? "bg-[#1E1B4B] text-white font-bold" : "text-[#334155] font-semibold hover:bg-[#EEF0FA]"
+                    }`}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+              {showPairs && unpairedB > 0 && (
+                <p className="m-0 text-sm text-[#92400E]">
+                  {unpairedB} Form B {unpairedB === 1 ? "item isn't" : "items aren't"} paired. Pair {unpairedB === 1 ? "it" : "them"} in the full list.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div
+            className={`grid grid-cols-1 gap-5 items-start ${
+              showPairs ? "xl:grid-cols-[260px_minmax(0,1fr)]" : "xl:grid-cols-[minmax(0,1fr)_300px]"
+            }`}
+          >
+            {/* LEFT: item list (side-by-side view, wide screens only) */}
+            {showPairs && (
+              <nav aria-label="Items" className="hidden xl:flex xl:col-start-1 xl:row-start-1 flex-col gap-1.5 p-[18px] rounded-[32px] bg-white">
+                <h2 className="m-0 mx-1.5 mb-1.5 font-bold text-base text-[#1E1B4B]">Items</h2>
+                {questions.map((q, i) => {
+                  const b = pairOf(q);
+                  const selected = i === selectedIndex;
+                  const aOk = isComplete(q);
+                  const bState = !b ? "missing" : isComplete(b) ? "ok" : "partial";
+                  return (
+                    <button
+                      key={String(q.id)}
+                      type="button"
+                      onClick={() => setSelectedItem(i)}
+                      aria-current={selected ? "true" : undefined}
+                      aria-label={`Item ${i + 1}: ${shortLabel(q.text)}. Form A ${aOk ? "complete" : "incomplete"}, Form B ${bState === "ok" ? "complete" : bState === "partial" ? "incomplete" : "missing"}.`}
+                      className={`min-h-[50px] px-3 py-2 rounded-2xl flex items-center gap-2.5 text-left transition-colors ${ring} ${
+                        selected ? "bg-[#1E1B4B] text-white" : "text-[#1E293B] hover:bg-[#F5F6FB]"
+                      }`}
+                    >
+                      <span className="w-7 h-7 shrink-0 rounded-[10px] bg-[#EEF0FA] text-[#1E1B4B] font-extrabold text-[13px] flex items-center justify-center">
+                        {i + 1}
+                      </span>
+                      <span className="flex-1 min-w-0 text-sm font-semibold truncate">{shortLabel(q.text)}</span>
+                      <span className="flex gap-[3px] shrink-0" aria-hidden="true">
+                        <span className={`w-2 h-2 rounded-full ${aOk ? "bg-[#10B981]" : selected ? "bg-white/30" : "bg-[#DDE1EE]"}`} />
+                        <span
+                          className={`w-2 h-2 rounded-full ${
+                            bState === "ok" ? "bg-[#10B981]" : bState === "partial" ? "bg-[#FBBF24]" : selected ? "bg-white/30" : "bg-[#DDE1EE]"
+                          }`}
+                        />
+                      </span>
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveForm("A");
+                    setQuestions([...questions, createQuestion()]);
+                    setSelectedItem(questions.length);
+                  }}
+                  className={`mt-1.5 h-[46px] rounded-2xl border-[1.5px] border-dashed border-[#C5CAE0] text-[#4338CA] font-bold text-sm hover:bg-[#F5F6FB] ${ring}`}
+                >
+                  Add item
+                </button>
+                <p className="m-0 mx-1.5 mt-1 text-xs text-[#5B6477]">Dots: Form A, Form B (green = filled in).</p>
+              </nav>
+            )}
+
+            {/* CENTER */}
+            <div className={`order-2 min-w-0 flex flex-col gap-4 ${showPairs ? "xl:col-start-2 xl:row-start-1 xl:row-span-2" : "xl:col-start-1 xl:row-start-1"}`}>
+              {/* Side by side: the selected item's Form A and Form B. */}
+              {showPairs && (
+                <div className="hidden xl:flex flex-col gap-4">
+                  {selectedA ? (
+                    <div className="grid grid-cols-2 gap-4 items-start">
+                      {renderQuestionCard(selectedA, selectedIndex, "A", {
+                        heading: (
+                          <div className="flex items-center gap-2.5">
+                            <h2 className="m-0 font-bold text-[17px] text-[#1E1B4B]">Form A · item {selectedIndex + 1}</h2>
+                            <span className="px-[11px] py-[5px] rounded-full bg-[#EEF0FA] text-[#3730A3] font-bold text-xs">Pre-test</span>
+                          </div>
+                        ),
+                      })}
+                      {selectedB ? (
+                        renderQuestionCard(selectedB, selectedBIndex, "B", {
+                          heading: (
+                            <div className="flex items-center gap-2.5">
+                              <h2 className="m-0 font-bold text-[17px] text-[#1E1B4B]">Form B</h2>
+                              <span className="px-[11px] py-[5px] rounded-full bg-[#FEF3C7] text-[#92400E] font-bold text-xs">Post-test</span>
+                            </div>
+                          ),
+                        })
+                      ) : (
+                        <div className="p-6 rounded-[32px] bg-white border-2 border-dashed border-[#DDE1EE] flex flex-col items-start gap-3">
+                          <div className="flex items-center gap-2.5">
+                            <h2 className="m-0 font-bold text-[17px] text-[#1E1B4B]">Form B</h2>
+                            <span className="px-[11px] py-[5px] rounded-full bg-[#FEF3C7] text-[#92400E] font-bold text-xs">Post-test</span>
+                          </div>
+                          <p className="m-0 text-sm text-[#5B6477]">
+                            Item {selectedIndex + 1} has no Form B item yet.
+                            {questionsPost.length === 0 && " Without a Form B, the post-test reuses Form A."}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => addFormBPairFor(selectedA)}
+                              className={`h-11 px-4 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-sm flex items-center gap-1.5 ${ring}`}
+                            >
+                              <Plus className="w-4 h-4" /> Add Form B item
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => (questionsPost.length > 0 ? setConfirmCopyToB(true) : copyFormAToFormB())}
+                              className={`h-11 px-4 rounded-xl border-[1.5px] border-[#DDE1EE] bg-white text-[#1E1B4B] font-bold text-sm flex items-center gap-1.5 hover:border-[#A5B4FC] ${ring}`}
+                            >
+                              <Copy className="w-4 h-4" /> Copy Form A to Form B
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-8 rounded-[32px] bg-white text-center flex flex-col items-center gap-3">
+                      <p className="m-0 font-bold text-[#1E1B4B]">No items yet</p>
+                      <button
+                        type="button"
+                        onClick={() => setQuestions([...questions, createQuestion()])}
+                        className={`h-11 px-4 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-sm ${ring}`}
+                      >
+                        Add the first item
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Full list with Form A / Form B tabs: always below 1280px,
+                  and on wide screens when "Full list" is chosen. */}
+              <div className={`flex flex-col gap-4 ${showPairs ? "xl:hidden" : ""}`}>
+                {isKnowledge && (
+                  <div className="bg-white rounded-[28px] p-4 md:p-5 flex flex-col gap-3">
+                    <div role="tablist" aria-label="Assessment forms" className="grid grid-cols-2 gap-1 p-[5px] rounded-full bg-[#F5F6FB]">
+                      {([
+                        { key: "A" as FormKey, label: "Form A", sub: "Pre-test", count: questions.length },
+                        { key: "B" as FormKey, label: "Form B", sub: "Post-test", count: questionsPost.length },
+                      ]).map((tab) => (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          role="tab"
+                          aria-selected={activeForm === tab.key}
+                          onClick={() => setActiveForm(tab.key)}
+                          className={`min-h-[44px] px-3 rounded-full text-sm transition-colors ${ring} ${
+                            activeForm === tab.key ? "bg-[#1E1B4B] text-white font-bold" : "text-[#334155] font-semibold hover:bg-white"
+                          }`}
+                        >
+                          {tab.label} <span className="font-medium opacity-75">· {tab.sub} · {tab.count}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className={`m-0 text-sm font-semibold ${questionsPost.length === 0 ? "text-[#5B6477]" : pairingProblem ? "text-[#92400E]" : "text-[#065F46]"}`}>
+                      {questionsPost.length === 0
+                        ? "No Form B yet: the post-test will reuse Form A."
+                        : pairingProblem
+                          ? `Not ready to publish: ${pairingProblem}`
+                          : `Forms are paired: ${filledA.length} items each.`}
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <h2 className="m-0 font-bold text-lg text-[#1E1B4B]">
+                      {isKnowledge
+                        ? activeForm === "A"
+                          ? "Form A (pre-test) questions"
+                          : "Form B (post-test) questions"
+                        : "Questions"}
+                    </h2>
+                    <p className="m-0 text-sm text-[#5B6477]">
+                      {isKnowledge && activeForm === "B"
+                        ? "Each item measures the same point as its paired Form A item, with its own text, choices, and answer."
+                        : "Create the questionnaire students will answer."}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isKnowledge && activeForm === "B" && questionsPost.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmCopyToB(true)}
+                        className={`h-11 px-4 rounded-xl border-[1.5px] border-[#DDE1EE] bg-white text-[#1E1B4B] font-bold text-sm flex items-center gap-1.5 hover:border-[#A5B4FC] ${ring}`}
+                      >
+                        <Copy className="w-4 h-4" /> Copy Form A to Form B
+                      </button>
+                    )}
+                    <span className="px-3.5 py-2 rounded-full bg-[#EEF0FA] text-[#3730A3] text-sm font-bold">
+                      {activeQuestions.length} {activeQuestions.length === 1 ? "question" : "questions"}
+                    </span>
+                  </div>
+                </div>
+
+                {isKnowledge && activeForm === "B" && questionsPost.length === 0 && (
+                  <div className="rounded-[32px] border-2 border-dashed border-[#DDE1EE] bg-white p-8 text-center flex flex-col items-center gap-2">
+                    <p className="m-0 font-bold text-[#1E1B4B]">Form B is empty</p>
+                    <p className="m-0 text-sm text-[#5B6477]">
+                      Start from a copy of Form A and rewrite each item, or add items one by one.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={copyFormAToFormB}
+                      className={`mt-2 h-11 px-4 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-sm flex items-center gap-1.5 ${ring}`}
+                    >
+                      <Copy className="w-4 h-4" /> Copy Form A to Form B
+                    </button>
+                  </div>
+                )}
+
+                {activeQuestions.map((question, index) => renderQuestionCard(question, index, activeForm))}
+
+                <button
+                  type="button"
+                  onClick={addQuestionToActiveForm}
+                  className={`w-full h-14 rounded-[24px] border-2 border-dashed border-[#C5CAE0] font-bold text-sm text-[#4338CA] hover:bg-white flex items-center justify-center gap-2 ${ring}`}
+                >
+                  <Plus className="h-5 w-5" />
+                  {isKnowledge ? `Add question to Form ${activeForm}` : "Add question"}
+                </button>
+              </div>
+            </div>
+
+            {/* RIGHT: settings and the pre-activation checklist */}
+            <aside className={`order-1 flex flex-col gap-4 min-w-0 ${showPairs ? "xl:col-start-1 xl:row-start-2" : "xl:col-start-2 xl:row-start-1"}`}>
+              <section aria-labelledby="settings-heading" className="p-[22px] rounded-[32px] bg-white flex flex-col gap-3">
+                <h2 id="settings-heading" className="m-0 font-bold text-base text-[#1E1B4B]">Settings</h2>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="survey-type" className={labelClass}>Survey type</label>
+                  <select
+                    id="survey-type"
+                    value={editingSurvey.type || "opinion"}
+                    onChange={(e) => updateSurveyInfo("type", e.target.value)}
+                    className={fieldClass}
+                  >
+                    <option value="knowledge">Knowledge assessment (scored)</option>
+                    <option value="opinion">Opinion survey (unscored)</option>
+                  </select>
+                </div>
 
                 {/* Pre-test/post-test link. Students answer a knowledge
                     assessment twice — once before reading the program's
                     IEC materials, once after — and Learning Gain in
                     Analytics pairs the two per program. */}
-                {editingSurvey.type === "knowledge" && (
-                  <>
-                    <label className="text-[9px] font-black uppercase text-indigo-200 mt-5 block">
-                      Pre/Post-Test For Program
-                    </label>
-
+                {isKnowledge && (
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="survey-program" className={labelClass}>Program</label>
                     <select
+                      id="survey-program"
                       value={editingSurvey.program_id ?? ""}
-                      onChange={(e) =>
-                        updateSurveyInfo(
-                          "program_id",
-                          e.target.value
-                        )
-                      }
-                      className="mt-2 w-full h-11 rounded-xl bg-white text-slate-800 px-3 font-bold text-xs outline-none"
+                      onChange={(e) => updateSurveyInfo("program_id", e.target.value)}
+                      className={fieldClass}
                     >
                       <option value="">Not linked to a program</option>
                       {programOptions.map((program) => (
-                        <option key={program.id} value={program.id}>
-                          {program.title}
-                        </option>
+                        <option key={program.id} value={program.id}>{program.title}</option>
                       ))}
                     </select>
-
-                    <p className="text-[9px] font-bold text-indigo-200/80 mt-2 leading-relaxed">
+                    <p className="m-0 text-xs text-[#5B6477] leading-normal">
                       Students take this twice: a pre-test, then a post-test after the program's IEC materials.
                     </p>
-                  </>
-                )}
-
-                <label className="text-[9px] font-black uppercase text-indigo-200 mt-5 block">
-                  Survey Category
-                </label>
-
-                <select
-                  value={editingSurvey.category || "Other"}
-                  onChange={(e) =>
-                    updateSurveyInfo(
-                      "category",
-                      e.target.value
-                    )
-                  }
-                  className="mt-2 w-full h-11 rounded-xl bg-white text-slate-800 px-3 font-bold text-xs outline-none"
-                >
-                  {CATEGORIES.map((category) => (
-                    <option key={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-
-                <label className="text-[9px] font-black uppercase text-indigo-200 mt-5 block">
-                  IEC Category
-                </label>
-
-                {/* Separate from Survey Category above (the 6 Guidance
-                    Services, tied to programs) — this uses the same
-                    8-value scheme as materials.category, so a survey
-                    can be tied to the IEC materials on the same topic.
-                    Optional: no "required" default forced here. */}
-                <select
-                  value={editingSurvey.iec_category || ""}
-                  onChange={(e) =>
-                    updateSurveyInfo(
-                      "iec_category",
-                      e.target.value
-                    )
-                  }
-                  className="mt-2 w-full h-11 rounded-xl bg-white text-slate-800 px-3 font-bold text-xs outline-none"
-                >
-                  <option value="">No IEC Category</option>
-                  {IEC_CATEGORIES.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-
-                <div className="mt-5">
-                  <p className="text-[9px] uppercase font-black text-indigo-200">
-                    Current Status
-                  </p>
-
-                  <p className="mt-1 font-black text-lg">
-                    {getStatusLabel(editingSurvey.status)}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8 flex flex-col md:flex-row gap-3">
-              <Button
-                onClick={saveSurveyContent}
-                disabled={isSaving}
-                className="bg-white text-indigo-900 hover:bg-indigo-50 h-12 px-7 rounded-xl font-black uppercase text-xs"
-              >
-                {isSaving ? (
-                  <Loader2 className="animate-spin mr-2 h-4 w-4" />
-                ) : (
-                  <Save className="mr-2 h-4 w-4" />
-                )}
-                Save Survey
-              </Button>
-
-              <Button
-                onClick={() => toggleSurveyStatus(editingSurvey)}
-                className="bg-indigo-500 hover:bg-indigo-400 h-12 px-7 rounded-xl font-black uppercase text-xs"
-              >
-                {editingSurvey.status === "active" ? (
-                  <>
-                    <EyeOff className="mr-2 h-4 w-4" />
-                    Close Survey
-                  </>
-                ) : (
-                  <>
-                    <Eye className="mr-2 h-4 w-4" />
-                    Publish Survey
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-
-          {/* QUESTIONS */}
-          <div className="space-y-5 pb-20">
-
-            {/* Knowledge assessments have two parallel forms: Form A is
-                the pre-test, Form B the post-test. Item N of Form B is
-                paired (by id) with an item of Form A. */}
-            {editingSurvey.type === "knowledge" && (() => {
-              const problem = formPairingProblem(
-                questions.filter((q) => q.text.trim()),
-                questionsPost.filter((q) => q.text.trim())
-              );
-              return (
-                <div className="bg-white rounded-3xl p-4 md:p-5 shadow-sm space-y-3">
-                  <div role="tablist" aria-label="Assessment forms" className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-slate-100">
-                    {([
-                      { key: "A" as FormKey, label: "Form A", sub: "Pre-test", count: questions.length },
-                      { key: "B" as FormKey, label: "Form B", sub: "Post-test", count: questionsPost.length },
-                    ]).map((tab) => (
-                      <button
-                        key={tab.key}
-                        type="button"
-                        role="tab"
-                        aria-selected={activeForm === tab.key}
-                        onClick={() => setActiveForm(tab.key)}
-                        className={`h-12 rounded-xl text-xs font-black transition-colors ${
-                          activeForm === tab.key ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
-                        }`}
-                      >
-                        {tab.label} <span className="font-bold text-slate-400">· {tab.sub} · {tab.count} items</span>
-                      </button>
-                    ))}
                   </div>
-                  <p className={`text-xs font-bold ${questionsPost.length === 0 ? "text-slate-500" : problem ? "text-amber-600" : "text-emerald-600"}`}>
-                    {questionsPost.length === 0
-                      ? "No Form B yet: the post-test will reuse Form A."
-                      : problem
-                        ? `Not ready to publish: ${problem}`
-                        : `Forms are paired: ${questions.filter((q) => q.text.trim()).length} items each.`}
-                  </p>
-                </div>
-              );
-            })()}
+                )}
 
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div>
-                <h2 className="text-xl font-black text-slate-900">
-                  {editingSurvey.type === "knowledge"
-                    ? activeForm === "A"
-                      ? "Form A (pre-test) questions"
-                      : "Form B (post-test) questions"
-                    : "Survey Questions"}
-                </h2>
-                <p className="text-xs font-medium text-slate-400">
-                  {editingSurvey.type === "knowledge" && activeForm === "B"
-                    ? "Each item measures the same point as its paired Form A item, with its own text, options, and answer."
-                    : "Create the questionnaire students will answer."}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {editingSurvey.type === "knowledge" && activeForm === "B" && (
-                  <Button
-                    variant="outline"
-                    onClick={() => (questionsPost.length > 0 ? setConfirmCopyToB(true) : copyFormAToFormB())}
-                    className="h-10 rounded-xl text-xs font-black"
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="survey-category" className={labelClass}>Category</label>
+                  <select
+                    id="survey-category"
+                    value={editingSurvey.category || "Other"}
+                    onChange={(e) => updateSurveyInfo("category", e.target.value)}
+                    className={fieldClass}
                   >
-                    <Copy className="w-4 h-4 mr-2" />
-                    Copy Form A to Form B
-                  </Button>
-                )}
-                <div className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-black">
-                  {activeQuestions.length} Questions
+                    {CATEGORIES.map((category) => (
+                      <option key={category}>{category}</option>
+                    ))}
+                  </select>
                 </div>
-              </div>
-            </div>
 
-            {activeForm === "B" && questionsPost.length === 0 && (
-              <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-white p-8 text-center">
-                <p className="font-black text-slate-700">Form B is empty</p>
-                <p className="text-xs text-slate-400 mt-1">
-                  Start from a copy of Form A and rewrite each item, or add items one by one.
-                </p>
-                <Button onClick={copyFormAToFormB} className="mt-4 h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs">
-                  <Copy className="w-4 h-4 mr-2" />
-                  Copy Form A to Form B
-                </Button>
-              </div>
-            )}
+                {/* Separate from Category above (the 6 Guidance Services,
+                    tied to programs) — this uses the same 8-value scheme
+                    as materials.category, so a survey can be tied to the
+                    IEC materials on the same topic. Optional. */}
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="survey-iec-category" className={labelClass}>IEC category</label>
+                  <select
+                    id="survey-iec-category"
+                    value={editingSurvey.iec_category || ""}
+                    onChange={(e) => updateSurveyInfo("iec_category", e.target.value)}
+                    className={fieldClass}
+                  >
+                    <option value="">No IEC category</option>
+                    {IEC_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
+                </div>
+              </section>
 
-            {activeQuestions.map((question, index) => (
-              <Card
-                key={question.id}
-                className="p-5 md:p-7 rounded-3xl border-none shadow-sm bg-white"
-              >
-                <div className="flex gap-4">
-
-                  <div className="hidden md:flex pt-3 text-slate-300">
-                    <GripVertical className="w-5 h-5" />
-                  </div>
-
-                  <div className="flex-1 space-y-5">
-
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black">
-                          {index + 1}
-                        </div>
-
-                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                          {editingSurvey.type === "knowledge" ? `${activeForm}${index + 1} · ` : ""}Question {index + 1}
-                        </span>
-                      </div>
-
-                      <Button
-                        variant="ghost"
-                        onClick={() =>
-                          removeQuestion(question.id)
-                        }
-                        className="text-rose-400 hover:text-rose-600 hover:bg-rose-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-
-                    {/* Form B: which Form A item this one is the parallel of. */}
-                    {editingSurvey.type === "knowledge" && activeForm === "B" && (() => {
-                      const pairIndex = questions.findIndex((q) => String(q.id) === String(question.pairs_with));
-                      const takenByOthers = new Set(
-                        questionsPost.filter((q) => q.id !== question.id).map((q) => String(q.pairs_with))
-                      );
-                      return (
-                        <div className={`rounded-xl p-3 ${pairIndex >= 0 ? "bg-indigo-50" : "bg-amber-50"}`}>
-                          <label className="text-[9px] font-black uppercase text-indigo-500">
-                            Pairs with
-                          </label>
-                          <select
-                            value={pairIndex >= 0 ? String(question.pairs_with) : ""}
-                            onChange={(e) => {
-                              const target = questions.find((q) => String(q.id) === e.target.value);
-                              updateQuestion(index, { pairs_with: target ? target.id : null });
-                            }}
-                            className="mt-1 w-full h-11 rounded-xl bg-white border border-indigo-100 px-3 text-xs font-bold text-slate-700 outline-none"
-                          >
-                            <option value="">Choose the Form A item...</option>
-                            {questions.map((q, aIndex) => (
-                              <option key={String(q.id)} value={String(q.id)}>
-                                A{aIndex + 1}: {q.text || "(empty)"}{takenByOthers.has(String(q.id)) ? " — already paired" : ""}
-                              </option>
-                            ))}
-                          </select>
-                          <p className={`mt-1.5 text-[10px] font-bold ${pairIndex >= 0 ? "text-indigo-600" : "text-amber-700"}`}>
-                            {pairIndex >= 0
-                              ? `Pairs with item ${pairIndex + 1} of Form A`
-                              : "Not paired yet"}
-                          </p>
-                        </div>
-                      );
-                    })()}
-
-                    <Input
-                      value={question.text}
-                      onChange={(e) =>
-                        updateQuestion(index, {
-                          text: e.target.value,
-                        })
-                      }
-                      placeholder="Enter your question..."
-                      className="h-14 rounded-xl bg-slate-50 border-none font-bold text-slate-800"
-                    />
-
-                    <div className="flex flex-wrap gap-2">
-                      {QUESTION_TYPES.map((type) => (
-                        <Button
-                          key={type.value}
-                          variant="outline"
-                          onClick={() =>
-                            changeQuestionType(
-                              index,
-                              type.value
-                            )
-                          }
-                          className={
-                            question.type === type.value
-                              ? "bg-indigo-600 text-white border-indigo-600"
-                              : ""
-                          }
-                        >
-                          {type.label}
-                        </Button>
-                      ))}
-                    </div>
-
-                    {question.type === "mcq" && (
-                      <div className="space-y-3 border-l-4 border-indigo-100 pl-4">
-                        {(question.options || []).map(
-                          (option, optionIndex) => (
-                            <div
-                              key={optionIndex}
-                              className="flex gap-2"
-                            >
-                              <Input
-                                value={option}
-                                onChange={(e) =>
-                                  updateOption(
-                                    index,
-                                    optionIndex,
-                                    e.target.value
-                                  )
-                                }
-                                className="bg-slate-50 border-none rounded-xl"
-                              />
-
-                              <Button
-                                variant="ghost"
-                                onClick={() =>
-                                  removeOption(
-                                    index,
-                                    optionIndex
-                                  )
-                                }
-                                className="text-slate-300 hover:text-rose-500"
-                              >
-                                <X className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          )
-                        )}
-
-                        <Button
-                          variant="ghost"
-                          onClick={() => addOption(index)}
-                          className="text-indigo-600 font-black uppercase text-[9px]"
-                        >
-                          <Plus className="w-4 h-4 mr-2" />
-                          Add Option
-                        </Button>
-
-                        {editingSurvey.type === "knowledge" && (
-                          <div className="mt-4 space-y-3 border-t border-indigo-100 pt-4">
-                            <div>
-                              <label className="text-[9px] font-black uppercase text-indigo-500">
-                                Correct Answer
-                              </label>
-
-                              <select
-                                value={question.correct_option || ""}
-                                onChange={(e) =>
-                                  updateQuestion(index, {
-                                    correct_option: e.target.value || undefined,
-                                  })
-                                }
-                                className="mt-1 w-full h-11 rounded-xl bg-white border border-indigo-100 px-3 text-xs font-bold text-slate-700 outline-none"
-                              >
-                                <option value="">
-                                  Select the correct option...
-                                </option>
-                                {(question.options || []).map((option, optionIndex) => (
-                                  <option key={optionIndex} value={option}>
-                                    {option}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              <div>
-                                <label className="text-[9px] font-black uppercase text-indigo-500">
-                                  Related Program (optional)
-                                </label>
-
-                                <select
-                                  value={question.related_program_id ?? ""}
-                                  onChange={(e) =>
-                                    updateQuestion(index, {
-                                      related_program_id: e.target.value
-                                        ? Number(e.target.value)
-                                        : null,
-                                    })
-                                  }
-                                  className="mt-1 w-full h-11 rounded-xl bg-white border border-indigo-100 px-3 text-xs font-bold text-slate-700 outline-none"
-                                >
-                                  <option value="">None</option>
-                                  {programOptions.map((program) => (
-                                    <option key={program.id} value={program.id}>
-                                      {program.title}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              <div>
-                                <label className="text-[9px] font-black uppercase text-indigo-500">
-                                  Related Material (optional)
-                                </label>
-
-                                <select
-                                  value={question.related_material_id ?? ""}
-                                  onChange={(e) =>
-                                    updateQuestion(index, {
-                                      related_material_id: e.target.value
-                                        ? Number(e.target.value)
-                                        : null,
-                                    })
-                                  }
-                                  className="mt-1 w-full h-11 rounded-xl bg-white border border-indigo-100 px-3 text-xs font-bold text-slate-700 outline-none"
-                                >
-                                  <option value="">None</option>
-                                  {materialOptions.map((material) => (
-                                    <option key={material.id} value={material.id}>
-                                      {material.title}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
-
-                            <p className="text-[9px] text-slate-400 leading-relaxed">
-                              Shown to a student if they miss this question, so the
-                              assessment doubles as an awareness intervention.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {question.type === "checkbox" && (
-                      <div className="space-y-3 border-l-4 border-indigo-100 pl-4">
-                        {(question.options || []).map(
-                          (option, optionIndex) => (
-                            <div
-                              key={optionIndex}
-                              className="flex gap-2"
-                            >
-                              <Input
-                                value={option}
-                                onChange={(e) =>
-                                  updateOption(
-                                    index,
-                                    optionIndex,
-                                    e.target.value
-                                  )
-                                }
-                                className="bg-slate-50 border-none rounded-xl"
-                              />
-
-                              <Button
-                                variant="ghost"
-                                onClick={() =>
-                                  removeOption(
-                                    index,
-                                    optionIndex
-                                  )
-                                }
-                                className="text-slate-300 hover:text-rose-500"
-                              >
-                                <X className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          )
-                        )}
-
-                        <Button
-                          variant="ghost"
-                          onClick={() => addOption(index)}
-                          className="text-indigo-600 font-black uppercase text-[9px]"
-                        >
-                          <Plus className="w-4 h-4 mr-2" />
-                          Add Option
-                        </Button>
-
-                        <label className="flex items-center gap-3 cursor-pointer w-fit pt-1">
-                          <input
-                            type="checkbox"
-                            checked={question.allow_other === true}
-                            onChange={(e) =>
-                              updateQuestion(index, {
-                                allow_other: e.target.checked,
-                              })
-                            }
-                            className="w-4 h-4 accent-indigo-600"
-                          />
-                          <span className="text-xs font-bold text-slate-500">
-                            Allow "Other, please specify"
+              {isKnowledge && (
+                <section aria-labelledby="checklist-heading" className="p-[22px] rounded-[32px] bg-[#1E1B4B] text-white flex flex-col gap-3">
+                  <h2 id="checklist-heading" className="m-0 font-bold text-base">Before activating</h2>
+                  <ul className="m-0 p-0 list-none flex flex-col gap-2.5">
+                    {checklist.map((item) => (
+                      <li key={item.label} className="flex gap-2.5 items-start text-sm leading-snug">
+                        {item.ok ? (
+                          <span className="w-[22px] h-[22px] shrink-0 rounded-full bg-[#10B981] flex items-center justify-center" aria-hidden="true">
+                            <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
                           </span>
-                        </label>
-
-                        {(question.options || []).length > 0 && (
-                          <div className="mt-4 space-y-2 border-t border-indigo-100 pt-4">
-                            <label className="text-[9px] font-black uppercase text-indigo-500">
-                              Link options to Programs (optional)
-                            </label>
-                            <p className="text-[9px] text-slate-400 leading-relaxed -mt-1">
-                              Powers the Program Participation by Course report —
-                              leave an option unmapped (e.g. "None of the above")
-                              to count it as "did not participate."
-                            </p>
-
-                            {(question.options || []).map((option, optionIndex) => (
-                              <div key={optionIndex} className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-slate-600 flex-1 truncate">
-                                  {option}
-                                </span>
-                                <select
-                                  value={question.option_program_ids?.[option] ?? ""}
-                                  onChange={(e) =>
-                                    setOptionProgram(
-                                      index,
-                                      option,
-                                      e.target.value ? Number(e.target.value) : null
-                                    )
-                                  }
-                                  className="w-56 h-10 rounded-xl bg-white border border-indigo-100 px-3 text-xs font-bold text-slate-700 outline-none"
-                                >
-                                  <option value="">Not a program</option>
-                                  {programOptions.map((program) => (
-                                    <option key={program.id} value={program.id}>
-                                      {program.title}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            ))}
-                          </div>
+                        ) : (
+                          <span className="w-[22px] h-[22px] shrink-0 rounded-full border-2 border-[#FBBF24]" aria-hidden="true" />
                         )}
-                      </div>
-                    )}
-
-                    {question.type === "scale" && (
-                      <div className="bg-indigo-50 rounded-xl p-5">
-                        <div className="flex justify-between text-xs font-black text-indigo-700">
-                          <span>1 — Strongly Disagree</span>
-                          <span>5 — Strongly Agree</span>
-                        </div>
-
-                        <div className="grid grid-cols-5 gap-2 mt-4">
-                          {[1, 2, 3, 4, 5].map((value) => (
-                            <div
-                              key={value}
-                              className="h-10 bg-white rounded-lg flex items-center justify-center font-black text-indigo-600"
-                            >
-                              {value}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {question.type === "text" && (
-                      <div className="h-24 rounded-xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold">
-                        Student text response field
-                      </div>
-                    )}
-
-                    <label className="flex items-center gap-3 cursor-pointer w-fit">
-                      <input
-                        type="checkbox"
-                        checked={question.required !== false}
-                        onChange={(e) =>
-                          updateQuestion(index, {
-                            required: e.target.checked,
-                          })
-                        }
-                        className="w-4 h-4 accent-indigo-600"
-                      />
-
-                      <span className="text-xs font-bold text-slate-500">
-                        Required question
-                      </span>
-                    </label>
-
-                  </div>
-                </div>
-              </Card>
-            ))}
-
-            <Button
-              variant="outline"
-              onClick={addQuestionToActiveForm}
-              className="w-full h-16 rounded-2xl border-dashed border-2 font-black uppercase text-xs text-indigo-600 hover:bg-indigo-50"
-            >
-              <Plus className="mr-2 h-5 w-5" />
-              {editingSurvey.type === "knowledge" ? `Add Question to Form ${activeForm}` : "Add Question"}
-            </Button>
+                        <span className="flex flex-col gap-0.5">
+                          <span>
+                            <span className="sr-only">{item.ok ? "Done: " : "Not yet: "}</span>
+                            {item.label}
+                          </span>
+                          {"detail" in item && item.detail && <span className="text-xs text-[#FBBF24]">{item.detail}</span>}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="m-0 text-xs leading-normal text-[#A5A8E0]">
+                    Publish checks the forms pair up before an assessment goes live.
+                  </p>
+                </section>
+              )}
+            </aside>
           </div>
         </div>
 
@@ -1623,7 +1735,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
               <Button variant="ghost" onClick={() => setConfirmCopyToB(false)} className="rounded-xl font-black">
                 Cancel
               </Button>
-              <Button onClick={copyFormAToFormB} className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black">
+              <Button onClick={copyFormAToFormB} className="rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-black">
                 Replace Form B
               </Button>
             </div>
@@ -1638,129 +1750,53 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
   ========================================================= */
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8 lg:p-12">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="font-figtree text-[#1E293B]">
+      <div className="flex flex-col gap-5">
 
-        {/* HEADER */}
-        <div className="bg-white rounded-3xl p-6 md:p-10 shadow-sm border border-slate-100">
-          <div className="flex flex-col lg:flex-row justify-between gap-6">
-
-            <div>
-              <div className="flex items-center gap-2 text-indigo-600 mb-2">
-                <ClipboardList className="w-5 h-5" />
-                <span className="text-[10px] font-black uppercase tracking-widest">
-                  OMSU Guidance & Testing Center
-                </span>
-              </div>
-
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight text-slate-900">
-                Survey <span className="text-indigo-600">Hub</span>
-              </h1>
-
-              <p className="mt-2 text-sm text-slate-400 font-medium">
-                Create, manage, publish, and review student surveys.
-              </p>
-            </div>
-
-            <Button
-              onClick={() => setIsCreateOpen(true)}
-              className="bg-indigo-600 hover:bg-indigo-700 h-14 px-7 rounded-2xl font-black uppercase text-xs"
-            >
-              <Plus className="mr-2 w-4 h-4" />
-              Create New Survey
-            </Button>
-          </div>
-        </div>
-
-        {/* STATISTICS */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-
-          <Card className="p-5 rounded-2xl border-none shadow-sm">
-            <div className="flex justify-between">
-              <div>
-                <p className="text-[9px] font-black uppercase text-slate-400">
-                  Total Surveys
-                </p>
-                <p className="text-3xl font-black text-slate-900 mt-1">
-                  {surveys.length}
-                </p>
-              </div>
-              <FileText className="text-indigo-500" />
-            </div>
-          </Card>
-
-          <Card className="p-5 rounded-2xl border-none shadow-sm">
-            <div className="flex justify-between">
-              <div>
-                <p className="text-[9px] font-black uppercase text-slate-400">
-                  Published
-                </p>
-                <p className="text-3xl font-black text-emerald-600 mt-1">
-                  {activeCount}
-                </p>
-              </div>
-              <Eye className="text-emerald-500" />
-            </div>
-          </Card>
-
-          <Card className="p-5 rounded-2xl border-none shadow-sm">
-            <div className="flex justify-between">
-              <div>
-                <p className="text-[9px] font-black uppercase text-slate-400">
-                  Drafts
-                </p>
-                <p className="text-3xl font-black text-amber-500 mt-1">
-                  {draftCount}
-                </p>
-              </div>
-              <Edit className="text-amber-500" />
-            </div>
-          </Card>
-
-          <Card className="p-5 rounded-2xl border-none shadow-sm">
-            <div className="flex justify-between">
-              <div>
-                <p className="text-[9px] font-black uppercase text-slate-400">
-                  Closed
-                </p>
-                <p className="text-3xl font-black text-slate-500 mt-1">
-                  {closedCount}
-                </p>
-              </div>
-              <EyeOff className="text-slate-400" />
-            </div>
-          </Card>
+        {/* SUMMARY + NEW (the page header is the Content page's) */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="m-0 text-[15px] text-[#5B6477]">
+            <strong className="text-[#1E1B4B]">{surveys.length}</strong> {surveys.length === 1 ? 'survey' : 'surveys'} ·{' '}
+            <strong className="text-[#065F46]">{activeCount}</strong> published ·{' '}
+            <strong className="text-[#92400E]">{draftCount}</strong> {draftCount === 1 ? 'draft' : 'drafts'} ·{' '}
+            <strong className="text-[#334155]">{closedCount}</strong> closed
+          </p>
+          <button
+            type="button"
+            onClick={() => setIsCreateOpen(true)}
+            className="h-12 px-[22px] rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] flex items-center justify-center gap-2 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
+          >
+            <Plus className="w-4 h-4" aria-hidden="true" />
+            New survey
+          </button>
         </div>
 
         {/* FILTER */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-100 flex flex-col md:flex-row gap-3">
-
+        <div className="bg-white p-4 md:p-5 rounded-[28px] flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-
-            <Input
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#6B7285] pointer-events-none" aria-hidden="true" />
+            <label htmlFor="survey-search" className="sr-only">Search surveys</label>
+            <input
+              id="survey-search"
+              type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search surveys..."
-              className="pl-11 h-12 bg-slate-50 border-none rounded-xl"
+              placeholder="Search surveys"
+              className="w-full h-12 pl-11 pr-4 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B] placeholder:text-[#8A91A6] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
             />
           </div>
 
-          <div className="relative md:w-64">
-            <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-
+          <div className="md:w-64">
+            <label htmlFor="survey-category-filter" className="sr-only">Category</label>
             <select
+              id="survey-category-filter"
               value={categoryFilter}
-              onChange={(e) =>
-                setCategoryFilter(e.target.value)
-              }
-              className="w-full h-12 bg-slate-50 rounded-xl pl-11 pr-4 text-xs font-bold text-slate-600 outline-none"
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="w-full h-12 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] px-4 text-sm font-semibold text-[#1E293B] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
             >
-              <option>All</option>
+              <option value="All">All categories</option>
               {CATEGORIES.map((category) => (
-                <option key={category}>
-                  {category}
-                </option>
+                <option key={category}>{category}</option>
               ))}
             </select>
           </div>
@@ -1786,10 +1822,10 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
             {groupedSurveys.map(({ category, surveys: categorySurveys }) => (
               <div key={category}>
                 <div className="flex items-center gap-3 mb-4">
-                  <h2 className="text-xs font-black uppercase tracking-widest text-slate-500 shrink-0">
+                  <h2 className="text-xs font-semibold text-slate-500 shrink-0">
                     {category}
                   </h2>
-                  <span className="text-[10px] font-black text-slate-300 shrink-0">
+                  <span className="text-[13px] font-semibold text-slate-300 shrink-0">
                     {categorySurveys.length}
                   </span>
                   <div className="flex-1 h-px bg-slate-100" />
@@ -1800,23 +1836,20 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                   {categorySurveys.map((survey) => (
                     <Card
                       key={survey.id}
-                      className="p-6 rounded-3xl border-none shadow-sm hover:shadow-xl transition-all bg-white"
+                      className="p-6 rounded-[28px] border-none shadow-none hover:shadow-xl transition-all bg-white"
                     >
 
                 <div className="flex justify-between items-start gap-3">
 
                   <div className="flex flex-wrap gap-2">
                     <span
-                      className={`px-3 py-1.5 rounded-lg text-[8px] font-black uppercase ${getStatusClass(
-                        survey.status
-                      )}`}
+                      className={`px-3 py-1.5 rounded-lg text-[13px] font-semibold ${getStatusClass( survey.status )}`}
                     >
                       {getStatusLabel(survey.status)}
                     </span>
 
                     <span
-                      className={`px-3 py-1.5 rounded-lg text-[8px] font-black uppercase ${
-                        survey.type === "knowledge"
+                      className={`px-3 py-1.5 rounded-lg text-[13px] font-semibold ${ survey.type ==="knowledge"
                           ? "bg-indigo-50 text-indigo-600"
                           : "bg-purple-50 text-purple-600"
                       }`}
@@ -1831,8 +1864,9 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                       onClick={() =>
                         fetchResponses(survey)
                       }
-                      className="h-9 w-9 p-0 rounded-xl"
-                      title="View Responses"
+                      className="h-11 w-11 p-0 rounded-xl"
+                      title="View responses"
+                      aria-label={`View responses to ${survey.title}`}
                     >
                       <ClipboardList className="w-4 h-4" />
                     </Button>
@@ -1842,8 +1876,9 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                       onClick={() =>
                         openEditor(survey)
                       }
-                      className="h-9 w-9 p-0 rounded-xl"
+                      className="h-11 w-11 p-0 rounded-xl"
                       title="Edit Survey"
+                      aria-label={`Edit ${survey.title}`}
                     >
                       <Edit className="w-4 h-4" />
                     </Button>
@@ -1852,11 +1887,11 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
 
                 <div className="mt-5">
 
-                  <h3 className="font-black text-xl text-slate-800 leading-tight">
+                  <h3 className="font-bold text-lg text-[#1E1B4B] leading-snug">
                     {survey.title}
                   </h3>
 
-                  <p className="mt-2 text-[10px] font-black uppercase text-indigo-500">
+                  <p className="mt-2 text-[13px] font-semibold text-indigo-500">
                     {survey.category || "Other"}
                   </p>
 
@@ -1870,7 +1905,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                 <div className="mt-6 grid grid-cols-2 gap-2">
 
                   <div className="bg-slate-50 rounded-xl p-3">
-                    <p className="text-[8px] uppercase font-black text-slate-400">
+                    <p className="text-[13px] font-semibold text-slate-400">
                       Questions
                     </p>
                     <p className="font-black text-slate-700 mt-1">
@@ -1882,7 +1917,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                   </div>
 
                   <div className="bg-slate-50 rounded-xl p-3">
-                    <p className="text-[8px] uppercase font-black text-slate-400">
+                    <p className="text-[13px] font-semibold text-slate-400">
                       Created
                     </p>
                     <p className="font-black text-slate-700 mt-1">
@@ -1902,8 +1937,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                     onClick={() =>
                       toggleSurveyStatus(survey)
                     }
-                    className={`flex-1 rounded-xl font-black uppercase text-[9px] ${
-                      survey.status === "active"
+                    className={`flex-1 h-11 rounded-xl font-bold text-sm ${ survey.status ==="active"
                         ? "bg-slate-100 text-slate-600 hover:bg-slate-200"
                         : "bg-indigo-600 text-white hover:bg-indigo-700"
                     }`}
@@ -1918,8 +1952,9 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                     onClick={() =>
                       duplicateSurvey(survey)
                     }
-                    className="rounded-xl"
+                    className="h-11 w-11 rounded-xl"
                     title="Duplicate"
+                    aria-label={`Duplicate ${survey.title}`}
                   >
                     <Copy className="w-4 h-4" />
                   </Button>
@@ -1932,8 +1967,9 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                         survey.title
                       )
                     }
-                    className="rounded-xl text-rose-500 hover:bg-rose-50"
-                    title="Delete"
+                    className="h-11 w-11 rounded-xl text-rose-500 hover:bg-rose-50"
+                    title="Archive"
+                    aria-label={`Archive ${survey.title}`}
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -1975,13 +2011,13 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                   name="title"
                   required
                   placeholder="e.g. Student Counseling Evaluation"
-                  className="mt-2 h-12 rounded-xl bg-slate-50 border-none"
+                  className="mt-2 h-12 rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE]"
                 />
               </div>
 
               <div>
                 <label className="text-xs font-black text-slate-600">
-                  Survey Type
+                  Survey type
                 </label>
 
                 <div className="mt-2 grid grid-cols-2 gap-3">
@@ -1998,7 +2034,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                         Knowledge Assessment
                       </span>
                     </span>
-                    <span className="text-[10px] text-slate-400 font-medium pl-6">
+                    <span className="text-[13px] text-slate-400 font-medium pl-6">
                       Scored — has correct answers
                     </span>
                   </label>
@@ -2015,7 +2051,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                         Opinion Survey
                       </span>
                     </span>
-                    <span className="text-[10px] text-slate-400 font-medium pl-6">
+                    <span className="text-[13px] text-slate-400 font-medium pl-6">
                       Unscored — no correct answer
                     </span>
                   </label>
@@ -2042,7 +2078,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
 
               <div>
                 <label className="text-xs font-black text-slate-600">
-                  IEC Category
+                  IEC category
                 </label>
 
                 {/* Optional, unlike Category above — no defaultValue, so
@@ -2070,14 +2106,14 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                 <textarea
                   name="description"
                   placeholder="Explain the purpose of this survey..."
-                  className="mt-2 w-full min-h-[110px] rounded-xl bg-slate-50 border-none p-4 text-sm outline-none resize-none"
+                  className="mt-2 w-full min-h-[110px] rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] p-4 text-sm outline-none resize-none"
                 />
               </div>
 
               <Button
                 type="submit"
                 disabled={creating}
-                className="w-full h-12 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-black uppercase text-xs"
+                className="w-full h-12 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] font-semibold text-xs"
               >
                 {creating ? (
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -2108,8 +2144,8 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
               <div className="flex justify-between items-start gap-4">
 
                 <div className="min-w-0">
-                  <p className="text-[9px] uppercase font-black text-indigo-300 tracking-widest">
-                    Survey Responses
+                  <p className="text-[13px] font-semibold text-indigo-300">
+                    Survey responses
                   </p>
 
                   <h2 className="text-xl md:text-2xl font-black mt-1 truncate">
@@ -2146,7 +2182,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
               ) : responses.length === 0 ? (
                 <div className="bg-white rounded-2xl p-16 text-center">
                   <Users className="mx-auto w-10 h-10 text-slate-300" />
-                  <p className="mt-3 text-xs font-black uppercase text-slate-400">
+                  <p className="mt-3 text-xs font-semibold text-slate-400">
                     No student responses yet.
                   </p>
                 </div>
@@ -2171,7 +2207,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                           {response.studentName}
                         </h3>
 
-                        <p className="text-[9px] text-slate-400 uppercase mt-1">
+                        <p className="text-[13px] text-slate-400 mt-1">
                           {response.studentNumber
                             ? `${response.studentNumber} · `
                             : ""}
@@ -2235,9 +2271,9 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                               className="bg-slate-50 rounded-xl p-4"
                             >
                               {label && (
-                                <p className="text-[9px] font-black text-indigo-500 mb-1">{label}</p>
+                                <p className="text-[13px] font-semibold text-indigo-500 mb-1">{label}</p>
                               )}
-                              <p className="text-[9px] font-black uppercase text-slate-400">
+                              <p className="text-[13px] font-semibold text-slate-400">
                                 {question.text}
                               </p>
 
