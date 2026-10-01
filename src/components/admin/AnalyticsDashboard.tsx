@@ -27,7 +27,6 @@ import {
   Accessibility,
   Globe2,
   ShieldCheck,
-  Info,
   BookOpen,
   Layers,
   FileStack,
@@ -227,12 +226,16 @@ type AnalyticsTab = "overview" | "learning" | "awareness" | "iec" | "students";
 
 const ANALYTICS_TABS: { id: AnalyticsTab; label: string; icon: React.ElementType }[] = [
   { id: "overview", label: "Overview", icon: BarChart3 },
-  { id: "learning", label: "Learning Gain", icon: TrendingUp },
-  { id: "awareness", label: "Knowledge Awareness", icon: Trophy },
-  { id: "iec", label: "IEC Materials", icon: BookOpen },
-  { id: "students", label: "Students & Inclusion", icon: Users },
+  { id: "learning", label: "Learning gain", icon: TrendingUp },
+  { id: "awareness", label: "Knowledge awareness", icon: Trophy },
+  { id: "iec", label: "IEC materials", icon: BookOpen },
+  { id: "students", label: "Students and inclusion", icon: Users },
 ];
 
+const focusRing =
+  "focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]";
+
+// White pill tab bar (same as the Content page).
 const AnalyticsTabBar: React.FC<{
   activeTab: AnalyticsTab;
   onChange: (tab: AnalyticsTab) => void;
@@ -240,9 +243,9 @@ const AnalyticsTabBar: React.FC<{
   <div
     role="tablist"
     aria-label="Analytics sections"
-    className="flex gap-2 overflow-x-auto p-1.5 rounded-[1.75rem] bg-white shadow-lg shadow-slate-100"
+    className="self-start max-w-full flex gap-1 overflow-x-auto p-[5px] rounded-full bg-white"
   >
-    {ANALYTICS_TABS.map(({ id, label, icon: Icon }) => {
+    {ANALYTICS_TABS.map(({ id, label }) => {
       const active = activeTab === id;
       return (
         <button
@@ -251,13 +254,10 @@ const AnalyticsTabBar: React.FC<{
           role="tab"
           aria-selected={active}
           onClick={() => onChange(id)}
-          className={`flex items-center gap-2 shrink-0 px-4 md:px-5 h-11 rounded-[1.25rem] text-[10px] font-black uppercase tracking-wider transition-colors ${
-            active
-              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
-              : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+          className={`shrink-0 h-11 px-[18px] rounded-full text-sm whitespace-nowrap transition-colors ${focusRing} ${
+            active ? "bg-[#1E1B4B] text-white font-bold" : "text-[#334155] font-semibold hover:bg-[#EEF0FA]"
           }`}
         >
-          <Icon className="w-4 h-4" strokeWidth={2.5} />
           {label}
         </button>
       );
@@ -269,43 +269,16 @@ const StatCard: React.FC<StatCardProps> = ({
   title,
   value,
   description,
-  icon: Icon,
   className = "",
 }) => {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -4 }}
-      transition={{ duration: 0.3 }}
-      className="h-full"
-    >
-      <Card
-        className={`relative overflow-hidden border-none rounded-[1.75rem] bg-white shadow-lg shadow-slate-100 p-5 md:p-6 h-full ${className}`}
-      >
-        <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-indigo-50" />
-
-        <div className="relative flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">
-              {title}
-            </p>
-
-            <p className="mt-2 text-3xl md:text-4xl font-black tracking-tighter text-slate-900">
-              {value}
-            </p>
-
-            <p className="mt-2 text-[9px] font-bold uppercase tracking-wide text-slate-400">
-              {description}
-            </p>
-          </div>
-
-          <div className="w-11 h-11 shrink-0 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-            <Icon className="w-5 h-5" strokeWidth={2.5} />
-          </div>
-        </div>
-      </Card>
-    </motion.div>
+    <div className={`h-full px-[22px] py-5 rounded-[26px] bg-white flex flex-col gap-1 min-w-0 ${className}`}>
+      <p className="m-0 text-[13px] font-semibold text-[#5B6477]">{title}</p>
+      <p className="m-0 font-bricolage font-extrabold text-[34px] md:text-[36px] leading-tight tracking-[-0.02em] text-[#1E1B4B] break-words">
+        {value}
+      </p>
+      <p className="m-0 text-[13px] text-[#5B6477]">{description}</p>
+    </div>
   );
 };
 
@@ -328,12 +301,12 @@ const InclusionBreakdownList: React.FC<{
   accentClassName: string;
 }> = ({ title, rows, accentClassName }) => (
   <div>
-    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">
+    <p className="text-[13px] font-semibold text-slate-400 mb-2">
       {title}
     </p>
 
     {rows.length === 0 ? (
-      <p className="text-[10px] font-bold text-slate-300">None</p>
+      <p className="text-[13px] font-bold text-slate-300">None</p>
     ) : (
       <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
         {rows.map((row) => (
@@ -345,7 +318,7 @@ const InclusionBreakdownList: React.FC<{
               {row.label}
             </span>
             <span
-              className={`shrink-0 font-black px-2 py-0.5 rounded-full text-[10px] ${accentClassName}`}
+              className={`shrink-0 font-semibold px-2 py-0.5 rounded-full text-[13px] ${accentClassName}`}
             >
               {row.count}
             </span>
@@ -2345,7 +2318,7 @@ export default function AnalyticsDashboard() {
         body: getReportRows().slice(1),
         headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: "bold" },
         alternateRowStyles: { fillColor: [248, 250, 252] },
-        styles: { fontSize: 8 },
+        styles: { fontSize: 12 },
       });
       nextY = (doc.lastAutoTable?.finalY || nextY) + 12;
 
@@ -2372,7 +2345,7 @@ export default function AnalyticsDashboard() {
           row.responseCount,
         ]),
         headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
-        styles: { fontSize: 8 },
+        styles: { fontSize: 12 },
       });
       nextY = (doc.lastAutoTable?.finalY || nextY) + (reportProgramAwareness.length === 0 ? 5 : 12);
 
@@ -2409,7 +2382,7 @@ export default function AnalyticsDashboard() {
           ["IP Status", "Non-IP", reportDemographics.nonIp],
         ],
         headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: "bold" },
-        styles: { fontSize: 8 },
+        styles: { fontSize: 12 },
       });
       nextY = (doc.lastAutoTable?.finalY || nextY) + 12;
 
@@ -2434,7 +2407,7 @@ export default function AnalyticsDashboard() {
           row.averageScore !== null ? `${row.averageScore}%` : "No data",
         ]),
         headStyles: { fillColor: [217, 119, 6], textColor: [255, 255, 255], fontStyle: "bold" },
-        styles: { fontSize: 8 },
+        styles: { fontSize: 12 },
       });
       nextY = (doc.lastAutoTable?.finalY || nextY) + 12;
 
@@ -2462,7 +2435,7 @@ export default function AnalyticsDashboard() {
           row.totalRespondents,
         ]),
         headStyles: { fillColor: [8, 145, 178], textColor: [255, 255, 255], fontStyle: "bold" },
-        styles: { fontSize: 8 },
+        styles: { fontSize: 12 },
       });
       nextY = (doc.lastAutoTable?.finalY || nextY) + (materialExposureAwareness.length === 0 ? 5 : 12);
 
@@ -2495,7 +2468,7 @@ export default function AnalyticsDashboard() {
         head: [["Category", "Materials", "Downloads"]],
         body: tableBodyOrPlaceholder(reportMaterialReach.byCategory, 3, (row) => [row.category, row.count, row.downloads]),
         headStyles: { fillColor: [190, 24, 93], textColor: [255, 255, 255], fontStyle: "bold" },
-        styles: { fontSize: 8 },
+        styles: { fontSize: 12 },
       });
       nextY = (doc.lastAutoTable?.finalY || nextY) + (reportMaterialReach.byCategory.length === 0 ? 5 : 12);
 
@@ -2532,7 +2505,7 @@ export default function AnalyticsDashboard() {
           material.created_at ? new Date(material.created_at).toLocaleDateString() : "",
         ]),
         headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
-        styles: { fontSize: 8 },
+        styles: { fontSize: 12 },
       });
 
       doc.save(`OMSU_Guidance_Analytics_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
@@ -2686,11 +2659,11 @@ export default function AnalyticsDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 font-figtree">
         <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
 
-        <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
-          Loading Guidance Analytics...
+        <p className="text-[13px] font-semibold text-slate-400">
+          Loading guidance analytics...
         </p>
       </div>
     );
@@ -2701,67 +2674,51 @@ export default function AnalyticsDashboard() {
   ======================================================= */
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-10">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="font-figtree text-[#1E293B]">
+      <div className="flex flex-col gap-[22px]">
 
         {/* =================================================
             HEADER
         ================================================= */}
 
-        <div className="bg-white rounded-[2rem] p-6 md:p-8 shadow-sm border border-slate-100">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+        <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-4 md:gap-6">
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <h1 className="m-0 font-bricolage font-extrabold text-[36px] md:text-[44px] leading-[1.05] tracking-[-0.025em] text-[#1E1B4B]">
+              Analytics
+            </h1>
+            <p className="m-0 text-base text-[#5B6477]">
+              How far the programs reached students, measured by pre-test and post-test results and the numbers below.
+            </p>
+          </div>
 
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <div className="flex flex-wrap gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={exportReportPDF}
+              disabled={generatingReport}
+              className={`h-12 px-5 rounded-2xl border-[1.5px] border-[#DDE1EE] bg-white text-[#1E1B4B] font-bold text-[15px] flex items-center gap-2 hover:border-[#A5B4FC] disabled:opacity-60 ${focusRing}`}
+            >
+              {generatingReport ? (
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Download className="w-4 h-4" aria-hidden="true" />
+              )}
+              Export PDF
+            </button>
 
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-600">
-                  Guidance Management Analytics
-                </span>
-              </div>
-
-              <h1 className="text-3xl md:text-5xl font-black tracking-tighter uppercase text-slate-900">
-                Analytics{" "}
-                <span className="text-indigo-600">
-                  Dashboard
-                </span>
-              </h1>
-
-              <p className="mt-3 max-w-2xl text-xs md:text-sm font-medium text-slate-500 leading-relaxed">
-                Administrative analytics for
-                monitoring students, Guidance
-                programs, surveys, and IEC
-                materials.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <Button
-                onClick={exportReportPDF}
-                disabled={generatingReport}
-                className="h-12 rounded-xl px-5 bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
-              >
-                {generatingReport ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Download className="w-4 h-4 mr-2" />
-                )}
-                Export PDF
-              </Button>
-
-              <Button
-                onClick={() => handleGenerateInsight(false)}
-                disabled={insightLoading}
-                className="h-12 rounded-xl px-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] tracking-widest"
-              >
-                {insightLoading ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Sparkles className="w-4 h-4 mr-2" />
-                )}
-                AI Insight
-              </Button>
-            </div>
+            <button
+              type="button"
+              onClick={() => handleGenerateInsight(false)}
+              disabled={insightLoading}
+              className={`h-12 px-[22px] rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] flex items-center gap-2 disabled:opacity-60 ${focusRing}`}
+            >
+              {insightLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Sparkles className="w-4 h-4" aria-hidden="true" />
+              )}
+              AI Insight
+            </button>
           </div>
         </div>
 
@@ -2771,40 +2728,37 @@ export default function AnalyticsDashboard() {
         ================================================= */}
 
         {(insightLoading || insightError || insight) && (
-          <Card className="border-none shadow-sm rounded-[1.75rem] p-5 md:p-7 bg-white">
-            <div className="flex items-center justify-between gap-3 mb-1">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-sm font-black uppercase tracking-tight text-slate-800">
-                  AI Insight
-                </h3>
-              </div>
+          <section
+            aria-labelledby="ai-insight-heading"
+            className="px-6 py-6 md:px-7 rounded-[32px] bg-[#1E1B4B] text-white flex flex-col gap-3"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h2 id="ai-insight-heading" className="m-0 font-bold text-lg flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#FBBF24]" aria-hidden="true" />
+                AI Insight
+              </h2>
 
               {insight && !insightLoading && (
-                <Button
-                  variant="ghost"
+                <button
+                  type="button"
                   onClick={() => handleGenerateInsight(true)}
-                  className="h-8 px-3 rounded-lg font-black uppercase text-[9px] tracking-widest text-indigo-600 hover:bg-indigo-50"
+                  className={`h-11 px-3.5 rounded-xl border-[1.5px] border-white/35 text-white font-bold text-[13px] flex items-center gap-1.5 hover:bg-white/10 ${focusRing}`}
                 >
-                  <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                  <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
                   Regenerate
-                </Button>
+                </button>
               )}
             </div>
 
             {insightLoading ? (
-              <div className="flex items-center gap-2 py-6 text-slate-400">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-xs font-bold uppercase tracking-widest">Generating explanation...</span>
+              <div className="flex items-center gap-2 py-4 text-[#C7C9F2]">
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                <span className="text-sm font-semibold">Generating explanation...</span>
               </div>
             ) : insightError ? (
-              <p className="text-xs font-bold text-rose-500 py-4">{insightError}</p>
+              <p className="m-0 text-sm font-semibold text-rose-300 py-2">{insightError}</p>
             ) : insight ? (
               <>
-                <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-4">
-                  Generated {new Date(insight.generatedAt).toLocaleString()}
-                  {insight.cached ? " · cached" : ""}
-                </p>
                 <div className="space-y-3">
                   {insight.insight.split(/\n{2,}/).map((block, i) => {
                     // The model is asked for "• " bullet lines (normalized
@@ -2819,9 +2773,9 @@ export default function AnalyticsDashboard() {
 
                     if (isList) {
                       return (
-                        <ul key={i} className="list-disc pl-5 space-y-1.5">
+                        <ul key={i} className="m-0 list-disc pl-5 flex flex-col gap-2">
                           {lines.map((line, j) => (
-                            <li key={j} className="text-sm text-slate-600 leading-relaxed">
+                            <li key={j} className="text-[15px] leading-[1.55] text-[#E0E1F7]">
                               {line.replace(/^•\s*/, "")}
                             </li>
                           ))}
@@ -2830,15 +2784,19 @@ export default function AnalyticsDashboard() {
                     }
 
                     return (
-                      <p key={i} className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                      <p key={i} className="m-0 text-[15px] leading-[1.55] text-[#E0E1F7] whitespace-pre-line">
                         {block}
                       </p>
                     );
                   })}
                 </div>
+                <p className="m-0 text-xs text-[#A5A8E0]">
+                  Generated {new Date(insight.generatedAt).toLocaleString()}
+                  {insight.cached ? " · cached" : ""}. Generated from the figures on this page. Check before using in a report.
+                </p>
               </>
             ) : null}
-          </Card>
+          </section>
         )}
 
         {/* =================================================
@@ -2846,35 +2804,35 @@ export default function AnalyticsDashboard() {
             (ported from the retired ReportsCenter screen)
         ================================================= */}
 
-        <Card className="p-5 md:p-7 rounded-[2rem] border-none shadow-sm bg-white">
+        <Card className="p-5 md:p-6 rounded-[28px] border-none shadow-none bg-white">
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5">
             <div className="grid grid-cols-2 gap-4 w-full lg:w-auto">
               <div className="space-y-1.5">
-                <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                <Label className="text-[13px] font-semibold text-slate-400">
                   From
                 </Label>
                 <Input
                   type="date"
                   value={reportStartDate}
                   onChange={(e) => setReportStartDate(e.target.value)}
-                  className="h-11 rounded-xl bg-slate-50 border-none font-bold text-xs"
+                  className="h-11 rounded-[14px] bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B]"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                <Label className="text-[13px] font-semibold text-slate-400">
                   To
                 </Label>
                 <Input
                   type="date"
                   value={reportEndDate}
                   onChange={(e) => setReportEndDate(e.target.value)}
-                  className="h-11 rounded-xl bg-slate-50 border-none font-bold text-xs"
+                  className="h-11 rounded-[14px] bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B]"
                 />
               </div>
             </div>
 
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Report Period: <span className="text-slate-700">{reportRangeLabel}</span>
+            <p className="m-0 text-sm text-[#5B6477]">
+              Report period: <span className="font-semibold text-[#1E1B4B]">{reportRangeLabel}</span>
             </p>
           </div>
         </Card>
@@ -2893,33 +2851,27 @@ export default function AnalyticsDashboard() {
               FILTERS
           ================================================= */}
 
-          <Card className="border-none shadow-sm rounded-[1.75rem] p-4 md:p-5 bg-white">
+          <Card className="border-none shadow-none rounded-[28px] px-5 py-5 md:px-6 bg-white flex flex-col gap-3.5">
 
-            <div className="flex items-center gap-2 mb-4">
-              <Info className="w-4 h-4 text-indigo-600" />
-
-              <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">
-                Analytics Filters
-              </p>
-            </div>
+            <h2 className="sr-only">Analytics filters</h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
 
-              {/* CAMPUS */}
-
+              <div className="flex flex-col gap-1.5 min-w-0">
+              <span id="filter-campus" className="text-[13px] font-semibold text-[#334155]">Campus</span>
               <Select
                 value={selectedCampus}
                 onValueChange={
                   handleCampusFilterChange
                 }
               >
-                <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
+                <SelectTrigger aria-labelledby="filter-campus" className="h-11 rounded-[14px] bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B]">
                   <SelectValue placeholder="Campus" />
                 </SelectTrigger>
 
                 <SelectContent>
                   <SelectItem value="all">
-                    All Campuses
+                    All campuses
                   </SelectItem>
 
                   {campusOptions.map(
@@ -2934,22 +2886,23 @@ export default function AnalyticsDashboard() {
                   )}
                 </SelectContent>
               </Select>
+              </div>
 
-              {/* PROGRAM */}
-
+              <div className="flex flex-col gap-1.5 min-w-0">
+              <span id="filter-course" className="text-[13px] font-semibold text-[#334155]">Course</span>
               <Select
                 value={selectedProgram}
                 onValueChange={
                   setSelectedProgram
                 }
               >
-                <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
+                <SelectTrigger aria-labelledby="filter-course" className="h-11 rounded-[14px] bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B]">
                   <SelectValue placeholder="Program" />
                 </SelectTrigger>
 
                 <SelectContent>
                   <SelectItem value="all">
-                    All Programs
+                    All courses
                   </SelectItem>
 
                   {programOptions.map(
@@ -2964,22 +2917,23 @@ export default function AnalyticsDashboard() {
                   )}
                 </SelectContent>
               </Select>
+              </div>
 
-              {/* YEAR */}
-
+              <div className="flex flex-col gap-1.5 min-w-0">
+              <span id="filter-year-level" className="text-[13px] font-semibold text-[#334155]">Year level</span>
               <Select
                 value={selectedYearLevel}
                 onValueChange={
                   setSelectedYearLevel
                 }
               >
-                <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
+                <SelectTrigger aria-labelledby="filter-year-level" className="h-11 rounded-[14px] bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B]">
                   <SelectValue placeholder="Year Level" />
                 </SelectTrigger>
 
                 <SelectContent>
                   <SelectItem value="all">
-                    All Year Levels
+                    All year levels
                   </SelectItem>
 
                   {yearLevelOptions.map(
@@ -2994,22 +2948,23 @@ export default function AnalyticsDashboard() {
                   )}
                 </SelectContent>
               </Select>
+              </div>
 
-              {/* GENDER */}
-
+              <div className="flex flex-col gap-1.5 min-w-0">
+              <span id="filter-gender" className="text-[13px] font-semibold text-[#334155]">Gender</span>
               <Select
                 value={selectedGender}
                 onValueChange={
                   setSelectedGender
                 }
               >
-                <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
+                <SelectTrigger aria-labelledby="filter-gender" className="h-11 rounded-[14px] bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B]">
                   <SelectValue placeholder="Gender" />
                 </SelectTrigger>
 
                 <SelectContent>
                   <SelectItem value="all">
-                    All Genders
+                    All genders
                   </SelectItem>
 
                   {genderOptions.map(
@@ -3024,20 +2979,21 @@ export default function AnalyticsDashboard() {
                   )}
                 </SelectContent>
               </Select>
+              </div>
 
-              {/* AGE */}
-
+              <div className="flex flex-col gap-1.5 min-w-0">
+              <span id="filter-age" className="text-[13px] font-semibold text-[#334155]">Age</span>
               <Select
                 value={selectedAge}
                 onValueChange={setSelectedAge}
               >
-                <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
+                <SelectTrigger aria-labelledby="filter-age" className="h-11 rounded-[14px] bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B]">
                   <SelectValue placeholder="Age" />
                 </SelectTrigger>
 
                 <SelectContent>
                   <SelectItem value="all">
-                    All Ages
+                    All ages
                   </SelectItem>
 
                   {ageGroupOptions.map(
@@ -3052,22 +3008,23 @@ export default function AnalyticsDashboard() {
                   )}
                 </SelectContent>
               </Select>
+              </div>
 
-              {/* YEAR */}
-
+              <div className="flex flex-col gap-1.5 min-w-0">
+              <span id="filter-academic-year" className="text-[13px] font-semibold text-[#334155]">Academic year</span>
               <Select
                 value={selectedAcademicYear}
                 onValueChange={
                   setSelectedAcademicYear
                 }
               >
-                <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
+                <SelectTrigger aria-labelledby="filter-academic-year" className="h-11 rounded-[14px] bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B]">
                   <SelectValue placeholder="Academic Year" />
                 </SelectTrigger>
 
                 <SelectContent>
                   <SelectItem value="all">
-                    All Years
+                    All years
                   </SelectItem>
 
                   {academicYearOptions.map(
@@ -3082,10 +3039,11 @@ export default function AnalyticsDashboard() {
                   )}
                 </SelectContent>
               </Select>
+              </div>
 
             </div>
 
-            <div className="mt-4 flex justify-end">
+            <div className="flex justify-end">
               <Button
                 variant="ghost"
                 onClick={() => {
@@ -3096,9 +3054,9 @@ export default function AnalyticsDashboard() {
                   setSelectedAge("all");
                   setSelectedAcademicYear("all");
                 }}
-                className="text-[9px] font-black uppercase tracking-widest text-slate-400"
+                className="h-11 px-3.5 rounded-xl font-bold text-sm text-[#4338CA] hover:bg-[#EEF0FA]"
               >
-                Reset Filters
+                Reset filters
               </Button>
             </div>
           </Card>
@@ -3115,28 +3073,28 @@ export default function AnalyticsDashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
             <StatCard
-              title="Students Covered"
+              title="Students covered"
               value={totalStudents}
               description="Profiles + survey participants"
               icon={Users}
             />
 
             <StatCard
-              title="Guidance Programs"
+              title="Guidance programs"
               value={totalGuidancePrograms}
               description="Programs in the system"
               icon={GraduationCap}
             />
 
             <StatCard
-              title="Survey Responses"
+              title="Survey responses"
               value={totalSurveyResponses}
               description={`${activeSurveys} active survey(s)`}
               icon={BarChart3}
             />
 
             <StatCard
-              title="Total Materials"
+              title="Total materials"
               value={totalMaterials}
               description="Materials in the library"
               icon={FileStack}
@@ -3148,7 +3106,7 @@ export default function AnalyticsDashboard() {
               SURVEY HUB
           ================================================= */}
 
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+          <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">
 
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
 
@@ -3159,11 +3117,11 @@ export default function AnalyticsDashboard() {
                 </div>
 
                 <div>
-                  <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-                    Survey & Program Awareness
+                  <h2 className="text-lg font-bold text-[#1E1B4B]">
+                    Survey & program awareness
                   </h2>
 
-                  <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+                  <p className="text-[13px] text-[#5B6477] mt-1">
                     Student evaluation and awareness dissemination
                   </p>
                 </div>
@@ -3173,7 +3131,7 @@ export default function AnalyticsDashboard() {
               <div className="grid grid-cols-3 gap-3">
 
                 <div className="bg-slate-50 rounded-xl px-4 py-3">
-                  <p className="text-[8px] uppercase font-black text-slate-400">
+                  <p className="text-[13px] font-semibold text-slate-400">
                     Surveys
                   </p>
 
@@ -3183,7 +3141,7 @@ export default function AnalyticsDashboard() {
                 </div>
 
                 <div className="bg-indigo-50 rounded-xl px-4 py-3">
-                  <p className="text-[8px] uppercase font-black text-indigo-400">
+                  <p className="text-[13px] font-semibold text-indigo-400">
                     Participants
                   </p>
 
@@ -3195,7 +3153,7 @@ export default function AnalyticsDashboard() {
                 </div>
 
                 <div className="bg-emerald-50 rounded-xl px-4 py-3">
-                  <p className="text-[8px] uppercase font-black text-emerald-400">
+                  <p className="text-[13px] font-semibold text-emerald-400">
                     Responses
                   </p>
 
@@ -3237,14 +3195,14 @@ export default function AnalyticsDashboard() {
 
             <div className="flex items-center gap-3">
               <Trophy className="w-5 h-5 text-indigo-600" />
-              <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
-                Knowledge Awareness
+              <h2 className="text-lg md:text-xl font-bold text-[#1E1B4B]">
+                Knowledge awareness
               </h2>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <StatCard
-                title="Overall Average Score"
+                title="Overall average score"
                 value={
                   awarenessAnalytics.overall !== null
                     ? `${awarenessAnalytics.overall}%`
@@ -3255,7 +3213,7 @@ export default function AnalyticsDashboard() {
               />
 
               <StatCard
-                title="Scored Assessment Responses"
+                title="Scored assessment responses"
                 value={awarenessAnalytics.totalResponses}
                 description="Knowledge Assessment submissions counted"
                 icon={Target}
@@ -3263,21 +3221,21 @@ export default function AnalyticsDashboard() {
             </div>
 
             {/* PER PROGRAM */}
-            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+            <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">
 
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
                 <div>
-                  <h3 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
-                    Awareness by Program
+                  <h3 className="text-lg md:text-xl font-bold text-[#1E1B4B]">
+                    Awareness by program
                   </h3>
 
-                  <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+                  <p className="text-[13px] text-[#5B6477] mt-1">
                     Average score on questions linked to each program
                   </p>
                 </div>
 
-                <div className="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase">
-                  {programAwarenessAnalytics.length} Programs With Data
+                <div className="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-600 text-[13px] font-semibold">
+                  {programAwarenessAnalytics.length} programs with data
                 </div>
               </div>
 
@@ -3300,12 +3258,12 @@ export default function AnalyticsDashboard() {
                       textAnchor="end"
                       interval={0}
                       height={90}
-                      tick={{ fontSize: 9, fontWeight: 700 }}
+                      tick={{ fontSize: 12, fontWeight: 700 }}
                     />
 
                     <YAxis
                       domain={[0, 100]}
-                      tick={{ fontSize: 9 }}
+                      tick={{ fontSize: 12 }}
                       unit="%"
                     />
 
@@ -3325,20 +3283,20 @@ export default function AnalyticsDashboard() {
             {/* DEMOGRAPHIC BREAKDOWNS */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {[
-                { title: "By Year Level", data: awarenessAnalytics.byYearLevel },
-                { title: "By Gender", data: awarenessAnalytics.byGender },
-                { title: "By PWD Status", data: awarenessAnalytics.byPwd },
-                { title: "By IP Status", data: awarenessAnalytics.byIp },
+                { title: "By year level", data: awarenessAnalytics.byYearLevel },
+                { title: "By gender", data: awarenessAnalytics.byGender },
+                { title: "By PWD status", data: awarenessAnalytics.byPwd },
+                { title: "By IP status", data: awarenessAnalytics.byIp },
               ].map(({ title, data }) => (
                 <Card
                   key={title}
-                  className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white"
+                  className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white"
                 >
-                  <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
+                  <h3 className="text-sm font-bold text-[#1E1B4B] mb-1">
                     {title}
                   </h3>
 
-                  <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
+                  <p className="text-[13px] font-bold text-slate-400 mb-5">
                     Average knowledge score
                   </p>
 
@@ -3377,19 +3335,19 @@ export default function AnalyticsDashboard() {
             </div>
 
             {/* GUIDANCE SERVICE COVERAGE */}
-            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-              <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
-                Guidance Service Coverage
+            <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">
+              <h3 className="text-sm font-bold text-[#1E1B4B] mb-1">
+                Guidance service coverage
               </h3>
 
-              <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
+              <p className="text-[13px] font-bold text-slate-400 mb-5">
                 Program count and average awareness score per guidance service
               </p>
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead>
-                    <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                    <tr className="text-[13px] font-semibold text-slate-400 border-b border-slate-100">
                       <th className="pb-3 pr-4">Guidance Service</th>
                       <th className="pb-3 pr-4">Programs</th>
                       <th className="pb-3">Avg. Awareness Score</th>
@@ -3423,12 +3381,12 @@ export default function AnalyticsDashboard() {
                 with a higher knowledge score on that category? Rendered
                 (headers + em dashes) even with zero scored responses,
                 never hidden. */}
-            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-              <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
-                Awareness by Material Exposure
+            <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">
+              <h3 className="text-sm font-bold text-[#1E1B4B] mb-1">
+                Awareness by material exposure
               </h3>
 
-              <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
+              <p className="text-[13px] font-bold text-slate-400 mb-5">
                 Average knowledge score for students who opened an IEC material in
                 that category vs. students who did not
               </p>
@@ -3436,7 +3394,7 @@ export default function AnalyticsDashboard() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead>
-                    <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                    <tr className="text-[13px] font-semibold text-slate-400 border-b border-slate-100">
                       <th className="pb-3 pr-4">IEC Category</th>
                       <th className="pb-3 pr-4">Opened</th>
                       <th className="pb-3 pr-4">Did Not Open</th>
@@ -3494,19 +3452,19 @@ export default function AnalyticsDashboard() {
               </div>
 
               {materialExposureAwareness.length === 0 && (
-                <p className="text-center text-[10px] font-bold text-slate-400 mt-4">
+                <p className="text-center text-[13px] font-bold text-slate-400 mt-4">
                   No responses have been recorded yet.
                 </p>
               )}
             </Card>
 
             {/* PROGRAM PARTICIPATION BY COURSE */}
-            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
-              <h3 className="text-sm font-black uppercase tracking-tight text-slate-800 mb-1">
-                Program Participation by Course
+            <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">
+              <h3 className="text-sm font-bold text-[#1E1B4B] mb-1">
+                Program participation by course
               </h3>
 
-              <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mb-5">
+              <p className="text-[13px] font-bold text-slate-400 mb-5">
                 Share of respondents per academic course who reported joining at
                 least one linked guidance program
               </p>
@@ -3521,7 +3479,7 @@ export default function AnalyticsDashboard() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead>
-                      <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                      <tr className="text-[13px] font-semibold text-slate-400 border-b border-slate-100">
                         <th className="pb-3 pr-4">Course</th>
                         <th className="pb-3 pr-4">Reached</th>
                         <th className="pb-3 pr-4">Not Reached</th>
@@ -3578,13 +3536,13 @@ export default function AnalyticsDashboard() {
               <div className="flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-indigo-600" />
 
-                <h2 className="text-xl font-black uppercase tracking-tight text-slate-800">
-                  IEC Materials Analytics
+                <h2 className="text-xl font-bold text-[#1E1B4B]">
+                  IEC materials analytics
                 </h2>
               </div>
 
-              <p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">
-                Information, Education and Communication material dissemination
+              <p className="mt-1 text-[13px] font-bold text-slate-400">
+                Information, education and communication material dissemination
               </p>
             </div>
 
@@ -3606,20 +3564,20 @@ export default function AnalyticsDashboard() {
                         <CalendarDays className="w-6 h-6" />
                       </div>
 
-                      <span className="text-[8px] font-black uppercase tracking-widest bg-white/10 px-3 py-2 rounded-full">
-                        Current Month
+                      <span className="text-[13px] font-semibold bg-white/10 px-3 py-2 rounded-full">
+                        Current month
                       </span>
                     </div>
 
-                    <p className="mt-6 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-100">
-                      IEC Materials Created
+                    <p className="mt-6 text-[13px] font-semibold text-indigo-100">
+                      IEC materials created
                     </p>
 
                     <p className="mt-1 text-5xl font-black tracking-tighter">
                       {iecMaterialsThisMonth}
                     </p>
 
-                    <p className="mt-2 text-[9px] font-bold uppercase tracking-wide text-indigo-100">
+                    <p className="mt-2 text-[13px] font-bold text-indigo-100">
                       New IEC materials this month
                     </p>
                   </div>
@@ -3628,21 +3586,21 @@ export default function AnalyticsDashboard() {
               </motion.div>
 
               <StatCard
-                title="Total IEC Materials"
+                title="Total IEC materials"
                 value={totalIECMaterials}
                 description="All IEC materials"
                 icon={BookOpen}
               />
 
               <StatCard
-                title="IEC Downloads"
+                title="IEC downloads"
                 value={totalIECDowloads}
                 description="Total material downloads"
                 icon={Download}
               />
 
               <StatCard
-                title="Downloads (This Month's Uploads)"
+                title="Downloads (this month's uploads)"
                 value={downloadsThisMonth}
                 description="Lifetime downloads of materials uploaded this month"
                 icon={TrendingUp}
@@ -3656,23 +3614,23 @@ export default function AnalyticsDashboard() {
               IEC CREATION TREND
           ================================================= */}
 
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+          <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">
 
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
 
               <div>
-                <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
-                  IEC Material Creation Trend
+                <h2 className="text-lg md:text-xl font-bold text-[#1E1B4B]">
+                  IEC material creation trend
                 </h2>
 
-                <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+                <p className="text-[13px] text-[#5B6477] mt-1">
                   Number of IEC materials created per month — current year
                 </p>
               </div>
 
               <div className="px-4 py-3 rounded-xl bg-indigo-50 text-indigo-700">
-                <p className="text-[8px] uppercase font-black tracking-widest">
-                  This Year
+                <p className="text-[13px] font-semibold">
+                  This year
                 </p>
 
                 <p className="text-xl font-black">
@@ -3703,7 +3661,7 @@ export default function AnalyticsDashboard() {
                 <XAxis
                   dataKey="month"
                   tick={{
-                    fontSize: 9,
+                    fontSize: 12,
                     fontWeight: 700,
                   }}
                 />
@@ -3711,7 +3669,7 @@ export default function AnalyticsDashboard() {
                 <YAxis
                   allowDecimals={false}
                   tick={{
-                    fontSize: 9,
+                    fontSize: 12,
                   }}
                 />
 
@@ -3740,15 +3698,15 @@ export default function AnalyticsDashboard() {
 
             {/* CATEGORY */}
 
-            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+            <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">
 
               <div className="flex items-center justify-between mb-5">
                 <div>
-                  <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-                    IEC by Category
+                  <h2 className="text-lg font-bold text-[#1E1B4B]">
+                    IEC by category
                   </h2>
 
-                  <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+                  <p className="text-[13px] text-[#5B6477] mt-1">
                     Distribution of IEC materials by category
                   </p>
                 </div>
@@ -3785,7 +3743,7 @@ export default function AnalyticsDashboard() {
                       interval={0}
                       height={90}
                       tick={{
-                        fontSize: 8,
+                        fontSize: 12,
                         fontWeight: 700,
                       }}
                     />
@@ -3793,7 +3751,7 @@ export default function AnalyticsDashboard() {
                     <YAxis
                       allowDecimals={false}
                       tick={{
-                        fontSize: 9,
+                        fontSize: 12,
                       }}
                     />
 
@@ -3818,13 +3776,13 @@ export default function AnalyticsDashboard() {
 
             {/* MATERIAL TYPE */}
 
-            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+            <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">
 
-              <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-                Materials by Type
+              <h2 className="text-lg font-bold text-[#1E1B4B]">
+                Materials by type
               </h2>
 
-              <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+              <p className="text-[13px] text-[#5B6477] mt-1">
                 IEC and other material classifications
               </p>
 
@@ -3888,13 +3846,13 @@ export default function AnalyticsDashboard() {
 
             {/* FORMAT */}
 
-            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white max-w-2xl">
+            <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white max-w-2xl">
 
-              <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-                Materials by Format
+              <h2 className="text-lg font-bold text-[#1E1B4B]">
+                Materials by format
               </h2>
 
-              <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1 mb-5">
+              <p className="text-[13px] text-[#5B6477] mt-1 mb-5">
                 PDF, PNG, JPG, MP4 and other formats
               </p>
 
@@ -3915,7 +3873,7 @@ export default function AnalyticsDashboard() {
                   <XAxis
                     dataKey="format"
                     tick={{
-                      fontSize: 9,
+                      fontSize: 12,
                       fontWeight: 700,
                     }}
                   />
@@ -3923,7 +3881,7 @@ export default function AnalyticsDashboard() {
                   <YAxis
                     allowDecimals={false}
                     tick={{
-                      fontSize: 9,
+                      fontSize: 12,
                     }}
                   />
 
@@ -3951,21 +3909,21 @@ export default function AnalyticsDashboard() {
               RECENT IEC MATERIALS
           ================================================= */}
 
-          <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+          <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">
 
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
 
               <div>
-                <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
-                  Recent IEC Materials
+                <h2 className="text-lg md:text-xl font-bold text-[#1E1B4B]">
+                  Recent IEC materials
                 </h2>
 
-                <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+                <p className="text-[13px] text-[#5B6477] mt-1">
                   Latest IEC materials added to the system
                 </p>
               </div>
 
-              <div className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-[9px] font-black uppercase">
+              <div className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 text-[13px] font-semibold">
                 {iecMaterialsThisMonth} Created This Month
               </div>
 
@@ -4035,20 +3993,20 @@ export default function AnalyticsDashboard() {
 
                           <div className="flex flex-wrap gap-2 mt-1">
 
-                            <span className="text-[8px] font-black uppercase text-indigo-600">
+                            <span className="text-[13px] font-semibold text-indigo-600">
                               {safeString(
                                 material.category
                               ) ||
                                 "Uncategorized"}
                             </span>
 
-                            <span className="text-[8px] font-bold uppercase text-slate-400">
+                            <span className="text-[13px] font-bold text-slate-400">
                               {safeString(material.format) ||
                                 safeString(material.type) ||
                                 "Unknown Format"}
                             </span>
 
-                            <span className="text-[8px] font-bold uppercase text-slate-400">
+                            <span className="text-[13px] font-bold text-slate-400">
                               {campusLabel(
                                 safeString(material.campus)
                               )}
@@ -4063,7 +4021,7 @@ export default function AnalyticsDashboard() {
                       <div className="flex items-center gap-5 md:shrink-0">
 
                         <div className="text-right">
-                          <p className="text-[8px] uppercase font-black text-slate-400">
+                          <p className="text-[13px] font-semibold text-slate-400">
                             Downloads
                           </p>
 
@@ -4076,7 +4034,7 @@ export default function AnalyticsDashboard() {
                         </div>
 
                         <div className="text-right">
-                          <p className="text-[8px] uppercase font-black text-slate-400">
+                          <p className="text-[13px] font-semibold text-slate-400">
                             Created
                           </p>
 
@@ -4111,13 +4069,13 @@ export default function AnalyticsDashboard() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+            <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">
 
-              <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-                Students by Course
+              <h2 className="text-lg font-bold text-[#1E1B4B]">
+                Students by course
               </h2>
 
-              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1 mb-5">
+              <p className="text-[13px] text-[#5B6477] mt-1 mb-5">
                 Demographic distribution by academic program &middot; click a bar to view students in Users
               </p>
 
@@ -4143,14 +4101,14 @@ export default function AnalyticsDashboard() {
                     interval={0}
                     height={80}
                     tick={{
-                      fontSize: 9,
+                      fontSize: 12,
                     }}
                   />
 
                   <YAxis
                     allowDecimals={false}
                     tick={{
-                      fontSize: 9,
+                      fontSize: 12,
                     }}
                   />
 
@@ -4174,13 +4132,13 @@ export default function AnalyticsDashboard() {
 
             </Card>
 
-            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+            <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">
 
-              <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-                Students by Year Level
+              <h2 className="text-lg font-bold text-[#1E1B4B]">
+                Students by year level
               </h2>
 
-              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1 mb-5">
+              <p className="text-[13px] text-[#5B6477] mt-1 mb-5">
                 Higher education student distribution
               </p>
 
@@ -4201,7 +4159,7 @@ export default function AnalyticsDashboard() {
                   <XAxis
                     dataKey="year"
                     tick={{
-                      fontSize: 9,
+                      fontSize: 12,
                       fontWeight: 700,
                     }}
                   />
@@ -4209,7 +4167,7 @@ export default function AnalyticsDashboard() {
                   <YAxis
                     allowDecimals={false}
                     tick={{
-                      fontSize: 9,
+                      fontSize: 12,
                     }}
                   />
 
@@ -4239,13 +4197,13 @@ export default function AnalyticsDashboard() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+            <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">
 
-              <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-                Gender Distribution
+              <h2 className="text-lg font-bold text-[#1E1B4B]">
+                Gender distribution
               </h2>
 
-              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">
+              <p className="text-[13px] text-[#5B6477] mt-1">
                 Student demographic analytics
               </p>
 
@@ -4295,13 +4253,13 @@ export default function AnalyticsDashboard() {
 
             </Card>
 
-            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+            <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">
 
-              <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-                Age Distribution
+              <h2 className="text-lg font-bold text-[#1E1B4B]">
+                Age distribution
               </h2>
 
-              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1 mb-5">
+              <p className="text-[13px] text-[#5B6477] mt-1 mb-5">
                 Student age-group analytics
               </p>
 
@@ -4320,7 +4278,7 @@ export default function AnalyticsDashboard() {
                   <XAxis
                     dataKey="group"
                     tick={{
-                      fontSize: 8,
+                      fontSize: 12,
                       fontWeight: 700,
                     }}
                   />
@@ -4328,7 +4286,7 @@ export default function AnalyticsDashboard() {
                   <YAxis
                     allowDecimals={false}
                     tick={{
-                      fontSize: 9,
+                      fontSize: 12,
                     }}
                   />
 
@@ -4358,7 +4316,7 @@ export default function AnalyticsDashboard() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-            <Card className="border-none shadow-xl rounded-[2rem] p-6 bg-white">
+            <Card className="border-none shadow-none rounded-[32px] p-6 bg-white">
 
               <div className="flex items-center gap-3">
 
@@ -4367,12 +4325,12 @@ export default function AnalyticsDashboard() {
                 </div>
 
                 <div>
-                  <h3 className="font-black uppercase text-slate-800">
-                    PWD Representation
+                  <h3 className="font-bold text-[#1E1B4B]">
+                    PWD representation
                   </h3>
 
-                  <p className="text-[9px] uppercase font-bold text-slate-400">
-                    Persons with Disabilities
+                  <p className="text-[13px] font-bold text-slate-400">
+                    Persons with disabilities
                   </p>
                 </div>
 
@@ -4386,7 +4344,7 @@ export default function AnalyticsDashboard() {
                   disabled={inclusionAnalytics.pwd === 0}
                   className={`bg-blue-50 rounded-2xl p-4 text-left transition-colors ${inclusionAnalytics.pwd > 0 ? 'hover:bg-blue-100 cursor-pointer' : 'cursor-default'}`}
                 >
-                  <p className="text-[9px] uppercase font-black text-blue-500">
+                  <p className="text-[13px] font-semibold text-blue-500">
                     PWD
                   </p>
 
@@ -4396,12 +4354,12 @@ export default function AnalyticsDashboard() {
                     }
                   </p>
                   {inclusionAnalytics.pwd > 0 && (
-                    <p className="text-[8px] uppercase font-black text-blue-400 mt-1 tracking-wider">View in Users &rarr;</p>
+                    <p className="text-[13px] font-semibold text-blue-400 mt-1">View in Users &rarr;</p>
                   )}
                 </button>
 
                 <div className="bg-slate-50 rounded-2xl p-4">
-                  <p className="text-[9px] uppercase font-black text-slate-400">
+                  <p className="text-[13px] font-semibold text-slate-400">
                     Non-PWD
                   </p>
 
@@ -4417,17 +4375,17 @@ export default function AnalyticsDashboard() {
               {inclusionAnalytics.pwd > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-100">
                   <InclusionBreakdownList
-                    title="By Campus"
+                    title="By campus"
                     rows={inclusionBreakdown.pwd.byCampus}
                     accentClassName="bg-blue-50 text-blue-600"
                   />
                   <InclusionBreakdownList
-                    title="By Program"
+                    title="By program"
                     rows={inclusionBreakdown.pwd.byProgram}
                     accentClassName="bg-blue-50 text-blue-600"
                   />
                   <InclusionBreakdownList
-                    title="By Year Level"
+                    title="By year level"
                     rows={inclusionBreakdown.pwd.byYearLevel}
                     accentClassName="bg-blue-50 text-blue-600"
                   />
@@ -4436,7 +4394,7 @@ export default function AnalyticsDashboard() {
 
             </Card>
 
-            <Card className="border-none shadow-xl rounded-[2rem] p-6 bg-white">
+            <Card className="border-none shadow-none rounded-[32px] p-6 bg-white">
 
               <div className="flex items-center gap-3">
 
@@ -4445,11 +4403,11 @@ export default function AnalyticsDashboard() {
                 </div>
 
                 <div>
-                  <h3 className="font-black uppercase text-slate-800">
-                    IP Representation
+                  <h3 className="font-bold text-[#1E1B4B]">
+                    IP representation
                   </h3>
 
-                  <p className="text-[9px] uppercase font-bold text-slate-400">
+                  <p className="text-[13px] font-bold text-slate-400">
                     Indigenous Peoples
                   </p>
                 </div>
@@ -4464,7 +4422,7 @@ export default function AnalyticsDashboard() {
                   disabled={inclusionAnalytics.ip === 0}
                   className={`bg-emerald-50 rounded-2xl p-4 text-left transition-colors ${inclusionAnalytics.ip > 0 ? 'hover:bg-emerald-100 cursor-pointer' : 'cursor-default'}`}
                 >
-                  <p className="text-[9px] uppercase font-black text-emerald-500">
+                  <p className="text-[13px] font-semibold text-emerald-500">
                     IP
                   </p>
 
@@ -4474,12 +4432,12 @@ export default function AnalyticsDashboard() {
                     }
                   </p>
                   {inclusionAnalytics.ip > 0 && (
-                    <p className="text-[8px] uppercase font-black text-emerald-500/70 mt-1 tracking-wider">View in Users &rarr;</p>
+                    <p className="text-[13px] font-semibold text-emerald-500/70 mt-1">View in Users &rarr;</p>
                   )}
                 </button>
 
                 <div className="bg-slate-50 rounded-2xl p-4">
-                  <p className="text-[9px] uppercase font-black text-slate-400">
+                  <p className="text-[13px] font-semibold text-slate-400">
                     Non-IP
                   </p>
 
@@ -4495,17 +4453,17 @@ export default function AnalyticsDashboard() {
               {inclusionAnalytics.ip > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-100">
                   <InclusionBreakdownList
-                    title="By Campus"
+                    title="By campus"
                     rows={inclusionBreakdown.ip.byCampus}
                     accentClassName="bg-emerald-50 text-emerald-600"
                   />
                   <InclusionBreakdownList
-                    title="By Program"
+                    title="By program"
                     rows={inclusionBreakdown.ip.byProgram}
                     accentClassName="bg-emerald-50 text-emerald-600"
                   />
                   <InclusionBreakdownList
-                    title="By Year Level"
+                    title="By year level"
                     rows={inclusionBreakdown.ip.byYearLevel}
                     accentClassName="bg-emerald-50 text-emerald-600"
                   />
@@ -4522,13 +4480,13 @@ export default function AnalyticsDashboard() {
 
           <div className="grid grid-cols-1 gap-6">
 
-            <Card className="border-none shadow-xl rounded-[2rem] p-5 md:p-7 bg-white">
+            <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">
 
-              <h2 className="text-lg font-black uppercase tracking-tight text-slate-800">
-                Campus Distribution
+              <h2 className="text-lg font-bold text-[#1E1B4B]">
+                Campus distribution
               </h2>
 
-              <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+              <p className="text-[13px] text-[#5B6477] mt-1">
                 Student distribution by campus &middot; click a slice to view students in Users
               </p>
 
@@ -4589,7 +4547,7 @@ export default function AnalyticsDashboard() {
             ADMIN FOOTER
         ================================================= */}
 
-        <div className="bg-slate-900 rounded-[2rem] p-6 md:p-7 text-white">
+        <div className="bg-[#1E1B4B] rounded-[32px] p-6 md:p-7 text-white">
 
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
 
@@ -4601,11 +4559,11 @@ export default function AnalyticsDashboard() {
 
               <div>
 
-                <h3 className="text-sm font-black uppercase tracking-wide">
-                  Administrative Analytics
+                <h3 className="text-sm font-semibold">
+                  Administrative analytics
                 </h3>
 
-                <p className="text-[10px] text-slate-400 mt-1 max-w-3xl leading-relaxed">
+                <p className="text-[13px] text-slate-400 mt-1 max-w-3xl leading-relaxed">
                   Analytics are generated from
                   registered student profiles,
                   Guidance programs,
@@ -4621,10 +4579,10 @@ export default function AnalyticsDashboard() {
             <Button
               onClick={fetchAnalytics}
               variant="ghost"
-              className="h-10 rounded-xl text-indigo-300 hover:text-white hover:bg-white/10 text-[9px] font-black uppercase tracking-widest"
+              className="h-11 px-4 rounded-xl text-indigo-200 hover:text-white hover:bg-white/10 text-sm font-bold"
             >
               <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh Data
+              Refresh data
             </Button>
 
           </div>

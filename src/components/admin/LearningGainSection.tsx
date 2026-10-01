@@ -11,14 +11,9 @@ import {
 } from "../ui/select";
 import {
   TrendingUp,
-  Users,
-  UserMinus,
-  Target,
-  Sigma,
   AlertTriangle,
   RefreshCw,
   Loader2,
-  FlaskConical,
   Info,
   CheckCircle2,
   MinusCircle,
@@ -69,9 +64,9 @@ import {
 
 // Validated with the dataviz palette checks (colorblind separation
 // and contrast on white): cyan = before, indigo = after.
-const PRE_COLOR = "#0891b2";
-const POST_COLOR = "#4f46e5";
-const GAIN_UP_COLOR = "#4f46e5";
+const PRE_COLOR = "#C7C9F2";
+const POST_COLOR = "#4F46E5";
+const GAIN_UP_COLOR = "#4F46E5";
 const GAIN_DOWN_COLOR = "#ea580c";
 
 type BreakdownDimension = Exclude<LearningGainDimension, "program" | "overall">;
@@ -80,9 +75,9 @@ const BREAKDOWNS: { id: BreakdownDimension; label: string }[] = [
   { id: "course", label: "Course" },
   { id: "gender", label: "Gender" },
   { id: "age_bracket", label: "Age" },
-  { id: "year_level", label: "Year Level" },
-  { id: "pwd", label: "PWD Status" },
-  { id: "ip", label: "IP Status" },
+  { id: "year_level", label: "Year level" },
+  { id: "pwd", label: "PWD status" },
+  { id: "ip", label: "IP status" },
 ];
 
 interface Filters {
@@ -338,17 +333,93 @@ export default function LearningGainSection() {
     BREAKDOWNS.find((item) => item.id === breakdown)?.label || "Group";
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-5 font-figtree text-[#1E293B]">
+
+      {/* FILTERS — all six combine (AND) inside the SQL function. */}
+      <Card className="border-none shadow-none rounded-[28px] px-5 py-5 md:px-6 bg-white flex flex-col gap-3.5">
+        <h2 className="sr-only">Learning gain filters</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          <FilterSelect
+            label="Program"
+            value={filters.programId}
+            onChange={setFilter("programId")}
+            allLabel="All programs"
+            options={summary.options.programs.map((program) => ({
+              value: String(program.id),
+              label: program.title,
+            }))}
+          />
+          <FilterSelect
+            label="Course"
+            value={filters.course}
+            onChange={setFilter("course")}
+            allLabel="All courses"
+            options={[...summary.options.courses].sort().map((course) => ({
+              value: course,
+              label: course,
+            }))}
+          />
+          <FilterSelect
+            label="Year level"
+            value={filters.yearLevel}
+            onChange={setFilter("yearLevel")}
+            allLabel="All year levels"
+            options={[...summary.options.year_levels]
+              .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+              .map((level) => ({ value: level, label: yearLevelLabel(level) }))}
+          />
+          <FilterSelect
+            label="Gender"
+            value={filters.gender}
+            onChange={setFilter("gender")}
+            allLabel="All genders"
+            options={[...summary.options.genders].sort().map((gender) => ({
+              value: gender,
+              label: gender,
+            }))}
+          />
+          <FilterSelect
+            label="Age"
+            value={filters.ageBracket}
+            onChange={setFilter("ageBracket")}
+            allLabel="All ages"
+            options={AGE_BRACKETS.map((bracket) => ({
+              value: bracket.label,
+              label: bracket.label,
+            }))}
+          />
+          <FilterSelect
+            label="Academic year"
+            value={filters.academicYear}
+            onChange={setFilter("academicYear")}
+            allLabel="All years"
+            options={[...summary.options.years]
+              .sort((a, b) => b - a)
+              .map((year) => ({ value: String(year), label: String(year) }))}
+          />
+        </div>
+
+        {filtersActive && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setFilters(DEFAULT_FILTERS)}
+              className="h-11 px-3.5 rounded-xl font-bold text-sm text-[#4338CA] hover:bg-[#EEF0FA] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
+            >
+              Reset filters
+            </button>
+          </div>
+        )}
+      </Card>
 
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div className="flex items-center gap-3">
-          <TrendingUp className="w-5 h-5 text-indigo-600" />
           <div>
-            <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
-              Learning Gain
+            <h2 className="m-0 font-bold text-lg text-[#1E1B4B]">
+              Learning gain
             </h2>
-            <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+            <p className="m-0 text-sm text-[#5B6477] mt-1">
               Pre-test vs post-test · paired students only · test accounts excluded
             </p>
           </div>
@@ -359,7 +430,7 @@ export default function LearningGainSection() {
           variant="outline"
           onClick={fetchSummary}
           disabled={loading}
-          className="h-10 rounded-xl text-[10px] font-black uppercase tracking-wider gap-2 self-start md:self-auto"
+          className="h-11 px-4 rounded-xl border-[1.5px] border-[#DDE1EE] bg-white text-[#1E1B4B] text-sm font-bold gap-2 self-start md:self-auto hover:border-[#A5B4FC]"
         >
           {loading ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -370,90 +441,15 @@ export default function LearningGainSection() {
         </Button>
       </div>
 
-      {/* FILTERS — all six combine (AND) inside the SQL function. */}
-      <Card className="border-none shadow-xl rounded-[2.5rem] md:rounded-[3.5rem] p-5 md:p-8 bg-white">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-          <FilterSelect
-            label="Program"
-            value={filters.programId}
-            onChange={setFilter("programId")}
-            allLabel="All Programs"
-            options={summary.options.programs.map((program) => ({
-              value: String(program.id),
-              label: program.title,
-            }))}
-          />
-          <FilterSelect
-            label="Course"
-            value={filters.course}
-            onChange={setFilter("course")}
-            allLabel="All Courses"
-            options={[...summary.options.courses].sort().map((course) => ({
-              value: course,
-              label: course,
-            }))}
-          />
-          <FilterSelect
-            label="Year Level"
-            value={filters.yearLevel}
-            onChange={setFilter("yearLevel")}
-            allLabel="All Year Levels"
-            options={[...summary.options.year_levels]
-              .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-              .map((level) => ({ value: level, label: yearLevelLabel(level) }))}
-          />
-          <FilterSelect
-            label="Gender"
-            value={filters.gender}
-            onChange={setFilter("gender")}
-            allLabel="All Genders"
-            options={[...summary.options.genders].sort().map((gender) => ({
-              value: gender,
-              label: gender,
-            }))}
-          />
-          <FilterSelect
-            label="Age"
-            value={filters.ageBracket}
-            onChange={setFilter("ageBracket")}
-            allLabel="All Ages"
-            options={AGE_BRACKETS.map((bracket) => ({
-              value: bracket.label,
-              label: bracket.label,
-            }))}
-          />
-          <FilterSelect
-            label="Academic Year"
-            value={filters.academicYear}
-            onChange={setFilter("academicYear")}
-            allLabel="All Years"
-            options={[...summary.options.years]
-              .sort((a, b) => b - a)
-              .map((year) => ({ value: String(year), label: String(year) }))}
-          />
-        </div>
-
-        {filtersActive && (
-          <div className="mt-4 flex justify-end">
-            <button
-              type="button"
-              onClick={() => setFilters(DEFAULT_FILTERS)}
-              className="text-[10px] font-black uppercase tracking-wider text-indigo-600 hover:underline"
-            >
-              Reset Filters
-            </button>
-          </div>
-        )}
-      </Card>
 
       {loadError ? (
-        <Card className="border-none shadow-xl rounded-[2.5rem] md:rounded-[3.5rem] p-8 md:p-10 bg-white">
+        <Card className="border-none shadow-none rounded-[32px] p-8 md:p-10 bg-white">
           <div className="flex flex-col items-center text-center gap-3 py-6">
             <div className="w-14 h-14 rounded-2xl bg-rose-50 flex items-center justify-center">
               <AlertTriangle className="w-7 h-7 text-rose-500" />
             </div>
-            <p className="text-sm font-black uppercase tracking-tight text-slate-800">
-              Learning Gain Unavailable
+            <p className="text-sm font-bold text-[#1E1B4B]">
+              Learning gain unavailable
             </p>
             <p className="text-xs font-medium text-slate-500 max-w-lg leading-relaxed">
               {loadError}
@@ -461,109 +457,105 @@ export default function LearningGainSection() {
             <Button
               type="button"
               onClick={fetchSummary}
-              className="mt-2 h-10 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider"
+              className="mt-2 h-10 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white text-[13px] font-semibold"
             >
-              Try Again
+              Try again
             </Button>
           </div>
         </Card>
       ) : (
-        <div className={`space-y-6 transition-opacity ${loading ? "opacity-60" : ""}`}>
+        <div className={`space-y-6 transition-opacity ${loading ?"opacity-60" : ""}`}>
 
-          {/* SUMMARY TILES */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <SummaryTile
-              title="Paired Students"
-              value={String(overall.paired_n)}
-              description="Completed both pre-test and post-test"
-              icon={Users}
-              badge={
-                overall.paired_n > 0 && overall.paired_n < SMALL_SAMPLE_N ? (
-                  <SmallSampleBadge />
-                ) : null
-              }
-            />
-            <SummaryTile
-              title="Incomplete"
-              value={String(overall.incomplete_n)}
-              description={
-                attempted > 0
-                  ? `Pre-test only · ${attritionPct.toFixed(1)}% attrition`
-                  : "Pre-test only · no attempts yet"
-              }
-              icon={UserMinus}
-            />
-            <SummaryTile
-              title="Mean Gain"
-              value={fmtGain(overall.mean_gain)}
-              description={`Pre ${fmtPct(overall.mean_pre)} → Post ${fmtPct(overall.mean_post)}`}
-              icon={Target}
-            />
-            <SummaryTile
-              title="Normalized Gain ⟨g⟩"
-              value={fmtG(overall.norm_gain)}
-              description={
-                overall.paired_n > 0 && overall.norm_gain === null
-                  ? "Pre-test mean is 100% — no room to gain"
-                  : "(post − pre) ÷ (100 − pre)"
-              }
-              icon={Sigma}
-              badge={overallLevel ? <GainLevelBadge level={overallLevel} /> : null}
-            />
+          {/* SUMMARY — same numbers as before, new layout. */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 md:gap-3.5">
+            <div className="px-[22px] py-5 rounded-[26px] bg-white flex flex-col gap-1 min-w-0">
+              <span className="text-[13px] font-semibold text-[#5B6477]">Students with both tests</span>
+              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#1E1B4B]">{overall.paired_n}</span>
+              {overall.paired_n > 0 && overall.paired_n < SMALL_SAMPLE_N && (
+                <span className="self-start"><SmallSampleBadge /></span>
+              )}
+            </div>
+            <div className="px-[22px] py-5 rounded-[26px] bg-white flex flex-col gap-1 min-w-0">
+              <span className="text-[13px] font-semibold text-[#5B6477]">Mean pre-test</span>
+              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#1E1B4B]">{fmtPct(overall.mean_pre)}</span>
+            </div>
+            <div className="px-[22px] py-5 rounded-[26px] bg-white flex flex-col gap-1 min-w-0">
+              <span className="text-[13px] font-semibold text-[#5B6477]">Mean post-test</span>
+              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#1E1B4B]">{fmtPct(overall.mean_post)}</span>
+            </div>
+            <div className="px-[22px] py-5 rounded-[26px] bg-[#D1FAE5] flex flex-col gap-1 min-w-0">
+              <span className="text-[13px] font-semibold text-[#065F46]">Mean gain</span>
+              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#065F46]">{fmtGain(overall.mean_gain)}</span>
+              <span className="text-xs text-[#065F46]">
+                {overall.paired_n > 0 && overall.norm_gain === null
+                  ? "Normalized gain: pre-test mean is 100%, no room to gain"
+                  : `Normalized gain ${fmtG(overall.norm_gain)}`}
+              </span>
+              {overallLevel && <span className="self-start mt-1"><GainLevelBadge level={overallLevel} /></span>}
+            </div>
+            <div className="col-span-2 lg:col-span-1 px-[22px] py-5 rounded-[26px] bg-[#1E1B4B] text-white flex flex-col gap-1 min-w-0">
+              <span className="text-[13px] font-semibold text-[#FBBF24]">Paired t-test</span>
+              <span className="font-bricolage font-extrabold text-[28px] leading-tight">
+                {overallTest
+                  ? overallTest.p < 0.001
+                    ? "p < .001"
+                    : `p = ${formatPValue(overallTest.p)}`
+                  : "Not enough data"}
+              </span>
+              <span className="text-xs text-[#C7C9F2]">
+                {overallTest
+                  ? `t(${overallTest.df}) = ${overallTest.t.toFixed(2)} · ${overallTest.significant ? "Significant at 0.05" : "Not significant at 0.05"}`
+                  : "Needs at least 2 paired students with differing gains"}
+              </span>
+              {overall.paired_n > 0 && overall.paired_n < T_TEST_CAUTION_N && (
+                <span className="self-start mt-1"><CautionBadge compact /></span>
+              )}
+            </div>
           </div>
 
-          {/* OVERALL PAIRED T-TEST */}
-          <Card className="border-none shadow-xl rounded-[2.5rem] md:rounded-[3.5rem] p-5 md:p-8 bg-white">
-            <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-              <div className="flex items-center gap-3 shrink-0">
-                <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                  <FlaskConical className="w-5 h-5" strokeWidth={2.5} />
-                </div>
-                <div>
-                  <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">
-                    Paired-Samples t-Test · All Programs
-                  </p>
-                  <p className="text-lg md:text-xl font-black tracking-tight text-slate-900">
-                    {overallTest
-                      ? `t(${overallTest.df}) = ${overallTest.t.toFixed(2)}, p ${
-                          overallTest.p < 0.001 ? "< .001" : `= ${formatPValue(overallTest.p)}`
-                        }`
-                      : "Not enough paired data"}
-                  </p>
-                </div>
+          {/* WHO IS COUNTED + how to read the t-test */}
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-5">
+            <div className="px-6 py-6 md:px-7 rounded-[32px] bg-white flex flex-col gap-3.5">
+              <h3 className="m-0 font-bold text-lg text-[#1E1B4B]">Who is counted</h3>
+              <div className="flex justify-between gap-3 px-4 py-3 rounded-2xl bg-[#F5F6FB]">
+                <span className="text-sm text-[#334155]">Pre-test and post-test (counted)</span>
+                <span className="font-extrabold text-[#1E1B4B]">{overall.paired_n}</span>
               </div>
-
-              <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
-                {overallTest && <SignificanceBadge significant={overallTest.significant} />}
-                {overall.paired_n > 0 && overall.paired_n < T_TEST_CAUTION_N && (
-                  <CautionBadge />
-                )}
+              <div className="flex justify-between gap-3 px-4 py-3 rounded-2xl bg-[#F5F6FB]">
+                <span className="text-sm text-[#334155]">
+                  Pre-test only (not yet finished)
+                  {attempted > 0 && <span className="text-[#5B6477]"> · {attritionPct.toFixed(1)}% attrition</span>}
+                </span>
+                <span className="font-extrabold text-[#1E1B4B]">{overall.incomplete_n}</span>
               </div>
+              <p className="m-0 text-[13px] text-[#5B6477]">Test accounts are excluded.</p>
             </div>
-
-            <p className="mt-4 text-[10px] font-medium text-slate-400 leading-relaxed">
-              p &lt; 0.05 means the pre-test to post-test difference is statistically
-              significant (unlikely to be due to chance). With fewer than {T_TEST_CAUTION_N}{" "}
-              paired students, read the result with caution: the t-test assumes the score
-              differences are roughly normal, which a small group can't show. Needs at least 2
-              paired students with differing gains.
-            </p>
-          </Card>
+            <div className="px-6 py-6 md:px-7 rounded-[32px] bg-white flex flex-col gap-2">
+              <h3 className="m-0 font-bold text-lg text-[#1E1B4B]">How to read the t-test</h3>
+              <p className="m-0 text-sm leading-relaxed text-[#334155]">
+                p &lt; 0.05 means the pre-test to post-test difference is statistically
+                significant (unlikely to be due to chance). With fewer than {T_TEST_CAUTION_N}{" "}
+                paired students, read the result with caution: the t-test assumes the score
+                differences are roughly normal, which a small group can't show. Needs at least 2
+                paired students with differing gains. Normalized gain is (post − pre) ÷ (100 − pre).
+              </p>
+            </div>
+          </div>
 
           {/* PRE VS POST PER PROGRAM */}
-          <Card className="border-none shadow-xl rounded-[2.5rem] md:rounded-[3.5rem] p-5 md:p-10 bg-white">
+          <Card className="border-none shadow-none rounded-[32px] p-5 md:p-10 bg-white">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
               <div>
-                <h3 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
-                  Pre-Test vs Post-Test by Program
+                <h3 className="text-lg md:text-xl font-bold text-[#1E1B4B]">
+                  Pre-test vs post-test by program
                 </h3>
-                <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+                <p className="text-[13px] font-bold text-slate-400 mt-1">
                   Mean score of paired students, in percent
                 </p>
               </div>
 
-              <div className="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase self-start md:self-auto">
-                {programChartData.length} of {programRows.length} Programs With Paired Data
+              <div className="px-3 py-2 rounded-xl bg-indigo-50 text-indigo-600 text-[13px] font-semibold self-start md:self-auto">
+                {programChartData.length} of {programRows.length} programs with paired data
               </div>
             </div>
 
@@ -589,11 +581,11 @@ export default function LearningGainSection() {
                     textAnchor="end"
                     interval={0}
                     height={100}
-                    tick={{ fontSize: 9, fontWeight: 700, fill: "#64748b" }}
+                    tick={{ fontSize: 12, fontWeight: 700, fill: "#64748b" }}
                   />
                   <YAxis
                     domain={[0, 100]}
-                    tick={{ fontSize: 9, fill: "#94a3b8" }}
+                    tick={{ fontSize: 12, fill: "#94a3b8" }}
                     unit="%"
                   />
                   <Tooltip
@@ -610,10 +602,10 @@ export default function LearningGainSection() {
                     verticalAlign="top"
                     height={36}
                     iconType="circle"
-                    wrapperStyle={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase" }}
+                    wrapperStyle={{ fontSize: 13, fontWeight: 600 }}
                   />
-                  <Bar dataKey="pre" name="Pre-Test" fill={PRE_COLOR} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="post" name="Post-Test" fill={POST_COLOR} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="pre" name="Pre-test" fill={PRE_COLOR} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="post" name="Post-test" fill={POST_COLOR} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -628,13 +620,13 @@ export default function LearningGainSection() {
           </Card>
 
           {/* DEMOGRAPHIC BREAKDOWN */}
-          <Card className="border-none shadow-xl rounded-[2.5rem] md:rounded-[3.5rem] p-5 md:p-10 bg-white">
+          <Card className="border-none shadow-none rounded-[32px] p-5 md:p-10 bg-white">
             <div className="flex flex-col gap-4 mb-6">
               <div>
-                <h3 className="text-lg md:text-xl font-black uppercase tracking-tight text-slate-800">
-                  Learning Gain by {breakdownLabel}
+                <h3 className="text-lg md:text-xl font-bold text-[#1E1B4B]">
+                  Learning gain by {breakdownLabel}
                 </h3>
-                <p className="text-[9px] uppercase font-bold tracking-widest text-slate-400 mt-1">
+                <p className="text-[13px] font-bold text-slate-400 mt-1">
                   Mean gain (post − pre, percentage points) per group
                 </p>
               </div>
@@ -645,10 +637,8 @@ export default function LearningGainSection() {
                     key={item.id}
                     type="button"
                     onClick={() => setBreakdown(item.id)}
-                    className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-wider transition-colors ${
-                      breakdown === item.id
-                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
-                        : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                    className={`h-11 px-4 rounded-full text-sm font-semibold transition-colors ${ breakdown === item.id ?"bg-[#1E1B4B] text-white font-bold"
+                        : "bg-[#F5F6FB] text-[#334155] hover:bg-[#EEF0FA]"
                     }`}
                   >
                     {item.label}
@@ -672,7 +662,7 @@ export default function LearningGainSection() {
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
                   <XAxis
                     type="number"
-                    tick={{ fontSize: 9, fill: "#94a3b8" }}
+                    tick={{ fontSize: 12, fill: "#94a3b8" }}
                     unit=" pts"
                     domain={[(min: number) => Math.min(0, Math.floor(min)), (max: number) => Math.max(0, Math.ceil(max))]}
                   />
@@ -680,7 +670,7 @@ export default function LearningGainSection() {
                     type="category"
                     dataKey="name"
                     width={160}
-                    tick={{ fontSize: 9, fontWeight: 700, fill: "#64748b" }}
+                    tick={{ fontSize: 12, fontWeight: 700, fill: "#64748b" }}
                   />
                   <ReferenceLine x={0} stroke="#94a3b8" />
                   <Tooltip
@@ -701,7 +691,7 @@ export default function LearningGainSection() {
                       dataKey="gain"
                       position="right"
                       formatter={(value: number) => fmtGain(Number(value))}
-                      style={{ fontSize: 10, fontWeight: 800, fill: "#334155" }}
+                      style={{ fontSize: 12, fontWeight: 800, fill: "#334155" }}
                     />
                   </Bar>
                 </BarChart>
@@ -720,7 +710,7 @@ export default function LearningGainSection() {
           {/* HOW TO READ */}
           <div className="flex items-start gap-3 p-5 md:p-6 rounded-[2rem] bg-indigo-50/70 border border-indigo-100">
             <Info className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
-            <p className="text-[10px] md:text-xs leading-relaxed font-medium text-indigo-800">
+            <p className="text-[13px] md:text-xs leading-relaxed font-medium text-indigo-800">
               <strong>Gain</strong> = post-test − pre-test, in percentage points.{" "}
               <strong>⟨g⟩</strong> (normalized gain) = gain ÷ (100 − pre-test), the share of the
               possible improvement actually achieved: High ≥ 0.70, Medium 0.30–0.69, Low &lt; 0.30.
@@ -753,12 +743,12 @@ function FilterSelect({
   options: { value: string; label: string }[];
 }) {
   return (
-    <div className="space-y-1.5 min-w-0">
-      <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 ml-1">
+    <div className="flex flex-col gap-1.5 min-w-0">
+      <p className="m-0 text-[13px] font-semibold text-[#334155]">
         {label}
       </p>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-none text-xs font-bold">
+        <SelectTrigger aria-label={label} className="h-11 rounded-[14px] bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B]">
           <SelectValue placeholder={allLabel} />
         </SelectTrigger>
         <SelectContent className="max-h-72">
@@ -771,45 +761,6 @@ function FilterSelect({
         </SelectContent>
       </Select>
     </div>
-  );
-}
-
-function SummaryTile({
-  title,
-  value,
-  description,
-  icon: Icon,
-  badge,
-}: {
-  title: string;
-  value: string;
-  description: string;
-  icon: React.ElementType;
-  badge?: React.ReactNode;
-}) {
-  return (
-    <Card className="relative overflow-hidden border-none rounded-[2rem] md:rounded-[2.5rem] bg-white shadow-lg shadow-slate-100 p-5 md:p-6 h-full">
-      <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-indigo-50" />
-
-      <div className="relative flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">
-            {title}
-          </p>
-          <p className="mt-2 text-3xl md:text-4xl font-black tracking-tighter text-slate-900">
-            {value}
-          </p>
-          <p className="mt-2 text-[9px] font-bold uppercase tracking-wide text-slate-400">
-            {description}
-          </p>
-          {badge && <div className="mt-3">{badge}</div>}
-        </div>
-
-        <div className="w-11 h-11 shrink-0 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-          <Icon className="w-5 h-5" strokeWidth={2.5} />
-        </div>
-      </div>
-    </Card>
   );
 }
 
@@ -842,7 +793,7 @@ function MetricsTable({
             ].map((heading) => (
               <th
                 key={heading}
-                className="pb-3 pr-4 text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap"
+                className="pb-3 pr-4 text-[13px] font-semibold text-slate-400 whitespace-nowrap"
               >
                 {heading}
               </th>
@@ -869,7 +820,7 @@ function MetricsTable({
                     <div className="mt-1 flex flex-wrap gap-1">
                       {row.paired_n > 0 && row.paired_n < SMALL_SAMPLE_N && <SmallSampleBadge />}
                       {row.ceiling_n > 0 && (
-                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[8px] font-black uppercase tracking-wider">
+                        <span className="px-2 py-[3px] rounded-full bg-[#F1F5F9] text-[#475569] text-xs font-bold">
                           {row.ceiling_n} at 100% pre
                         </span>
                       )}
@@ -877,11 +828,10 @@ function MetricsTable({
                   </td>
                   <td className="py-3 pr-4 text-xs font-black text-slate-900">{row.paired_n}</td>
                   <td className="py-3 pr-4 text-xs font-bold text-slate-500">{row.incomplete_n}</td>
-                  <td className="py-3 pr-4 text-xs font-bold text-cyan-700">{fmtPct(row.mean_pre)}</td>
+                  <td className="py-3 pr-4 text-xs font-bold text-[#5B6477]">{fmtPct(row.mean_pre)}</td>
                   <td className="py-3 pr-4 text-xs font-bold text-indigo-600">{fmtPct(row.mean_post)}</td>
                   <td
-                    className={`py-3 pr-4 text-xs font-black whitespace-nowrap ${
-                      row.mean_gain !== null && row.mean_gain < 0 ? "text-orange-600" : "text-slate-900"
+                    className={`py-3 pr-4 text-xs font-black whitespace-nowrap ${ row.mean_gain !== null && row.mean_gain < 0 ?"text-orange-600" : "text-slate-900"
                     }`}
                   >
                     {fmtGain(row.mean_gain)}
@@ -908,7 +858,7 @@ function MetricsTable({
                       {test ? (
                         <SignificanceBadge significant={test.significant} />
                       ) : (
-                        <span className="text-[9px] font-bold text-slate-300 uppercase">n/a</span>
+                        <span className="text-[13px] font-bold text-slate-300">n/a</span>
                       )}
                       {test && row.paired_n < T_TEST_CAUTION_N && <CautionBadge compact />}
                     </div>
@@ -934,7 +884,7 @@ function EmptyState({ message }: { message: string }) {
 
 function SmallSampleBadge() {
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[8px] font-black uppercase tracking-wider">
+    <span className="inline-flex items-center gap-1 px-2 py-[3px] rounded-full bg-[#FEF3C7] text-[#92400E] text-xs font-bold whitespace-nowrap">
       <AlertTriangle className="w-2.5 h-2.5" />
       Small sample
     </span>
@@ -943,7 +893,7 @@ function SmallSampleBadge() {
 
 function CautionBadge({ compact = false }: { compact?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 text-[8px] font-black uppercase tracking-wider whitespace-nowrap">
+    <span className="inline-flex items-center gap-1 px-2 py-[3px] rounded-full bg-[#FFEDD5] text-[#9A3412] text-xs font-bold whitespace-nowrap">
       <AlertTriangle className="w-2.5 h-2.5" />
       {compact ? `n < ${T_TEST_CAUTION_N}` : `n < ${T_TEST_CAUTION_N} · interpret with caution`}
     </span>
@@ -952,12 +902,12 @@ function CautionBadge({ compact = false }: { compact?: boolean }) {
 
 function SignificanceBadge({ significant }: { significant: boolean }) {
   return significant ? (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[8px] font-black uppercase tracking-wider whitespace-nowrap">
+    <span className="inline-flex items-center gap-1 px-2 py-[3px] rounded-full bg-[#D1FAE5] text-[#065F46] text-xs font-bold whitespace-nowrap">
       <CheckCircle2 className="w-2.5 h-2.5" />
       Significant
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[8px] font-black uppercase tracking-wider whitespace-nowrap">
+    <span className="inline-flex items-center gap-1 px-2 py-[3px] rounded-full bg-[#F1F5F9] text-[#475569] text-xs font-bold whitespace-nowrap">
       <MinusCircle className="w-2.5 h-2.5" />
       Not significant
     </span>
@@ -973,7 +923,7 @@ function GainLevelBadge({ level }: { level: "High" | "Medium" | "Low" }) {
 
   return (
     <span
-      className={`inline-flex px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider ${styles[level]}`}
+      className={`inline-flex px-2 py-0.5 rounded-full text-[13px] font-semibold ${styles[level]}`}
     >
       {level} gain
     </span>
