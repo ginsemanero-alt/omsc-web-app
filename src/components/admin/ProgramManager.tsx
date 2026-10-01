@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, lazy, Suspense, type DragEvent as ReactDragEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, type DragEvent as ReactDragEvent } from 'react';
 import { supabase } from '../../lib/supabase';
 import { compressImageFile } from '../../lib/imageCompress';
 import { logActivity } from '../../lib/activityLog';
@@ -6,7 +6,6 @@ import { notifyStudents } from '../../lib/notifyStudents';
 import { formatProgramDate } from '../../lib/formatProgramDate';
 import { CAMPUSES, ALL_CAMPUSES_LABEL, campusLabel } from '../../lib/campuses';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
-import ZoomableImage from '../shared/ZoomableImage';
 import ProgramEntryTimeline from '../shared/ProgramEntryTimeline';
 import PhotoViewer, { collectProgramPhotos, viewerAt, type PhotoViewerState } from '../shared/PhotoViewer';
 import { useAuth } from '../../hooks/useAuth';
@@ -25,17 +24,13 @@ import {
 import { Label } from '../../components/ui/label';
 import {
   Plus, Search, Edit, Trash2,
-  Loader2, Camera, FileText, ChevronDown, ChevronUp, Download, AlertCircle, Eye, HardDrive,
+  Loader2, Camera, ChevronDown, ChevronUp, AlertCircle, Eye,
   Star, X
 } from 'lucide-react';
 
 // One photo in the program's cover + gallery list. `file` is set until
 // it's uploaded; `url` is then a local blob preview.
 type CoverPhoto = { url: string; file?: File };
-
-// Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
-// this chunk unless someone actually opens a handout PDF preview.
-const PdfPreview = lazy(() => import('../shared/PdfPreview'));
 
 const PROGRAMS_PAGE_SIZE = 8;
 
@@ -69,7 +64,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
   const { toast } = useToast();
   const { user, userName } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const materialRef = useRef<HTMLInputElement>(null);
 
   const [programs, setPrograms] = useState<any[]>([]);
   const [checkStatusByProgram, setCheckStatusByProgram] = useState<Record<number, string>>({});
@@ -77,7 +71,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [photoViewer, setPhotoViewer] = useState<PhotoViewerState | null>(null);
-  const [previewHandout, setPreviewHandout] = useState<{ url: string; title: string } | null>(null);
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -90,9 +83,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
   // cards everywhere, the rest are the gallery. Adding photos appends;
   // each can be removed or made the cover individually.
   const [coverPhotos, setCoverPhotos] = useState<CoverPhoto[]>([]);
-  const [materialFile, setMaterialFile] = useState<File | null>(null);
-  // Existing handouts the admin marked for removal; deleted on save.
-  const [handoutsToRemove, setHandoutsToRemove] = useState<number[]>([]);
 
   const [startTime, setStartTime] = useState('08:00');
   const [endTime, setEndTime] = useState('17:00');
@@ -197,11 +187,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
         .from('programs')
         .select(`
           *,
-          materials!materials_program_id_fkey (
-            id,
-            title,
-            file_url
-          ),
           program_entries (
             id,
             label,
@@ -253,26 +238,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
     handleOpenDialog(program);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editRequest, programs]);
-
-  // Handouts open in an in-app preview first (see previewHandout below) —
-  // this is the actual download action, triggered only when the admin
-  // explicitly clicks Download inside that preview, not on first click.
-  const downloadHandout = async (url: string, filename: string) => {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      window.location.href = url;
-    }
-  };
 
   const formatTo12h = (time24: string) => {
     if (!time24) return "";
@@ -332,56 +297,9 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
       setStartTime('08:00');
       setEndTime('17:00');
     }
-    setMaterialFile(null);
-    setHandoutsToRemove([]);
     setShowStudentPreview(false);
     resetEntryForm();
     setIsDialogOpen(true);
-  };
-
-  // Handouts of the program open in the dialog (certificate templates
-  // are stored the same way but aren't handouts).
-  const currentHandouts: any[] = editingId
-    ? (programs.find((p) => p.id === editingId)?.materials || []).filter(
-        (m: any) => !m.title?.startsWith('CERTIFICATE_TEMPLATE:')
-      )
-    : [];
-
-  // Deletes the marked handouts: rows first, then their files
-  // (best-effort — a storage hiccup only leaves an orphaned file, same as
-  // the Archive screen's permanent delete).
-  const removeMarkedHandouts = async (programId: number) => {
-    if (handoutsToRemove.length === 0) return;
-    const removed = currentHandouts.filter((m) => handoutsToRemove.includes(m.id));
-
-    const { error } = await supabase
-      .from('materials')
-      .delete()
-      .in('id', handoutsToRemove)
-      .eq('program_id', programId);
-    if (error) throw new Error(`Program saved, but removing handouts failed: ${error.message}`);
-
-    const byBucket = new Map<string, string[]>();
-    for (const mat of removed) {
-      const match = String(mat.file_url || '').match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
-      if (!match) continue;
-      byBucket.set(match[1], [...(byBucket.get(match[1]) || []), decodeURIComponent(match[2])]);
-    }
-    for (const [bucket, paths] of byBucket) {
-      const { error: storageError } = await supabase.storage.from(bucket).remove(paths);
-      if (storageError) console.warn(`Handout file cleanup failed in ${bucket}:`, storageError.message);
-    }
-
-    logActivity({
-      actorEmail: user?.email,
-      actorName: userName,
-      action: 'update',
-      entityType: 'program',
-      entityId: programId,
-      entityLabel: formData.title,
-      details: `Removed handout${removed.length === 1 ? '' : 's'}: ${removed.map((m) => m.title.replace('HANDOUT: ', '')).join(', ')}`,
-    });
-    setHandoutsToRemove([]);
   };
 
   const handleSave = async () => {
@@ -487,27 +405,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
         if (currentProgramId) await saveDraftEntries(currentProgramId, entryList);
       } finally {
         if (isNewProgram) notifyStudents('program', payload.title, payload.content);
-      }
-
-      if (currentProgramId) await removeMarkedHandouts(currentProgramId);
-
-      if (materialFile && currentProgramId) {
-        const matPath = `${currentProgramId}/handout_${Date.now()}_${materialFile.name}`;
-        const { error: storageError } = await supabase.storage.from('materials').upload(matPath, materialFile, { cacheControl: '31536000' });
-        if (storageError) throw storageError;
-        const { data: matUrl } = supabase.storage.from('materials').getPublicUrl(matPath);
-        
-        // Explicitly NOT 'iec' — a program handout lives in the same
-        // `materials` table as the real IEC Library, but it's scoped to
-        // this one program (via program_id) and should only ever surface
-        // in that program's own details panel, never in the general IEC
-        // Library / Infographics / Articles tabs alongside it.
-        await supabase.from('materials').insert([{
-          program_id: currentProgramId,
-          title: `HANDOUT: ${materialFile.name}`,
-          file_url: matUrl.publicUrl,
-          material_type: 'program_handout'
-        }]);
       }
 
       toast({ title: "Success", description: "Program metrics and structural items synced without cache conflicts." });
@@ -850,7 +747,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
               <th scope="col" className="py-4 pl-6 pr-3 font-semibold">Program</th>
               <th scope="col" className="py-4 px-3 font-semibold">Status</th>
               <th scope="col" className="py-4 px-3 font-semibold">Timeline</th>
-              <th scope="col" className="py-4 px-3 font-semibold">Handouts</th>
               <th scope="col" className="py-4 px-3 font-semibold">Knowledge check</th>
               <th scope="col" className="py-4 pl-3 pr-6 font-semibold text-right">Actions</th>
             </tr>
@@ -860,7 +756,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
               const effectiveStatus = getEffectiveProgramStatus(program);
               const statusBadge = STATUS_BADGE[effectiveStatus] || { label: effectiveStatus, className: 'bg-[#F1F5F9] text-[#475569]' };
               const checkBadge = CHECK_BADGE[checkStatusByProgram[program.id] || 'none'] || CHECK_BADGE.none;
-              const normalHandouts = program.materials?.filter((m: any) => !m.title?.startsWith('CERTIFICATE_TEMPLATE:')) || [];
               const entryCount = program.program_entries?.length || 0;
               const expanded = expandedId === program.id;
               const poster = program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop';
@@ -890,7 +785,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
                       <span className={`inline-block px-[11px] py-[5px] rounded-full font-bold text-xs whitespace-nowrap ${statusBadge.className}`}>{statusBadge.label}</span>
                     </td>
                     <td className="py-3.5 px-3 text-[#334155] whitespace-nowrap">{entryCount} {entryCount === 1 ? 'entry' : 'entries'}</td>
-                    <td className="py-3.5 px-3 text-[#334155]">{normalHandouts.length}</td>
                     <td className="py-3.5 px-3">
                       <span className={`inline-block px-[11px] py-[5px] rounded-full font-bold text-xs ${checkBadge.className}`}>{checkBadge.label}</span>
                     </td>
@@ -926,8 +820,8 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
                   </tr>
                   {expanded && (
                     <tr className="bg-[#F5F6FB]/60">
-                      <td colSpan={6} className="px-6 py-5">
-                        <ProgramDetails program={program} handouts={normalHandouts} onPreview={setPreviewHandout} />
+                      <td colSpan={5} className="px-6 py-5">
+                        <ProgramDetails program={program} />
                       </td>
                     </tr>
                   )}
@@ -943,7 +837,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
             const effectiveStatus = getEffectiveProgramStatus(program);
             const statusBadge = STATUS_BADGE[effectiveStatus] || { label: effectiveStatus, className: 'bg-[#F1F5F9] text-[#475569]' };
             const checkBadge = CHECK_BADGE[checkStatusByProgram[program.id] || 'none'] || CHECK_BADGE.none;
-            const normalHandouts = program.materials?.filter((m: any) => !m.title?.startsWith('CERTIFICATE_TEMPLATE:')) || [];
             const entryCount = program.program_entries?.length || 0;
             const expanded = expandedId === program.id;
             const poster = program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop';
@@ -966,7 +859,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
                       <span className={`px-2.5 py-1 rounded-full font-bold text-xs ${checkBadge.className}`}>Check: {checkBadge.label}</span>
                     </div>
                     <span className="text-[13px] text-[#5B6477]">
-                      {entryCount} timeline {entryCount === 1 ? 'entry' : 'entries'} · {normalHandouts.length} {normalHandouts.length === 1 ? 'handout' : 'handouts'}
+                      {entryCount} timeline {entryCount === 1 ? 'entry' : 'entries'}
                     </span>
                   </div>
                 </div>
@@ -995,7 +888,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-                {expanded && <ProgramDetails program={program} handouts={normalHandouts} onPreview={setPreviewHandout} />}
+                {expanded && <ProgramDetails program={program} />}
               </li>
             );
           })}
@@ -1188,80 +1081,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
                 <Label className="text-[13px] font-semibold ml-1 text-slate-400">Seat capacity limit</Label>
                 <Input type="number" value={formData.capacity} onChange={(e) => setFormData({...formData, capacity: Number(e.target.value)})} className="rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-4 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-[#A5B4FC]" />
               </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[13px] font-semibold ml-1 text-slate-400">Session handouts file</Label>
-
-              {/* Handouts already on this program. Remove marks one; it is
-                  deleted (row and file) when the program is saved. */}
-              {currentHandouts.length > 0 && (
-                <div className="space-y-1.5">
-                  {currentHandouts.map((mat: any) => {
-                    const title = mat.title.replace('HANDOUT: ', '');
-                    const removing = handoutsToRemove.includes(mat.id);
-                    return (
-                      <div
-                        key={mat.id}
-                        className={`h-12 rounded-xl flex items-center gap-2 pl-4 pr-1.5 text-xs ${removing ? 'bg-rose-50' : 'bg-slate-50'}`}
-                      >
-                        <FileText className={`w-4 h-4 shrink-0 ${removing ? 'text-rose-300' : 'text-indigo-500'}`} />
-                        <span className={`truncate flex-1 font-bold ${removing ? 'line-through text-slate-400' : 'text-slate-600'}`}>{title}</span>
-                        {removing ? (
-                          <>
-                            <span className="text-[13px] font-semibold text-rose-500 shrink-0">Removed on save</span>
-                            <button
-                              type="button"
-                              onClick={() => setHandoutsToRemove((previous) => previous.filter((id) => id !== mat.id))}
-                              className="h-9 px-3 rounded-lg text-[13px] font-semibold text-slate-600 hover:bg-white shrink-0"
-                            >
-                              Undo
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setHandoutsToRemove((previous) => [...previous, mat.id])}
-                            className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 shrink-0 transition-colors"
-                            aria-label={`Remove handout ${title}`}
-                            title="Remove handout"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              <div onClick={() => materialRef.current?.click()} className="h-12 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center pl-4 pr-1.5 cursor-pointer border-none text-slate-600 text-xs">
-                <FileText className="w-4 h-4 text-indigo-500 mr-2 shrink-0" />
-                <span className="truncate flex-1 font-bold">
-                  {materialFile ? materialFile.name : currentHandouts.length > 0 ? 'Add another handout...' : 'Choose a handout...'}
-                </span>
-                {materialFile && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMaterialFile(null);
-                      if (materialRef.current) materialRef.current.value = '';
-                    }}
-                    className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 shrink-0 transition-colors"
-                    aria-label="Remove chosen handout file"
-                    title="Remove"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-                <input type="file" ref={materialRef} className="hidden" accept=".pdf,.doc,.docx,image/*" onChange={(e) => setMaterialFile(e.target.files?.[0] || null)} />
-              </div>
-              {handoutsToRemove.length > 0 && (
-                <p className="text-[13px] font-bold text-rose-500 ml-1">
-                  {handoutsToRemove.length} handout{handoutsToRemove.length === 1 ? '' : 's'} will be deleted when you save.
-                </p>
-              )}
             </div>
 
             <div className="space-y-1.5">
@@ -1524,51 +1343,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
       {/* POSTER / PHOTO PREVIEW — same viewer students get */}
       <PhotoViewer state={photoViewer} onChange={setPhotoViewer} />
 
-      {/* HANDOUT PREVIEW — opens in-app first; downloading is a separate,
-          explicit action below, not the default click behavior. */}
-      <Dialog open={!!previewHandout} onOpenChange={(open) => !open && setPreviewHandout(null)}>
-        <DialogContent className="max-w-4xl w-[95vw] h-[85vh] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl flex flex-col">
-          <DialogHeader className="p-5 bg-white border-b border-slate-100 flex flex-row items-center justify-between shrink-0">
-            <DialogTitle className="font-semibold tracking-tighter text-base text-slate-900 truncate pr-8">
-              {previewHandout?.title}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="flex-1 w-full bg-slate-900/50 flex items-center justify-center overflow-hidden relative">
-            {previewHandout && /\.pdf(\?.*)?$/i.test(previewHandout.url) ? (
-              <Suspense
-                fallback={
-                  <div className="flex flex-col items-center justify-center gap-3">
-                    <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
-                    <p className="text-[13px] font-semibold text-slate-400">Loading PDF...</p>
-                  </div>
-                }
-              >
-                <PdfPreview url={previewHandout.url} />
-              </Suspense>
-            ) : previewHandout && /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(previewHandout.url) ? (
-              <ZoomableImage src={previewHandout.url} alt={previewHandout.title} className="p-4" />
-            ) : (
-              <div className="text-center px-6">
-                <HardDrive className="w-16 h-16 text-slate-700 mx-auto" />
-                <p className="font-bold text-slate-400 mt-4 text-xs">Preview not available for this file type</p>
-                <p className="text-slate-500 text-[13px] mt-1">Download it below to open it.</p>
-              </div>
-            )}
-          </div>
-
-          <div className="p-4 bg-white border-t border-slate-100 flex justify-end gap-3 shrink-0">
-            <Button variant="ghost" onClick={() => setPreviewHandout(null)} className="rounded-xl font-bold text-[13px]">Close</Button>
-            <Button
-              onClick={() => previewHandout && downloadHandout(previewHandout.url, previewHandout.title)}
-              className="bg-[#4F46E5] hover:bg-[#4338CA] rounded-xl font-semibold text-[13px] px-6 text-white"
-            >
-              <Download className="w-3.5 h-3.5 mr-2" /> Download
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
     </div>
   );
 }
@@ -1578,47 +1352,14 @@ function FragmentRows({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// The expandable details of one program: description and handouts.
-function ProgramDetails({
-  program,
-  handouts,
-  onPreview,
-}: {
-  program: any;
-  handouts: any[];
-  onPreview: (handout: { url: string; title: string }) => void;
-}) {
+// The expandable details of one program: its description.
+function ProgramDetails({ program }: { program: any }) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-semibold text-[#5B6477]">Description</span>
-        <p className="m-0 text-sm leading-relaxed text-[#334155] whitespace-pre-wrap">
-          {program.content || 'No description yet.'}
-        </p>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-semibold text-[#5B6477]">Handouts</span>
-        {handouts.length > 0 ? (
-          <div className="flex flex-col gap-2">
-            {handouts.map((mat: any) => (
-              <button
-                key={mat.id}
-                type="button"
-                onClick={() => onPreview({ url: mat.file_url, title: mat.title.replace('HANDOUT: ', '') })}
-                className="w-full min-h-[44px] flex items-center justify-between gap-3 px-3.5 py-2.5 bg-white border-[1.5px] border-[#DDE1EE] hover:border-[#A5B4FC] rounded-xl text-left focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
-              >
-                <span className="flex items-center gap-2.5 min-w-0">
-                  <FileText className="w-4 h-4 text-[#4F46E5] shrink-0" aria-hidden="true" />
-                  <span className="text-sm font-semibold text-[#1E1B4B] truncate">{mat.title.replace('HANDOUT: ', '')}</span>
-                </span>
-                <Eye className="w-4 h-4 text-[#5B6477] shrink-0" aria-hidden="true" />
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="m-0 text-sm text-[#5B6477]">No handouts yet.</p>
-        )}
-      </div>
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-semibold text-[#5B6477]">Description</span>
+      <p className="m-0 text-sm leading-relaxed text-[#334155] whitespace-pre-wrap">
+        {program.content || 'No description yet.'}
+      </p>
     </div>
   );
 }
