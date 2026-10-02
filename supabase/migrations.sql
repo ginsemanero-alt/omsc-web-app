@@ -1311,3 +1311,145 @@ $phase28$;
 --                    'Labor Education for Graduating Students: Knowledge Check',
 --                    'Guardians of Dignity: Knowledge Check')
 --    AND NOT EXISTS (SELECT 1 FROM survey_responses r WHERE r.survey_id = s.id);
+
+-- =========================================================
+-- PHASE 29: link IEC materials to programs, record views
+-- =========================================================
+-- program_materials links library IEC materials (materials.program_id IS
+-- NULL) to programs. Handouts (materials.program_id set) are untouched
+-- and can't be linked here. NOTE: this adds a second programs<->materials
+-- path for PostgREST, so every programs->materials embed must name its
+-- FK (materials!materials_program_id_fkey). The code does.
+--
+-- material_views keeps one row per student per material: first_viewed_at
+-- is set once and never changed; last_viewed_at and view_count update on
+-- every open. It is written only through record_material_view(), which
+-- finds the student from the session (auth.uid()). No backfill from
+-- activity_logs, which keeps its own 'view' rows for analytics.
+--
+-- The post-test lock (every linked, non-archived IEC material viewed;
+-- locked while a program has none) is enforced in the UI in this phase
+-- (src/lib/materialProgress.ts). PHASE 30 enforces it in submit_assessment.
+
+CREATE TABLE IF NOT EXISTS program_materials (
+  program_id  integer     NOT NULL REFERENCES programs(id) ON DELETE CASCADE,
+  material_id bigint      NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
+  sort_order  integer     NOT NULL DEFAULT 0,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (program_id, material_id)
+);
+ALTER TABLE program_materials ADD COLUMN IF NOT EXISTS sort_order integer NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS program_materials_material_id_idx
+  ON program_materials (material_id);
+
+-- Only library IEC materials can be linked, never a program's handouts.
+CREATE OR REPLACE FUNCTION program_materials_iec_only() RETURNS trigger
+LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM materials WHERE id = NEW.material_id AND program_id IS NOT NULL) THEN
+    RAISE EXCEPTION 'Only IEC library materials can be linked to a program (material % is a handout).', NEW.material_id;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS program_materials_iec_only ON program_materials;
+CREATE TRIGGER program_materials_iec_only
+  BEFORE INSERT OR UPDATE ON program_materials
+  FOR EACH ROW EXECUTE FUNCTION program_materials_iec_only();
+
+ALTER TABLE program_materials ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS program_materials_select_public ON program_materials;
+CREATE POLICY program_materials_select_public ON program_materials
+  FOR SELECT USING (true);
+DROP POLICY IF EXISTS program_materials_insert_admin ON program_materials;
+CREATE POLICY program_materials_insert_admin ON program_materials
+  FOR INSERT WITH CHECK (is_admin());
+DROP POLICY IF EXISTS program_materials_update_admin ON program_materials;
+CREATE POLICY program_materials_update_admin ON program_materials
+  FOR UPDATE USING (is_admin()) WITH CHECK (is_admin());
+DROP POLICY IF EXISTS program_materials_delete_admin ON program_materials;
+CREATE POLICY program_materials_delete_admin ON program_materials
+  FOR DELETE USING (is_admin());
+
+GRANT SELECT ON program_materials TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON program_materials TO authenticated;
+
+-- The signed-in student's users.id, from the session (auth.uid() ->
+-- auth.users.email -> users). NULL for admins, archived accounts, and
+-- anonymous callers.
+CREATE OR REPLACE FUNCTION current_student_id() RETURNS bigint
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT u.id
+    FROM users u
+    JOIN auth.users au ON lower(au.email) = lower(u.email)
+   WHERE au.id = auth.uid()
+     AND u.role = 'student'
+     AND u.archived_at IS NULL
+   LIMIT 1
+$$;
+
+REVOKE ALL ON FUNCTION current_student_id() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION current_student_id() TO authenticated;
+
+CREATE TABLE IF NOT EXISTS material_views (
+  user_id         bigint      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  material_id     bigint      NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
+  first_viewed_at timestamptz NOT NULL DEFAULT now(),
+  last_viewed_at  timestamptz NOT NULL DEFAULT now(),
+  view_count      integer     NOT NULL DEFAULT 1,
+  PRIMARY KEY (user_id, material_id)
+);
+
+CREATE INDEX IF NOT EXISTS material_views_material_id_idx
+  ON material_views (material_id);
+
+ALTER TABLE material_views ENABLE ROW LEVEL SECURITY;
+
+-- Read: a student sees only their own rows; admins see all. No write
+-- policies: rows are written only by record_material_view().
+DROP POLICY IF EXISTS material_views_select_own_or_admin ON material_views;
+CREATE POLICY material_views_select_own_or_admin ON material_views
+  FOR SELECT USING (is_admin() OR user_id = current_student_id());
+
+REVOKE ALL ON material_views FROM anon;
+REVOKE INSERT, UPDATE, DELETE ON material_views FROM authenticated;
+GRANT SELECT ON material_views TO authenticated;
+
+CREATE OR REPLACE FUNCTION record_material_view(p_material_id bigint) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user bigint := current_student_id();
+BEGIN
+  -- Students only (an admin previewing a material isn't a student view),
+  -- and only real, non-archived materials.
+  IF v_user IS NULL THEN
+    RETURN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM materials WHERE id = p_material_id AND archived_at IS NULL) THEN
+    RETURN;
+  END IF;
+
+  INSERT INTO material_views (user_id, material_id)
+  VALUES (v_user, p_material_id)
+  ON CONFLICT (user_id, material_id) DO UPDATE
+    SET last_viewed_at = now(),
+        view_count     = material_views.view_count + 1;
+END $$;
+
+REVOKE ALL ON FUNCTION record_material_view(bigint) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION record_material_view(bigint) TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
+-- ---------------------------------------------------------
+-- ROLLBACK of PHASE 29 (run only to undo it). Deletes every link and
+-- every recorded view.
+-- ---------------------------------------------------------
+-- DROP FUNCTION IF EXISTS record_material_view(bigint);
+-- DROP TABLE IF EXISTS material_views;
+-- DROP TABLE IF EXISTS program_materials;
+-- DROP FUNCTION IF EXISTS program_materials_iec_only();
+-- DROP FUNCTION IF EXISTS current_student_id();
+-- NOTIFY pgrst, 'reload schema';

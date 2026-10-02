@@ -217,6 +217,9 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
 
   const [programOptions, setProgramOptions] = useState<ProgramOption[]>([]);
   const [materialOptions, setMaterialOptions] = useState<MaterialOption[]>([]);
+  // program id -> how many IEC materials are linked to it (PHASE 29). A
+  // knowledge check can't go live while its program has none.
+  const [linkedCountByProgram, setLinkedCountByProgram] = useState<Record<number, number>>({});
 
   useEffect(() => {
     fetchSurveys();
@@ -231,6 +234,27 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
 
     if (programsRes.data) setProgramOptions(programsRes.data as ProgramOption[]);
     if (materialsRes.data) setMaterialOptions(materialsRes.data as MaterialOption[]);
+    try {
+      setLinkedCountByProgram(await fetchLinkedMaterialCounts());
+    } catch (err) {
+      console.warn("Unable to load linked materials:", err);
+    }
+  }
+
+  // Linked IEC materials per program, counted the way students see them:
+  // not archived, and never handouts (src/lib/materialProgress.ts).
+  async function fetchLinkedMaterialCounts(programId?: number): Promise<Record<number, number>> {
+    let query = supabase.from("program_materials").select("program_id, materials(id, archived_at, program_id)");
+    if (programId != null) query = query.eq("program_id", programId);
+    const { data, error } = await query;
+    if (error) throw error;
+    const counts: Record<number, number> = {};
+    (data || []).forEach((row: any) => {
+      const material = row.materials;
+      if (!material || material.archived_at || material.program_id !== null) return;
+      counts[row.program_id] = (counts[row.program_id] || 0) + 1;
+    });
+    return counts;
   }
 
   async function fetchSurveys() {
@@ -534,6 +558,30 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
         const problem = formPairingProblem(survey.questions_data, survey.questions_data_post);
         if (problem) {
           toast({ title: "Can't Publish Yet", description: problem, variant: "destructive" });
+          return;
+        }
+
+        // Students view the program's linked IEC materials between the
+        // pre-test and the post-test, so a program without any would
+        // leave the post-test locked for good. Checked live, not from the
+        // cached counts, in case links changed in Programs meanwhile.
+        if (survey.program_id == null) {
+          toast({
+            title: "Can't Publish Yet",
+            description: "Choose the program this knowledge check belongs to, then link IEC materials to that program.",
+            variant: "destructive",
+          });
+          return;
+        }
+        const counts = await fetchLinkedMaterialCounts(survey.program_id);
+        setLinkedCountByProgram((prev) => ({ ...prev, [survey.program_id as number]: counts[survey.program_id as number] || 0 }));
+        if (!counts[survey.program_id]) {
+          const programTitle = programOptions.find((p) => p.id === survey.program_id)?.title || "this program";
+          toast({
+            title: "Can't Publish Yet",
+            description: `"${programTitle}" has no linked IEC materials. Link at least one in Programs (Edit program, Linked IEC materials), then publish.`,
+            variant: "destructive",
+          });
           return;
         }
       }
@@ -936,11 +984,25 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
     ).length;
     const showPairs = isKnowledge && viewMode === "pairs";
 
-    // The same checks the builder already runs before publishing, shown
-    // as a list (formPairingProblem), plus whether every item has an
-    // answer marked. Display only: nothing new is enforced here.
+    // The same checks the builder runs before publishing, shown as a
+    // list (formPairingProblem, linked IEC materials), plus whether every
+    // item has an answer marked.
+    const linkedCount = editingSurvey.program_id != null ? linkedCountByProgram[editingSurvey.program_id] || 0 : 0;
     const checklist = isKnowledge
       ? [
+          {
+            ok: linkedCount > 0,
+            label:
+              editingSurvey.program_id == null
+                ? "No program chosen, so no linked IEC materials"
+                : linkedCount > 0
+                  ? `The program has ${linkedCount} linked IEC ${linkedCount === 1 ? "material" : "materials"}`
+                  : "The program has no linked IEC materials",
+            detail:
+              linkedCount > 0
+                ? null
+                : "Link them in Programs (Edit program, Linked IEC materials). Publishing is blocked until then.",
+          },
           {
             ok: filledB.length === 0 || filledA.length === filledB.length,
             label:
@@ -1692,7 +1754,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                     ))}
                   </ul>
                   <p className="m-0 text-xs leading-normal text-[#A5A8E0]">
-                    Publish checks the forms pair up before an assessment goes live.
+                    Publish checks the program has linked IEC materials and the forms pair up before an assessment goes live.
                   </p>
                 </section>
               )}

@@ -42,22 +42,34 @@ interface ContentSummary {
   programs: { id: number; title: string; date: string; date_display?: string | null; time_range?: string | null; status: string; entryCount: number }[];
   materialCount: number;
   categoriesCovered: number;
-  knowledgeChecks: { id: number; title: string; status: string }[];
+  knowledgeChecks: { id: number; title: string; status: string; program_id: number | null }[];
+  // program id -> linked IEC materials students can see (PHASE 29)
+  linkedCountByProgram: Record<number, number>;
 }
 
 // Read-only numbers for the stat cards and the "Needs attention" list.
 async function fetchContentSummary(): Promise<ContentSummary> {
-  const [programsRes, materialsRes, surveysRes] = await Promise.all([
+  const [programsRes, materialsRes, surveysRes, linksRes] = await Promise.all([
     supabase
       .from('programs')
       .select('id, title, date, date_display, time_range, status, program_entries(id)')
       .is('archived_at', null),
     supabase.from('materials').select('id, category').is('program_id', null).is('archived_at', null),
-    supabase.from('surveys').select('id, title, status').eq('type', 'knowledge').is('archived_at', null),
+    supabase.from('surveys').select('id, title, status, program_id').eq('type', 'knowledge').is('archived_at', null),
+    supabase.from('program_materials').select('program_id, materials(id, archived_at, program_id)'),
   ]);
   if (programsRes.error) throw programsRes.error;
   if (materialsRes.error) throw materialsRes.error;
   if (surveysRes.error) throw surveysRes.error;
+  if (linksRes.error) throw linksRes.error;
+
+  // Counted the way students see them: not archived, never handouts.
+  const linkedCountByProgram: Record<number, number> = {};
+  (linksRes.data || []).forEach((row: any) => {
+    const material = row.materials;
+    if (!material || material.archived_at || material.program_id !== null) return;
+    linkedCountByProgram[row.program_id] = (linkedCountByProgram[row.program_id] || 0) + 1;
+  });
 
   const categories = new Set((materialsRes.data || []).map((m: any) => m.category).filter(Boolean));
   return {
@@ -65,6 +77,7 @@ async function fetchContentSummary(): Promise<ContentSummary> {
     materialCount: (materialsRes.data || []).length,
     categoriesCovered: IEC_CATEGORIES.filter((c) => categories.has(c)).length,
     knowledgeChecks: (surveysRes.data || []) as ContentSummary['knowledgeChecks'],
+    linkedCountByProgram,
   };
 }
 
@@ -106,11 +119,23 @@ function ContentManagement() {
     request(setEditProgramRequest, id);
   };
 
-  // "Needs attention": read-only checks on data that already exists. The
-  // "active knowledge check without linked IEC materials" rule is left
-  // out: program-material links don't exist yet.
+  // "Needs attention": read-only checks on data that already exists.
   const attention: AttentionItem[] = [];
   if (summary) {
+    // An active knowledge check whose program has no linked IEC materials
+    // (e.g. they were unlinked or archived after it went live): students
+    // can't unlock its post-test.
+    for (const check of summary.knowledgeChecks.filter((c) => c.status === 'active')) {
+      if (check.program_id == null || summary.linkedCountByProgram[check.program_id]) continue;
+      const program = summary.programs.find((p) => p.id === check.program_id);
+      attention.push({
+        key: `no-materials-${check.id}`,
+        title: `${(program?.title || check.title).trim()} has no linked IEC materials`,
+        detail: 'Its knowledge check is active, but students can’t unlock the post-test until materials are linked.',
+        action: 'Link materials',
+        onClick: () => (program ? openProgram(program.id) : setTab('programs')),
+      });
+    }
     for (const check of summary.knowledgeChecks.filter((c) => c.status === 'draft')) {
       attention.push({
         key: `draft-${check.id}`,

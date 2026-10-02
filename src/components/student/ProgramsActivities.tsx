@@ -9,8 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import {
   Search, Calendar, MapPin, Loader2, Clock, ChevronRight, ZoomIn, FileText, Download, HardDrive,
-  Check, Lock, Image as ImageIcon, PlayCircle, Music, File as FileIcon, X, AlertCircle,
+  Check, Lock, Image as ImageIcon, PlayCircle, Music, File as FileIcon, X, AlertCircle, Link as LinkIcon,
 } from 'lucide-react';
+import {
+  loadMaterialProgress, isMaterialViewed, materialProgressFor, postTestLockFor, linkedMaterialsFor, recordMaterialView,
+  MATERIALS_COMING_SOON, type MaterialProgressData, type MaterialProgress, type LinkedMaterial,
+} from '../../lib/materialProgress';
 import { formatProgramDate } from '../../lib/formatProgramDate';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
 import { logActivity } from '../../lib/activityLog';
@@ -129,23 +133,52 @@ function resolveAssessment(programId: number, surveys: KnowledgeSurveyRow[], res
   return { status: pre && post ? 'completed' : pre ? 'in_progress' : 'not_taken', surveyId: survey.id, pre, post };
 }
 
-// TODO: return true/false once material_views exists (a row per student
-// per material opened). null = not tracked yet, so no "Viewed" badge.
-function getMaterialViewed(_materialId: number): boolean | null {
-  return null;
+// Material progress (PHASE 29, src/lib/materialProgress.ts). Only the
+// program's linked IEC materials count; handouts never do. null = still
+// loading, so no badge or count yet.
+function getMaterialViewed(data: MaterialProgressData | null, materialId: number): boolean | null {
+  return isMaterialViewed(data, materialId);
 }
 
-// TODO: return { viewed, total } once program_materials and material_views
-// exist. null = not tracked yet, so no "2 of 3 viewed" count.
-function getMaterialProgress(_programId: number): { viewed: number; total: number } | null {
-  return null;
+function getMaterialProgress(data: MaterialProgressData | null, programId: number): MaterialProgress | null {
+  return materialProgressFor(data, programId);
 }
 
-// TODO: return a reason string (e.g. "Opens after you view all
-// materials") once post-test gating exists. null = not locked, so the
-// post-test button stays enabled after the pre-test.
-function getPostTestLock(_programId: number): string | null {
-  return null;
+// Why the post-test is locked (e.g. "View 1 more material to unlock"),
+// or null when it's open.
+function getPostTestLock(data: MaterialProgressData | null, programId: number, failed: boolean): string | null {
+  return postTestLockFor(data, programId, failed);
+}
+
+// IEC material type -> icon and label. Older rows without a type fall
+// back to the file extension.
+function linkedMaterialKind(material: LinkedMaterial): { label: string; icon: React.ElementType } {
+  const url = material.file_url || '';
+  if (material.type === 'Video' || /youtube\.com|youtu\.be/.test(url)) return { label: 'Video', icon: PlayCircle };
+  if (material.type === 'Audio') return { label: 'Audio', icon: Music };
+  if (material.type === 'Link') return { label: 'Link', icon: LinkIcon };
+  if (material.type === 'Image') return { label: 'Image', icon: ImageIcon };
+  if (material.type === 'PDF') return { label: 'PDF document', icon: FileText };
+  return handoutKind(url);
+}
+
+function isYouTube(url: string): boolean {
+  return /youtube\.com|youtu\.be/.test(url);
+}
+
+function youTubeEmbedUrl(url: string): string {
+  const match = url.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/);
+  return match ? `https://www.youtube.com/embed/${match[1]}` : url;
+}
+
+interface PreviewFile {
+  url: string;
+  title: string;
+  // Set for linked IEC materials: opening or downloading one counts as
+  // viewed. Handouts leave it unset.
+  materialId?: number;
+  type?: string | null;
+  poster?: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -208,9 +241,8 @@ interface Step {
   state: StepState;
 }
 
-function stepsFor(programId: number, assessment: ProgramAssessment): Step[] {
-  const materials = getMaterialProgress(programId);
-  const lock = getPostTestLock(programId);
+function stepsFor(assessment: ProgramAssessment, materials: MaterialProgress | null, lock: string | null): Step[] {
+  const materialsDone = !!materials && materials.total > 0 && materials.viewed >= materials.total;
 
   switch (assessment.status) {
     case 'coming_soon':
@@ -230,12 +262,16 @@ function stepsFor(programId: number, assessment: ProgramAssessment): Step[] {
         { label: 'Pre-test submitted', sub: longDate(assessment.pre!.created_at), state: 'done' },
         {
           label: 'Read the materials',
-          sub: materials ? `${materials.viewed} of ${materials.total} viewed` : 'Open them below',
-          state: 'now',
+          sub: !materials
+            ? 'Open them below'
+            : materials.total === 0
+              ? 'Coming soon'
+              : `${materials.viewed} of ${materials.total} viewed`,
+          state: materialsDone ? 'done' : 'now',
         },
         lock
-          ? { label: 'Post-test', sub: lock, state: 'locked' }
-          : { label: 'Post-test', sub: 'Open now', state: 'next' },
+          ? { label: 'Post-test', sub: 'Opens after the materials', state: 'locked' }
+          : { label: 'Post-test', sub: 'Open now', state: 'now' },
       ];
     case 'completed':
       return [
@@ -261,7 +297,9 @@ export default function ProgramsActivities() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [photoViewer, setPhotoViewer] = useState<PhotoViewerState | null>(null);
-  const [previewHandout, setPreviewHandout] = useState<{ url: string; title: string } | null>(null);
+  const [previewHandout, setPreviewHandout] = useState<PreviewFile | null>(null);
+  const [materialData, setMaterialData] = useState<MaterialProgressData | null>(null);
+  const [materialLoadFailed, setMaterialLoadFailed] = useState(false);
 
   const [knowledgeSurveys, setKnowledgeSurveys] = useState<KnowledgeSurveyRow[]>([]);
   const [responses, setResponses] = useState<ResponseRow[]>([]);
@@ -394,6 +432,68 @@ export default function ProgramsActivities() {
     fetchAssessments();
   }, [authLoading, fetchAssessments]);
 
+  // Linked IEC materials for every program, and which ones this student
+  // has opened (PHASE 29). Two queries total.
+  const fetchMaterialProgress = useCallback(async () => {
+    setMaterialLoadFailed(false);
+    try {
+      setMaterialData(await loadMaterialProgress(dbUserId ?? null));
+    } catch (err) {
+      console.error('Error fetching material progress:', err);
+      setMaterialLoadFailed(true);
+    }
+  }, [dbUserId]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    fetchMaterialProgress();
+  }, [authLoading, fetchMaterialProgress]);
+
+  // Opening a linked IEC material counts as viewing it: record it, then
+  // mark it viewed here so the count and the post-test lock update at
+  // once. Every open is recorded (the server keeps first_viewed_at).
+  const openLinkedMaterial = (material: LinkedMaterial) => {
+    if (material.type === 'Link' && material.file_url) {
+      window.open(material.file_url, '_blank', 'noopener,noreferrer');
+    } else {
+      setPreviewHandout({
+        url: material.file_url || '',
+        title: material.title,
+        materialId: material.id,
+        type: material.type,
+        poster: material.image_url,
+      });
+    }
+    markMaterialViewed(material);
+  };
+
+  const markMaterialViewed = (material: { id: number; title: string; category?: string | null }) => {
+    if (!user) return;
+    recordMaterialView(material.id).then((recorded) => {
+      if (!recorded) return;
+      setMaterialData((prev) =>
+        prev && !prev.viewedIds.has(material.id)
+          ? { ...prev, viewedIds: new Set(prev.viewedIds).add(material.id) }
+          : prev
+      );
+    });
+    // Same once-per-session activity row the IEC Library writes, for
+    // the aggregate material exposure in Analytics.
+    const flagKey = `logged_material_view_${material.id}`;
+    if (user.email && !sessionStorage.getItem(flagKey)) {
+      sessionStorage.setItem(flagKey, '1');
+      logActivity({
+        actorEmail: user.email,
+        actorName: authUserName,
+        action: 'view',
+        entityType: 'material',
+        entityId: material.id,
+        entityLabel: material.title,
+        details: `category: ${material.category ?? 'Unknown'}`,
+      });
+    }
+  };
+
   const filteredPrograms = programs
     .filter((p) => {
       const matchesSearch = p.title?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -444,10 +544,12 @@ export default function ProgramsActivities() {
     };
     const assessment = resolveAssessment(program.id, knowledgeSurveys, responses);
     const assessmentBadge = ASSESSMENT_BADGE[assessment.status];
-    const steps = stepsFor(program.id, assessment);
-    const postTestLock = getPostTestLock(program.id);
+    const materialsLoading = !materialData && !materialLoadFailed;
+    const postTestLock = getPostTestLock(materialData, program.id, materialLoadFailed);
+    const materialProgress = getMaterialProgress(materialData, program.id);
+    const steps = stepsFor(assessment, materialProgress, postTestLock);
+    const linkedMaterials = linkedMaterialsFor(materialData, program.id);
     const handouts = program.materials?.filter((m) => !m.title?.startsWith('CERTIFICATE_TEMPLATE:')) || [];
-    const materialProgress = getMaterialProgress(program.id);
     const entries = program.program_entries || [];
     const photos = collectProgramPhotos(program);
     const poster = program.image_url || FALLBACK_POSTER;
@@ -550,7 +652,7 @@ export default function ProgramsActivities() {
                 Your pre- and post-test
               </h2>
 
-              {assessmentLoading ? (
+              {assessmentLoading || materialsLoading ? (
                 <p className="m-0 flex items-center gap-2 text-sm text-[#C7C9F2]">
                   <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Checking your progress...
                 </p>
@@ -636,13 +738,19 @@ export default function ProgramsActivities() {
                   {assessment.status === 'in_progress' && (
                     <>
                       {postTestLock ? (
-                        <button
-                          type="button"
-                          disabled
-                          className="h-[52px] rounded-2xl bg-white/[0.12] text-[#C7C9F2] font-bold text-[15px] cursor-not-allowed"
-                        >
-                          Post-test locked
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            disabled
+                            aria-describedby="post-test-lock-reason"
+                            className="h-[52px] rounded-2xl bg-white/[0.12] text-[#C7C9F2] font-bold text-[15px] cursor-not-allowed flex items-center justify-center gap-2"
+                          >
+                            <Lock className="w-4 h-4" aria-hidden="true" /> Take post-test
+                          </button>
+                          <p id="post-test-lock-reason" className="m-0 -mt-1 text-sm font-semibold text-[#FBBF24]">
+                            {postTestLock}
+                          </p>
+                        </>
                       ) : (
                         <button
                           type="button"
@@ -671,7 +779,8 @@ export default function ProgramsActivities() {
               )}
             </section>
 
-            {/* Materials */}
+            {/* Materials: the linked IEC materials (these unlock the
+                post-test), then the session handouts (these don't count). */}
             <section
               aria-labelledby="materials-heading"
               className="rounded-[36px] lg:rounded-[40px] bg-white dark:bg-slate-900 p-5 sm:p-[26px] flex flex-col gap-3.5"
@@ -680,40 +789,65 @@ export default function ProgramsActivities() {
                 <h2 id="materials-heading" className="m-0 font-bold text-lg text-[#1E1B4B] dark:text-white">
                   Materials
                 </h2>
-                {materialProgress && (
-                  <span className="text-sm font-semibold text-[#92400E] dark:text-amber-200">
+                {materialProgress && materialProgress.total > 0 && (
+                  <span
+                    className={`text-sm font-semibold ${
+                      materialProgress.viewed >= materialProgress.total
+                        ? 'text-[#065F46] dark:text-emerald-300'
+                        : 'text-[#92400E] dark:text-amber-200'
+                    }`}
+                  >
                     {materialProgress.viewed} of {materialProgress.total} viewed
                   </span>
                 )}
               </div>
 
-              {handouts.length === 0 ? (
-                <p className="m-0 px-1 text-sm text-[#5B6477] dark:text-slate-400">No materials for this program yet.</p>
+              {materialsLoading ? (
+                <p className="m-0 px-1 flex items-center gap-2 text-sm text-[#5B6477] dark:text-slate-400">
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Loading materials...
+                </p>
+              ) : materialLoadFailed ? (
+                <div className="flex flex-col gap-2 px-1">
+                  <p className="m-0 flex gap-2 text-sm text-[#5B6477] dark:text-slate-400">
+                    <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+                    Couldn't load the program's materials.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={fetchMaterialProgress}
+                    className={`self-start h-11 px-4 rounded-xl bg-[#F5F6FB] dark:bg-slate-800 hover:bg-[#E0E7FF] text-[#4338CA] dark:text-indigo-200 font-bold text-sm ${focusRing}`}
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : linkedMaterials.length === 0 ? (
+                <p className="m-0 px-1 text-sm text-[#5B6477] dark:text-slate-400">{MATERIALS_COMING_SOON}</p>
               ) : (
                 <ul className="m-0 p-0 list-none flex flex-col gap-2.5">
-                  {handouts.map((material) => {
-                    const kind = handoutKind(material.file_url);
+                  {linkedMaterials.map((material) => {
+                    const kind = linkedMaterialKind(material);
                     const KindIcon = kind.icon;
-                    const viewed = getMaterialViewed(material.id);
-                    const title = handoutTitle(material);
+                    const viewed = getMaterialViewed(materialData, material.id);
                     return (
                       <li key={material.id} className="rounded-[20px] bg-[#F5F6FB] dark:bg-slate-800 p-3 flex gap-3 items-center">
                         <span className="w-[46px] h-[46px] shrink-0 rounded-[14px] bg-[#E0E7FF] dark:bg-indigo-500/20 text-[#4338CA] dark:text-indigo-200 flex items-center justify-center" aria-hidden="true">
                           <KindIcon className="w-5 h-5" />
                         </span>
                         <span className="grow flex flex-col gap-0.5 min-w-0">
-                          <span className="font-bold text-sm text-[#1E1B4B] dark:text-white break-words">{title}</span>
-                          <span className="text-xs text-[#5B6477] dark:text-slate-400">{kind.label}</span>
-                        </span>
-                        {viewed === true && (
-                          <span className="hidden sm:inline px-2.5 py-1 rounded-full bg-[#D1FAE5] text-[#065F46] font-bold text-xs shrink-0">
-                            Viewed
+                          <span className="font-bold text-sm text-[#1E1B4B] dark:text-white break-words">{material.title}</span>
+                          <span className="text-xs text-[#5B6477] dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            {kind.label}
+                            {viewed === true && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#D1FAE5] text-[#065F46] dark:bg-emerald-500/20 dark:text-emerald-200 font-bold">
+                                <Check className="w-3 h-3" strokeWidth={3} aria-hidden="true" /> Viewed
+                              </span>
+                            )}
                           </span>
-                        )}
+                        </span>
                         <button
                           type="button"
-                          onClick={() => setPreviewHandout({ url: material.file_url, title })}
-                          aria-label={`Open ${title}`}
+                          onClick={() => openLinkedMaterial(material)}
+                          aria-label={`Open ${material.title}`}
                           className={`h-11 px-4 shrink-0 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[13px] transition-colors ${focusRing}`}
                         >
                           Open
@@ -722,6 +856,41 @@ export default function ProgramsActivities() {
                     );
                   })}
                 </ul>
+              )}
+
+              {handouts.length > 0 && (
+                <div className="flex flex-col gap-2.5 pt-1">
+                  <div className="px-1">
+                    <h3 className="m-0 font-bold text-[15px] text-[#1E1B4B] dark:text-white">Session handouts</h3>
+                    <p className="m-0 text-xs text-[#5B6477] dark:text-slate-400">Extra reading from the session. These don't unlock the post-test.</p>
+                  </div>
+                  <ul className="m-0 p-0 list-none flex flex-col gap-2.5">
+                    {handouts.map((material) => {
+                      const kind = handoutKind(material.file_url);
+                      const KindIcon = kind.icon;
+                      const title = handoutTitle(material);
+                      return (
+                        <li key={material.id} className="rounded-[20px] bg-[#F5F6FB] dark:bg-slate-800 p-3 flex gap-3 items-center">
+                          <span className="w-[46px] h-[46px] shrink-0 rounded-[14px] bg-white dark:bg-slate-700 text-[#5B6477] dark:text-slate-300 flex items-center justify-center" aria-hidden="true">
+                            <KindIcon className="w-5 h-5" />
+                          </span>
+                          <span className="grow flex flex-col gap-0.5 min-w-0">
+                            <span className="font-bold text-sm text-[#1E1B4B] dark:text-white break-words">{title}</span>
+                            <span className="text-xs text-[#5B6477] dark:text-slate-400">{kind.label}</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewHandout({ url: material.file_url, title })}
+                            aria-label={`Open ${title}`}
+                            className={`h-11 px-4 shrink-0 rounded-xl bg-white dark:bg-slate-700 hover:bg-[#E0E7FF] text-[#4338CA] dark:text-indigo-200 font-bold text-[13px] transition-colors ${focusRing}`}
+                          >
+                            Open
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
               )}
             </section>
           </aside>
@@ -794,7 +963,27 @@ export default function ProgramsActivities() {
           </DialogHeader>
 
           <div className="flex-1 w-full bg-slate-900/50 flex items-center justify-center overflow-hidden relative">
-            {previewHandout && /\.pdf(\?.*)?$/i.test(previewHandout.url) ? (
+            {previewHandout && isYouTube(previewHandout.url) ? (
+              <iframe
+                src={youTubeEmbedUrl(previewHandout.url)}
+                className="w-full aspect-video max-w-4xl rounded-2xl border-none"
+                allowFullScreen
+                title={previewHandout.title}
+              />
+            ) : previewHandout && (previewHandout.type === 'Video' || /\.(mp4|webm|mov)(\?.*)?$/i.test(previewHandout.url)) ? (
+              <video
+                src={previewHandout.url}
+                poster={previewHandout.poster || undefined}
+                controls
+                playsInline
+                className="w-full max-h-full max-w-4xl rounded-2xl"
+              />
+            ) : previewHandout && (previewHandout.type === 'Audio' || /\.(mp3|wav|m4a|ogg)(\?.*)?$/i.test(previewHandout.url)) ? (
+              <div className="p-8 w-full max-w-xl flex flex-col items-center gap-6">
+                <Music className="w-12 h-12 text-indigo-300" aria-hidden="true" />
+                <audio src={previewHandout.url} controls className="w-full" />
+              </div>
+            ) : previewHandout && /\.pdf(\?.*)?$/i.test(previewHandout.url) ? (
               <Suspense
                 fallback={
                   <div className="flex flex-col items-center justify-center gap-3">
@@ -820,12 +1009,23 @@ export default function ProgramsActivities() {
 
           <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 shrink-0">
             <Button variant="ghost" onClick={() => setPreviewHandout(null)} className="h-11 rounded-xl font-bold text-sm">Close</Button>
-            <Button
-              onClick={() => previewHandout && downloadHandout(previewHandout.url, previewHandout.title)}
-              className="h-11 bg-[#4F46E5] hover:bg-[#4338CA] rounded-xl font-bold text-sm px-6 text-white"
-            >
-              <Download className="w-4 h-4 mr-2" /> Download
-            </Button>
+            {/* Downloading from an open preview is part of the same open:
+                the view was recorded when it opened. A YouTube video has
+                nothing to download. */}
+            {previewHandout && !isYouTube(previewHandout.url) && (
+              <Button
+                onClick={() => {
+                  downloadHandout(previewHandout.url, previewHandout.title);
+                  if (previewHandout.materialId) {
+                    supabase.rpc('increment_material_downloads', { material_id: previewHandout.materialId })
+                      .then(({ error }) => { if (error) console.warn('Download count update failed:', error.message); });
+                  }
+                }}
+                className="h-11 bg-[#4F46E5] hover:bg-[#4338CA] rounded-xl font-bold text-sm px-6 text-white"
+              >
+                <Download className="w-4 h-4 mr-2" /> Download
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

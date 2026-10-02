@@ -37,6 +37,10 @@ const PROGRAMS_PAGE_SIZE = 8;
 const focusRing =
   'focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]';
 
+// An IEC library material that can be linked to a program (PHASE 29).
+// Handouts (materials.program_id set) are never offered.
+type IecMaterialOption = { id: number; title: string; type: string | null; category: string | null };
+
 // A request from the Content page header (New program) or its
 // "Needs attention" list (open one program). n changes on every request.
 type OpenRequest = { n: number; id?: number };
@@ -67,6 +71,13 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
 
   const [programs, setPrograms] = useState<any[]>([]);
   const [checkStatusByProgram, setCheckStatusByProgram] = useState<Record<number, string>>({});
+  // Linked IEC materials (PHASE 29): program id -> material ids, in the
+  // order students see them. Students must view all of them before the
+  // post-test opens.
+  const [linksByProgram, setLinksByProgram] = useState<Record<number, number[]>>({});
+  const [iecMaterials, setIecMaterials] = useState<IecMaterialOption[]>([]);
+  const [linkedMaterialIds, setLinkedMaterialIds] = useState<number[]>([]);
+  const [materialSearch, setMaterialSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -212,6 +223,18 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
       const byProgram: Record<number, string> = {};
       (checks || []).forEach((c: any) => { byProgram[c.program_id] = c.status; });
       setCheckStatusByProgram(byProgram);
+
+      // Linked IEC materials, and the library they're picked from.
+      const [linkRes, materialRes] = await Promise.all([
+        supabase.from('program_materials').select('program_id, material_id, sort_order').order('sort_order', { ascending: true }),
+        supabase.from('materials').select('id, title, type, category').is('program_id', null).is('archived_at', null).order('title', { ascending: true }),
+      ]);
+      if (linkRes.error) throw linkRes.error;
+      if (materialRes.error) throw materialRes.error;
+      const links: Record<number, number[]> = {};
+      (linkRes.data || []).forEach((l: any) => { (links[l.program_id] ||= []).push(Number(l.material_id)); });
+      setLinksByProgram(links);
+      setIecMaterials((materialRes.data || []) as IecMaterialOption[]);
       onChanged?.();
     } catch (err: any) {
       toast({ variant: "destructive", title: "Fetch Error", description: err.message });
@@ -238,6 +261,44 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
     handleOpenDialog(program);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editRequest, programs]);
+
+  // Linked materials that students actually see: archived ones don't
+  // count (same rule as src/lib/materialProgress.ts).
+  const iecMaterialById = useMemo(() => new Map(iecMaterials.map((m) => [m.id, m])), [iecMaterials]);
+  const activeLinksFor = (programId: number | null) =>
+    programId == null ? [] : (linksByProgram[programId] || []).filter((id) => iecMaterialById.has(id));
+
+  // Writes the dialog's linked materials: removes unticked links, then
+  // upserts the rest in order. Links to archived materials are left alone,
+  // so restoring the material restores its link.
+  const saveMaterialLinks = async (programId: number) => {
+    const removed = activeLinksFor(programId).filter((id) => !linkedMaterialIds.includes(id));
+    if (removed.length > 0) {
+      const { error } = await supabase
+        .from('program_materials')
+        .delete()
+        .eq('program_id', programId)
+        .in('material_id', removed);
+      if (error) throw error;
+    }
+    if (linkedMaterialIds.length > 0) {
+      const { error } = await supabase
+        .from('program_materials')
+        .upsert(
+          linkedMaterialIds.map((materialId, index) => ({ program_id: programId, material_id: materialId, sort_order: index })),
+          { onConflict: 'program_id,material_id' }
+        );
+      if (error) throw error;
+    }
+  };
+
+  const moveLinkedMaterial = (index: number, delta: number) => {
+    const target = index + delta;
+    if (target < 0 || target >= linkedMaterialIds.length) return;
+    const next = [...linkedMaterialIds];
+    [next[index], next[target]] = [next[target], next[index]];
+    setLinkedMaterialIds(next);
+  };
 
   const formatTo12h = (time24: string) => {
     if (!time24) return "";
@@ -279,6 +340,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
           .slice()
           .sort((a: any, b: any) => a.sort_order - b.sort_order)
       );
+      setLinkedMaterialIds(activeLinksFor(program.id));
 
       if (program.time_range && program.time_range.includes(' - ')) {
         const parts = program.time_range.split(' - ');
@@ -294,10 +356,12 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
       });
       setCoverPhotos([]);
       setEntries([]);
+      setLinkedMaterialIds([]);
       setStartTime('08:00');
       setEndTime('17:00');
     }
     setShowStudentPreview(false);
+    setMaterialSearch('');
     resetEntryForm();
     setIsDialogOpen(true);
   };
@@ -397,6 +461,8 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
         setEditingId(currentProgramId);
         logActivity({ actorEmail: user?.email, actorName: userName, action: 'create', entityType: 'program', entityId: currentProgramId, entityLabel: payload.title });
       }
+
+      if (currentProgramId) await saveMaterialLinks(currentProgramId);
 
       // Draft entries added before the program existed. Students are
       // notified only after this, so a new program first appears with
@@ -747,6 +813,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
               <th scope="col" className="py-4 pl-6 pr-3 font-semibold">Program</th>
               <th scope="col" className="py-4 px-3 font-semibold">Status</th>
               <th scope="col" className="py-4 px-3 font-semibold">Timeline</th>
+              <th scope="col" className="py-4 px-3 font-semibold">Linked materials</th>
               <th scope="col" className="py-4 px-3 font-semibold">Knowledge check</th>
               <th scope="col" className="py-4 pl-3 pr-6 font-semibold text-right">Actions</th>
             </tr>
@@ -757,6 +824,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
               const statusBadge = STATUS_BADGE[effectiveStatus] || { label: effectiveStatus, className: 'bg-[#F1F5F9] text-[#475569]' };
               const checkBadge = CHECK_BADGE[checkStatusByProgram[program.id] || 'none'] || CHECK_BADGE.none;
               const entryCount = program.program_entries?.length || 0;
+              const linkedCount = activeLinksFor(program.id).length;
               const expanded = expandedId === program.id;
               const poster = program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop';
 
@@ -785,6 +853,13 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
                       <span className={`inline-block px-[11px] py-[5px] rounded-full font-bold text-xs whitespace-nowrap ${statusBadge.className}`}>{statusBadge.label}</span>
                     </td>
                     <td className="py-3.5 px-3 text-[#334155] whitespace-nowrap">{entryCount} {entryCount === 1 ? 'entry' : 'entries'}</td>
+                    <td className="py-3.5 px-3 whitespace-nowrap">
+                      {linkedCount > 0 ? (
+                        <span className="text-[#334155]">{linkedCount}</span>
+                      ) : (
+                        <span className="inline-block px-[11px] py-[5px] rounded-full font-bold text-xs bg-[#FEF3C7] text-[#92400E]">None</span>
+                      )}
+                    </td>
                     <td className="py-3.5 px-3">
                       <span className={`inline-block px-[11px] py-[5px] rounded-full font-bold text-xs ${checkBadge.className}`}>{checkBadge.label}</span>
                     </td>
@@ -820,7 +895,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
                   </tr>
                   {expanded && (
                     <tr className="bg-[#F5F6FB]/60">
-                      <td colSpan={5} className="px-6 py-5">
+                      <td colSpan={6} className="px-6 py-5">
                         <ProgramDetails program={program} />
                       </td>
                     </tr>
@@ -838,6 +913,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
             const statusBadge = STATUS_BADGE[effectiveStatus] || { label: effectiveStatus, className: 'bg-[#F1F5F9] text-[#475569]' };
             const checkBadge = CHECK_BADGE[checkStatusByProgram[program.id] || 'none'] || CHECK_BADGE.none;
             const entryCount = program.program_entries?.length || 0;
+            const linkedCount = activeLinksFor(program.id).length;
             const expanded = expandedId === program.id;
             const poster = program.image_url || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop';
             return (
@@ -859,7 +935,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
                       <span className={`px-2.5 py-1 rounded-full font-bold text-xs ${checkBadge.className}`}>Check: {checkBadge.label}</span>
                     </div>
                     <span className="text-[13px] text-[#5B6477]">
-                      {entryCount} timeline {entryCount === 1 ? 'entry' : 'entries'}
+                      {entryCount} timeline {entryCount === 1 ? 'entry' : 'entries'} · {linkedCount === 0 ? 'no' : linkedCount} linked {linkedCount === 1 ? 'material' : 'materials'}
                     </span>
                   </div>
                 </div>
@@ -1100,6 +1176,114 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
                 <option value="ongoing">Ongoing</option>
                 <option value="completed">Completed</option>
               </select>
+            </div>
+
+            {/* LINKED IEC MATERIALS (PHASE 29): IEC library materials only,
+                never handouts. Students view all of them between the
+                pre-test and the post-test; the post-test stays locked
+                until they have. Saved with the program. */}
+            <div className="space-y-3 border-t border-slate-100 pt-5">
+              <div>
+                <Label id="linked-materials-label" className="text-[13px] font-semibold ml-1 text-slate-400">Linked IEC materials</Label>
+                <p className="text-[13px] text-slate-400 ml-1 mt-0.5">
+                  Students view these after the pre-test. The post-test opens once they've viewed all of them. A knowledge check can't be activated until its program has at least one.
+                </p>
+              </div>
+
+              {linkedMaterialIds.length === 0 ? (
+                <p className="m-0 rounded-xl bg-[#FEF3C7] text-[#92400E] px-4 py-3 text-[13px] font-semibold">
+                  No materials linked yet. Students will see "Materials for this program are coming soon." and can't take the post-test.
+                </p>
+              ) : (
+                <ol aria-labelledby="linked-materials-label" className="m-0 p-0 list-none space-y-2">
+                  {linkedMaterialIds.map((materialId, index) => {
+                    const material = iecMaterialById.get(materialId);
+                    const title = material?.title || `Material #${materialId}`;
+                    return (
+                      <li key={materialId} className="flex items-center gap-2 rounded-xl bg-[#F5F6FB] pl-3 pr-1.5 py-1.5">
+                        <span className="w-6 shrink-0 text-xs font-bold text-[#5B6477]">{index + 1}.</span>
+                        <span className="flex-1 min-w-0 flex flex-col">
+                          <span className="text-sm font-bold text-[#1E1B4B] break-words">{title}</span>
+                          <span className="text-xs text-[#5B6477]">{[material?.type, material?.category].filter(Boolean).join(' · ')}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => moveLinkedMaterial(index, -1)}
+                          disabled={index === 0}
+                          aria-label={`Move ${title} up`}
+                          className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center text-[#1E1B4B] hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent ${focusRing}`}
+                        >
+                          <ChevronUp className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveLinkedMaterial(index, 1)}
+                          disabled={index === linkedMaterialIds.length - 1}
+                          aria-label={`Move ${title} down`}
+                          className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center text-[#1E1B4B] hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent ${focusRing}`}
+                        >
+                          <ChevronDown className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLinkedMaterialIds(linkedMaterialIds.filter((id) => id !== materialId))}
+                          aria-label={`Unlink ${title}`}
+                          className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center text-rose-500 hover:bg-rose-50 ${focusRing}`}
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+
+              {(() => {
+                const query = materialSearch.trim().toLowerCase();
+                const available = iecMaterials.filter(
+                  (m) =>
+                    !linkedMaterialIds.includes(m.id) &&
+                    (!query || m.title.toLowerCase().includes(query) || (m.category || '').toLowerCase().includes(query))
+                );
+                return (
+                  <div className="rounded-xl border-[1.5px] border-[#DDE1EE] p-2 space-y-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" aria-hidden="true" />
+                      <Input
+                        value={materialSearch}
+                        onChange={(e) => setMaterialSearch(e.target.value)}
+                        placeholder="Search the IEC library to link a material"
+                        aria-label="Search IEC materials to link"
+                        className="pl-9 h-11 rounded-lg bg-[#F5F6FB] border-none text-sm focus-visible:ring-2 focus-visible:ring-[#A5B4FC]"
+                      />
+                    </div>
+                    {available.length === 0 ? (
+                      <p className="m-0 px-2 py-2 text-[13px] text-slate-400">
+                        {iecMaterials.length === 0 ? 'The IEC library has no materials yet.' : query ? 'No materials match your search.' : 'Every IEC material is already linked.'}
+                      </p>
+                    ) : (
+                      <ul className="m-0 p-0 list-none max-h-56 overflow-y-auto">
+                        {available.map((material) => (
+                          <li key={material.id}>
+                            <button
+                              type="button"
+                              onClick={() => setLinkedMaterialIds([...linkedMaterialIds, material.id])}
+                              aria-label={`Link ${material.title}`}
+                              className={`w-full min-h-[44px] flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-[#EEF0FA] ${focusRing}`}
+                            >
+                              <Plus className="w-4 h-4 shrink-0 text-[#4F46E5]" aria-hidden="true" />
+                              <span className="flex-1 min-w-0 flex flex-col">
+                                <span className="text-sm font-semibold text-[#1E1B4B] break-words">{material.title}</span>
+                                <span className="text-xs text-[#5B6477]">{[material.type, material.category].filter(Boolean).join(' · ')}</span>
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* ENTRIES (TIMELINE) — available while creating too: a new

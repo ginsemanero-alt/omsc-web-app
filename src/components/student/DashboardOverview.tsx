@@ -5,6 +5,9 @@ import { supabase } from '../../lib/supabase';
 import { campusVisibilityFilter } from '../../lib/campuses';
 import { YEAR_LEVELS, normalizeYearLevel } from '../../lib/programs';
 import { useAuth } from '../../hooks/useAuth';
+import {
+  loadMaterialProgress, materialProgressFor, type MaterialProgress, type MaterialProgressData,
+} from '../../lib/materialProgress';
 
 const PROGRAMS_PATH = '/student/programs';
 const ASSESSMENT_PATH = '/student/survey';
@@ -55,6 +58,8 @@ interface ProgramProgress {
   surveyId: number | null;
   pre: ResponseRow | null;
   post: ResponseRow | null;
+  // Linked IEC materials viewed (PHASE 29). null when it couldn't load.
+  materials: MaterialProgress | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -69,12 +74,17 @@ function academicYearLabel(today: Date = new Date()): string {
   return `Academic year ${start} to ${start + 1}`;
 }
 
-// TODO: return { viewed, total } once program_materials and material_views
-// exist (along with post-test gating). Until then there is no reliable
-// per-program material count, so this returns null and the UI shows the
-// generic "Read the materials" copy instead of "2 of 3 materials viewed".
-function getMaterialProgress(_programId: number): { viewed: number; total: number } | null {
-  return null;
+// The program's linked IEC materials the student has viewed (PHASE 29,
+// src/lib/materialProgress.ts). null when it couldn't be loaded: the UI
+// then shows the generic "Read the materials" copy.
+function getMaterialProgress(item: ProgramProgress): MaterialProgress | null {
+  return item.materials;
+}
+
+// Every linked material viewed, so the post-test is open.
+function materialsDone(item: ProgramProgress): boolean {
+  const materials = getMaterialProgress(item);
+  return !!materials && materials.total > 0 && materials.viewed >= materials.total;
 }
 
 function scoreText(response: ResponseRow | null): string {
@@ -156,7 +166,7 @@ function progressPercent(item: ProgramProgress): number {
     case 'in_progress': {
       // Pre-test done is one third of the way (pre-test, materials,
       // post-test); material views fill the middle third once tracked.
-      const materials = getMaterialProgress(item.program.id);
+      const materials = getMaterialProgress(item);
       const materialShare = materials && materials.total > 0 ? materials.viewed / materials.total : 0;
       return Math.round(((1 + materialShare) / 3) * 100);
     }
@@ -172,10 +182,11 @@ function detailText(item: ProgramProgress): string {
     case 'not_taken':
       return 'Take the pre-test before you read the materials.';
     case 'in_progress': {
-      const materials = getMaterialProgress(item.program.id);
-      return materials
-        ? `Pre-test done. ${materials.viewed} of ${materials.total} materials viewed.`
-        : 'Pre-test done. Read the materials, then take the post-test.';
+      const materials = getMaterialProgress(item);
+      if (!materials) return 'Pre-test done. Read the materials, then take the post-test.';
+      if (materials.total === 0) return 'Pre-test done. Materials are coming soon.';
+      if (materialsDone(item)) return `Pre-test done. ${materials.total} of ${materials.total} materials viewed. Post-test open.`;
+      return `Pre-test done. ${materials.viewed} of ${materials.total} materials viewed.`;
     }
     case 'completed':
       // Scores only ever appear here, once the post-test exists.
@@ -187,6 +198,7 @@ function detailText(item: ProgramProgress): string {
 // results, or to the program itself (?program=<id>).
 function ctaPath(item: ProgramProgress): string {
   if (item.status === 'not_taken' && item.surveyId != null) return `${ASSESSMENT_PATH}?survey=${item.surveyId}`;
+  if (item.status === 'in_progress' && item.surveyId != null && materialsDone(item)) return `${ASSESSMENT_PATH}?survey=${item.surveyId}`;
   if (item.status === 'completed') return `${ASSESSMENT_PATH}?view=results`;
   return `${PROGRAMS_PATH}?program=${item.program.id}`;
 }
@@ -198,7 +210,8 @@ function ctaPath(item: ProgramProgress): string {
 function buildProgress(
   programs: ProgramRow[],
   surveys: KnowledgeSurveyRow[],
-  responses: ResponseRow[]
+  responses: ResponseRow[],
+  materialData: MaterialProgressData | null
 ): ProgramProgress[] {
   const surveysByProgram = new Map<number, KnowledgeSurveyRow[]>();
   for (const survey of surveys) {
@@ -223,7 +236,7 @@ function buildProgress(
     const survey = answered || programSurveys.find((s) => s.status === 'active') || null;
 
     if (!survey) {
-      return { program, status: 'coming_soon', surveyId: null, pre: null, post: null };
+      return { program, status: 'coming_soon', surveyId: null, pre: null, post: null, materials: materialProgressFor(materialData, program.id) };
     }
 
     const attempts = responsesBySurvey.get(survey.id) || [];
@@ -235,7 +248,7 @@ function buildProgress(
     const post = latest('post');
 
     const status: ProgramStatus = pre && post ? 'completed' : pre ? 'in_progress' : 'not_taken';
-    return { program, status, surveyId: survey.id, pre, post };
+    return { program, status, surveyId: survey.id, pre, post, materials: materialProgressFor(materialData, program.id) };
   });
 }
 
@@ -344,7 +357,7 @@ export default function DashboardOverview() {
       const scoped = <T extends { or: (filters: string) => T }>(query: T) =>
         viewerCampus ? query.or(campusVisibilityFilter(viewerCampus)) : query;
 
-      const [programRes, surveyRes, responseRes, notificationRes] = await Promise.all([
+      const [programRes, surveyRes, responseRes, notificationRes, materialData] = await Promise.all([
         scoped(supabase.from('programs').select('id, title, image_url, created_at').is('archived_at', null)).order(
           'created_at',
           { ascending: false }
@@ -369,6 +382,12 @@ export default function DashboardOverview() {
               .order('created_at', { ascending: false })
               .limit(3)
           : Promise.resolve({ data: [] as NotificationRow[], error: null }),
+        // Material progress is extra detail: if it fails, the dashboard
+        // still loads with the generic "Read the materials" copy.
+        loadMaterialProgress(dbUserId ?? null).catch((error) => {
+          console.warn('Unable to load material progress:', error);
+          return null;
+        }),
       ]);
 
       // supabase queries resolve (not reject) on error, so Promise.all won't
@@ -382,7 +401,8 @@ export default function DashboardOverview() {
         buildProgress(
           (programRes.data || []) as ProgramRow[],
           (surveyRes.data || []) as KnowledgeSurveyRow[],
-          (responseRes.data || []) as ResponseRow[]
+          (responseRes.data || []) as ResponseRow[],
+          materialData
         )
       );
       setNotifications((notificationRes.data || []) as NotificationRow[]);
@@ -472,19 +492,26 @@ export default function DashboardOverview() {
   let continueNote = '';
   let continueCta = { label: '', path: PROGRAMS_PATH };
   if (continueItem?.status === 'in_progress') {
-    const materials = getMaterialProgress(continueItem.program.id);
+    const materials = getMaterialProgress(continueItem);
+    const done = materialsDone(continueItem);
     continueSteps = [
       { label: 'Pre-test', sub: `Submitted ${shortDate(continueItem.pre!.created_at)}`, state: 'done' },
       {
         label: 'Read the materials',
-        sub: materials ? `${materials.viewed} of ${materials.total} viewed` : 'Open the program materials',
-        state: 'now',
+        sub: !materials
+          ? 'Open the program materials'
+          : materials.total === 0
+            ? 'Coming soon'
+            : `${materials.viewed} of ${materials.total} viewed`,
+        state: done ? 'done' : 'now',
       },
-      { label: 'Post-test', sub: 'After the materials', state: 'next' },
+      { label: 'Post-test', sub: done ? 'Open now' : 'After the materials', state: done ? 'now' : 'next' },
       { label: 'Your results', sub: 'Pre-test and post-test scores', state: 'next' },
     ];
-    continueNote = 'Then take the post-test in Assessment.';
-    continueCta = { label: 'Open the materials', path: ctaPath(continueItem) };
+    continueNote = done ? 'All materials viewed. The post-test is open.' : 'Then take the post-test in Assessment.';
+    continueCta = done
+      ? { label: 'Take post-test', path: ctaPath(continueItem) }
+      : { label: 'Open the materials', path: ctaPath(continueItem) };
   } else if (continueItem?.status === 'not_taken') {
     continueSteps = [
       { label: 'Pre-test', sub: 'Take it before the materials', state: 'now' },

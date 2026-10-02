@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
+import { loadMaterialProgress, postTestLockFor, type MaterialProgressData } from '../../lib/materialProgress';
 
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -27,6 +28,7 @@ import {
   BookOpen,
   Calendar,
   Check,
+  Lock,
 } from 'lucide-react';
 
 interface Question {
@@ -61,6 +63,9 @@ interface Survey {
   // student's next submission will become — the database assigns it
   // (set_attempt_type trigger); this is only for labels.
   next_attempt?: AttemptType | null;
+  // Why the post-test can't be taken yet (PHASE 29: the program's linked
+  // IEC materials aren't all viewed), or null when it can.
+  post_test_lock?: string | null;
 }
 
 type AttemptType = 'pre' | 'post';
@@ -354,6 +359,20 @@ export default function QuizzesSurveys() {
         .select('survey_id, attempt_type')
         .eq('user_id', dbUserId);
 
+      // Post-test lock: same rule as the program page and dashboard
+      // (src/lib/materialProgress.ts). If it can't be checked, the lock
+      // holds with a "couldn't check" reason.
+      // TODO(PHASE 1a): submit_assessment must enforce this lock on the
+      // server too; until then it is enforced only here in the UI.
+      let materialData: MaterialProgressData | null = null;
+      let materialLoadFailed = false;
+      try {
+        materialData = await loadMaterialProgress(dbUserId);
+      } catch (error) {
+        console.warn('Unable to check material progress:', error);
+        materialLoadFailed = true;
+      }
+
       if (responsesError) {
         console.warn('Unable to fetch completed surveys:', responsesError);
       }
@@ -383,7 +402,10 @@ export default function QuizzesSurveys() {
               ? 'post'
               : null;
 
-          return { ...survey, is_completed: next_attempt === null, next_attempt };
+          const post_test_lock =
+            next_attempt === 'post' ? postTestLockFor(materialData, survey.program_id, materialLoadFailed) : null;
+
+          return { ...survey, is_completed: next_attempt === null, next_attempt, post_test_lock };
         }) || [];
 
       setSurveys(formattedSurveys);
@@ -471,6 +493,10 @@ export default function QuizzesSurveys() {
    */
   const handleStartSurvey = (survey: Survey) => {
     if (survey.is_completed) return;
+    if (survey.post_test_lock) {
+      toast({ title: 'Post-test locked', description: survey.post_test_lock });
+      return;
+    }
 
     setActiveForm(formForAttempt(survey));
     setActiveSurveyId(survey.id);
@@ -1245,7 +1271,9 @@ export default function QuizzesSurveys() {
                         {survey.is_completed
                           ? 'Completed'
                           : survey.next_attempt === 'post'
-                            ? 'Post-Test Ready'
+                            ? survey.post_test_lock
+                              ? 'Post-Test Locked'
+                              : 'Post-Test Ready'
                             : 'Available'}
                       </span>
 
@@ -1288,7 +1316,8 @@ export default function QuizzesSurveys() {
 
                   <Button
                     onClick={() => handleStartSurvey(survey)}
-                    disabled={survey.is_completed}
+                    disabled={survey.is_completed || !!survey.post_test_lock}
+                    aria-describedby={survey.post_test_lock ? `lock-reason-${survey.id}` : undefined}
                     className={`
                       mt-7 w-full h-12 sm:h-14
                       rounded-2xl
@@ -1296,12 +1325,13 @@ export default function QuizzesSurveys() {
                       text-[10px] sm:text-xs
                       tracking-widest
                       ${
-                        survey.is_completed
+                        survey.is_completed || survey.post_test_lock
                           ? 'bg-slate-100 dark:bg-slate-800 text-slate-400'
                           : 'bg-indigo-600 text-white hover:bg-indigo-700'
                       }
                     `}
                   >
+                    {survey.post_test_lock && <Lock className="w-4 h-4 mr-2" aria-hidden="true" />}
                     {survey.is_completed
                       ? 'Already Submitted'
                       : survey.next_attempt === 'pre'
@@ -1310,6 +1340,26 @@ export default function QuizzesSurveys() {
                           ? 'Take Post-Test'
                           : 'Start Assessment'}
                   </Button>
+
+                  {survey.post_test_lock && (
+                    <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
+                      <p
+                        id={`lock-reason-${survey.id}`}
+                        className="m-0 text-sm font-semibold text-amber-700 dark:text-amber-300"
+                      >
+                        {survey.post_test_lock}
+                      </p>
+                      {survey.program_id != null && (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/student/programs?program=${survey.program_id}`)}
+                          className="min-h-[44px] px-1 text-sm font-bold text-indigo-700 dark:text-indigo-300 hover:underline rounded-lg focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC] text-left"
+                        >
+                          Open the materials
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </Card>
               ))}
             </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, Suspense, lazy } from 'react';
+import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../componen
 import { PaginationControls } from '../../components/ui/pagination-controls';
 import { usePagination } from '../../hooks/usePagination';
 import { logActivity } from '../../lib/activityLog';
+import { recordMaterialView } from '../../lib/materialProgress';
 import { useAuth } from '../../hooks/useAuth';
 import { IEC_CATEGORIES } from '../../lib/iecCategories';
 import { fetchViewerCampus, campusVisibilityFilter } from '../../lib/campuses';
@@ -124,10 +125,28 @@ export default function IECMaterials() {
     });
   };
 
+  // Every open (preview, download, play, open link) counts toward the
+  // student's material progress (PHASE 29): one material_views update per
+  // open, unlike the once-per-session activity log above. The server
+  // ignores admins and signed-out visitors.
+  const markOpened = (item: any) => {
+    logMaterialView(item);
+    if (user) recordMaterialView(item.id);
+  };
+
+  // Inline audio: pausing and resuming is the same open, so only the
+  // first play on this page counts.
+  const playedAudio = useRef(new Set<number>());
+  const markAudioPlayed = (item: any) => {
+    if (playedAudio.current.has(item.id)) return;
+    playedAudio.current.add(item.id);
+    markOpened(item);
+  };
+
   const handlePreview = (item: any) => {
     setPreviewItem(item);
     setIsPreviewOpen(true);
-    logMaterialView(item);
+    markOpened(item);
   };
 
   const downloadFile = async (url: string, filename: string) => {
@@ -336,7 +355,7 @@ export default function IECMaterials() {
                     {item.description && (
                       <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">{item.description}</p>
                     )}
-                    <Button onClick={() => { downloadFile(item.file_url, item.title); incrementDownloadCount(item.id); logMaterialView(item); }} className="w-full h-12 bg-slate-900 hover:bg-indigo-600 rounded-2xl font-black uppercase text-xs">
+                    <Button onClick={() => { downloadFile(item.file_url, item.title); incrementDownloadCount(item.id); markOpened(item); }} className="w-full h-12 bg-slate-900 hover:bg-indigo-600 rounded-2xl font-black uppercase text-xs">
                       <Download className="w-4 h-4 mr-2" /> Download
                     </Button>
                   </div>
@@ -405,7 +424,7 @@ export default function IECMaterials() {
                       {item.description && (
                         <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3">{item.description}</p>
                       )}
-                      <audio src={item.file_url} controls className="w-full h-10" />
+                      <audio src={item.file_url} controls className="w-full h-10" onPlay={() => markAudioPlayed(item)} />
                     </div>
                   </div>
                 </Card>
@@ -431,6 +450,7 @@ export default function IECMaterials() {
                       )}
                       <a
                         href={item.file_url}
+                        onClick={() => markOpened(item)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 h-11 px-6 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs text-white transition-colors"
@@ -527,7 +547,9 @@ export default function IECMaterials() {
           <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 shrink-0">
             <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="rounded-xl font-bold uppercase text-[10px]">Close</Button>
             
-            {/* Hide download for streaming/external-link types — a YouTube
+            {/* Downloading from an open preview is part of the same open, so it
+                isn't recorded as a second view (handlePreview already did).
+                Hide download for streaming/external-link types — a YouTube
                 embed and a plain external Link have nothing to actually
                 download, but a self-hosted Video upload does. */}
             {previewItem?.type !== 'Link' &&

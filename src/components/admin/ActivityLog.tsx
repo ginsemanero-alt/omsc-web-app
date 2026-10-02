@@ -53,9 +53,15 @@ export default function ActivityLog() {
     setLoading(true);
     // Latest 200 — this is an audit trail, not a paginated report; older
     // entries stay in the DB and are queryable directly if ever needed.
+    //
+    // Privacy: students' material views (action 'view' on a material) are
+    // never listed here. They stay in the table for Analytics, which only
+    // shows material exposure in aggregate. Rows missing either field are
+    // kept (neq alone would drop NULLs).
     const { data, error } = await supabase
       .from('activity_logs')
       .select('*')
+      .or('action.neq.view,entity_type.neq.material,action.is.null,entity_type.is.null')
       .order('created_at', { ascending: false })
       .limit(200);
 
@@ -107,7 +113,7 @@ export default function ActivityLog() {
           Activity <span className="text-indigo-600">Log</span>
         </h1>
         <p className="text-slate-400 font-bold uppercase text-[9px] tracking-widest">
-          Admin actions across Programs, Materials, Surveys, and Users &middot; student login/logout/registration/browsing
+          Admin actions across Programs, Materials, Surveys, and Users &middot; student login/logout/registration/browsing (which students open which materials is never listed)
         </p>
       </div>
 
