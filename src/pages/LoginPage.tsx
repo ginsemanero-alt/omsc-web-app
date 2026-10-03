@@ -33,6 +33,12 @@ import { motionDelay, prefersReducedMotion, replayAnimation } from '../lib/motio
 // How long the sign in <-> register switch plays before the view changes.
 const VIEW_SWITCH_MS = 200;
 
+// Email verification: seconds before "Resend code" can be used again
+// (Supabase allows one resend a minute), and how long a code stays valid
+// (Authentication > Providers > Email > Email OTP Expiration).
+const RESEND_SECONDS = 60;
+const CODE_LIFETIME_MS = 60 * 60 * 1000;
+
 type UserRole = 'student' | 'admin';
 
 interface LoginPageProps {
@@ -131,6 +137,25 @@ export default function LoginPage({
   const [resetEmailSent, setResetEmailSent] = useState(false);
 
   const { toast } = useToast();
+
+  /* ---------------- Email verification (6-digit code) ---------------- */
+
+  // Set while the "Enter the code" step is showing: the email the code
+  // went to. Supabase Auth sends the code ("Confirm signup" email) after
+  // registration, and again when an unverified student tries to sign in.
+  const [verifyEmail, setVerifyEmail] = useState<string | null>(null);
+  const [code, setCode] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [verifyMessage, setVerifyMessage] = useState<{ tone: 'error' | 'info'; text: string } | null>(null);
+  const [resendIn, setResendIn] = useState(0);
+  const [resending, setResending] = useState(false);
+  // When the latest code was sent, to tell an expired code from a
+  // mistyped one (Supabase reports both the same way).
+  const codeSentAtRef = useRef(0);
+  // The password just typed, kept only in memory so a verified student is
+  // signed in straight away. Cleared when the step closes.
+  const pendingPasswordRef = useRef('');
+  const codeInputRef = useRef<HTMLInputElement>(null);
 
   /* ---------------- Motion only (no effect on the form logic) ---------------- */
 
@@ -289,6 +314,197 @@ export default function LoginPage({
     if (registerStep > 1) setRegisterStep((registerStep - 1) as RegisterStep);
   };
 
+  // Everything after a successful /api/login: the Supabase session, the
+  // sign-in log, display values, the welcome toast, and onLogin (which
+  // also follows ?redirect=).
+  const completeSignIn = async (data: any) => {
+    /*
+     * Set Supabase Auth session.
+     * Backend should return access_token and refresh_token.
+     */
+    if (data.access_token && data.refresh_token) {
+      const { error: sessionError } =
+        await supabase.auth.setSession({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+        });
+
+      if (sessionError) {
+        console.warn(
+          'Could not set Supabase session:',
+          sessionError.message
+        );
+      } else {
+        console.log(
+          'Supabase Auth session set successfully.'
+        );
+
+        // Admin logins already show up in the Activity Log via
+        // every admin action's actorEmail — this is specifically
+        // for tracking student sign-ins, which nothing else logs.
+        if (data.role === 'student') {
+          logActivity({
+            actorEmail: data.email,
+            actorName: data.name,
+            action: 'login',
+            entityType: 'user',
+            entityId: data.id,
+            entityLabel: data.name,
+          });
+        }
+      }
+    } else {
+      console.warn(
+        'No tokens returned from server. Supabase session not set.'
+      );
+    }
+
+    /*
+     * localStorage keeps only display values. Auth state and
+     * role are never read from localStorage — they come from
+     * the verified Supabase session via useAuth.
+     */
+    localStorage.setItem('userName', data.name);
+
+    localStorage.setItem(
+      'userCampus',
+      data.campus || 'San Jose Campus'
+    );
+
+    toast({
+      title: 'WELCOME',
+      description: `Access Granted! Hello, ${data.name}.`,
+      // Green for a successful student sign-in, matching every other
+      // success state in the app (ACCOUNT CREATED above, and the
+      // admin logout toast) — admin sign-in keeps the indigo brand
+      // color it always had.
+      className:
+        data.role === 'student'
+          ? 'bg-emerald-600 text-white font-black rounded-2xl shadow-2xl'
+          : 'bg-indigo-600 text-white font-black rounded-2xl shadow-2xl',
+    });
+
+    onLogin(data.role, data.name);
+  };
+
+  // Opens the "Enter the code" step for this email. codeSent is false
+  // when the server couldn't send one (e.g. one was sent under a minute
+  // ago); the student can then use "Resend code".
+  const openVerifyStep = (targetEmail: string, passwordValue: string, codeSent: boolean) => {
+    pendingPasswordRef.current = passwordValue;
+    codeSentAtRef.current = Date.now();
+    setVerifyEmail(targetEmail);
+    setCode('');
+    setVerifyMessage(
+      codeSent
+        ? null
+        : { tone: 'info', text: "We couldn't send a new code just now. Wait a moment, then tap Resend code." }
+    );
+    setResendIn(RESEND_SECONDS);
+  };
+
+  const closeVerifyStep = () => {
+    pendingPasswordRef.current = '';
+    setVerifyEmail(null);
+    setCode('');
+    setVerifyMessage(null);
+    setIsRegister(false);
+  };
+
+  // Resend countdown.
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const timer = window.setTimeout(() => setResendIn((seconds) => seconds - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendIn]);
+
+  useEffect(() => {
+    if (verifyEmail) codeInputRef.current?.focus();
+  }, [verifyEmail]);
+
+  const handleVerifyCode = async (value: string = code) => {
+    if (!verifyEmail || verifying) return;
+    if (!/^\d{6}$/.test(value)) {
+      setVerifyMessage({ tone: 'error', text: 'Enter all 6 digits of the code.' });
+      return;
+    }
+
+    setVerifying(true);
+    setVerifyMessage(null);
+
+    const { error } = await supabase.auth.verifyOtp({ email: verifyEmail, token: value, type: 'signup' });
+
+    if (error) {
+      setVerifying(false);
+      setCode('');
+      codeInputRef.current?.focus();
+      const status = (error as any).status;
+      if (status === 429 || /rate limit|too many/i.test(error.message)) {
+        setVerifyMessage({ tone: 'error', text: 'Too many tries. Wait a few minutes, then try again or tap Resend code for a new one.' });
+      } else if (Date.now() - codeSentAtRef.current > CODE_LIFETIME_MS) {
+        setVerifyMessage({ tone: 'error', text: 'This code has expired. Tap Resend code and use the new one.' });
+      } else {
+        setVerifyMessage({ tone: 'error', text: "That code isn't right. Check the 6 digits in the latest email and try again." });
+      }
+      return;
+    }
+
+    // Verified. verifyOtp starts a Supabase session on its own; signing
+    // in through /api/login as well sets up everything else the app needs.
+    const verifiedEmail = verifyEmail;
+    const passwordValue = pendingPasswordRef.current;
+    try {
+      if (!passwordValue) throw new Error('no password');
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: verifiedEmail, password: passwordValue }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message);
+      pendingPasswordRef.current = '';
+      setVerifyEmail(null);
+      await completeSignIn(data);
+    } catch {
+      await supabase.auth.signOut();
+      setEmail(verifiedEmail);
+      closeVerifyStep();
+      toast({
+        title: 'EMAIL VERIFIED',
+        description: 'Your email is verified. Sign in with your password to continue.',
+        className: 'bg-emerald-600 text-white font-black rounded-2xl shadow-xl',
+      });
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (!verifyEmail || resendIn > 0 || resending) return;
+    setResending(true);
+    const { error } = await supabase.auth.resend({ type: 'signup', email: verifyEmail });
+    setResending(false);
+
+    if (error) {
+      const status = (error as any).status;
+      setVerifyMessage({
+        tone: 'error',
+        text:
+          status === 429 || /rate limit|seconds/i.test(error.message)
+            ? 'A code was sent very recently. Please wait a minute before asking for another.'
+            : "We couldn't send a new code. Check your connection and try again.",
+      });
+      setResendIn(RESEND_SECONDS);
+      return;
+    }
+
+    codeSentAtRef.current = Date.now();
+    setCode('');
+    setVerifyMessage({ tone: 'info', text: `A new code is on its way to ${verifyEmail}. Only the newest code works.` });
+    setResendIn(RESEND_SECONDS);
+    codeInputRef.current?.focus();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -344,85 +560,30 @@ export default function LoginPage({
 
       if (response.ok) {
         if (isRegister) {
-          toast({
-            title: 'ACCOUNT CREATED',
-            description:
-              'Your student account has been successfully created. You can now sign in.',
-            className:
-              'bg-emerald-600 text-white font-black rounded-2xl shadow-xl',
-          });
-
-          resetRegistrationFields();
-          setIsRegister(false);
-        } else {
-          /*
-           * Set Supabase Auth session.
-           * Backend should return access_token and refresh_token.
-           */
-          if (data.access_token && data.refresh_token) {
-            const { error: sessionError } =
-              await supabase.auth.setSession({
-                access_token: data.access_token,
-                refresh_token: data.refresh_token,
-              });
-
-            if (sessionError) {
-              console.warn(
-                'Could not set Supabase session:',
-                sessionError.message
-              );
-            } else {
-              console.log(
-                'Supabase Auth session set successfully.'
-              );
-
-              // Admin logins already show up in the Activity Log via
-              // every admin action's actorEmail — this is specifically
-              // for tracking student sign-ins, which nothing else logs.
-              if (data.role === 'student') {
-                logActivity({
-                  actorEmail: data.email,
-                  actorName: data.name,
-                  action: 'login',
-                  entityType: 'user',
-                  entityId: data.id,
-                  entityLabel: data.name,
-                });
-              }
-            }
+          if (data.verificationRequired) {
+            // Account created; it opens once the emailed code is entered.
+            const registeredEmail = data.email || email.trim().toLowerCase();
+            const registeredPassword = password;
+            resetRegistrationFields();
+            openVerifyStep(registeredEmail, registeredPassword, data.codeSent !== false);
           } else {
-            console.warn(
-              'No tokens returned from server. Supabase session not set.'
-            );
+            toast({
+              title: 'ACCOUNT CREATED',
+              description:
+                'Your student account has been successfully created. You can now sign in.',
+              className:
+                'bg-emerald-600 text-white font-black rounded-2xl shadow-xl',
+            });
+
+            resetRegistrationFields();
+            setIsRegister(false);
           }
-
-          /*
-           * localStorage keeps only display values. Auth state and
-           * role are never read from localStorage — they come from
-           * the verified Supabase session via useAuth.
-           */
-          localStorage.setItem('userName', data.name);
-
-          localStorage.setItem(
-            'userCampus',
-            data.campus || 'San Jose Campus'
-          );
-
-          toast({
-            title: 'WELCOME',
-            description: `Access Granted! Hello, ${data.name}.`,
-            // Green for a successful student sign-in, matching every other
-            // success state in the app (ACCOUNT CREATED above, and the
-            // admin logout toast) — admin sign-in keeps the indigo brand
-            // color it always had.
-            className:
-              data.role === 'student'
-                ? 'bg-emerald-600 text-white font-black rounded-2xl shadow-2xl'
-                : 'bg-indigo-600 text-white font-black rounded-2xl shadow-2xl',
-          });
-
-          onLogin(data.role, data.name);
+        } else {
+          await completeSignIn(data);
         }
+      } else if (!isRegister && data.code === 'email_not_confirmed') {
+        // Registered but not verified yet: a fresh code was sent.
+        openVerifyStep(data.email || email.trim().toLowerCase(), password, data.codeSent !== false);
       } else {
         if (!isRegister) setSignInShakes((count) => count + 1);
         toast({
@@ -639,49 +800,53 @@ export default function LoginPage({
      SIGN IN
   ========================================================= */
 
+  // Desktop left panel shared by sign in and email verification.
+  const portalPanel = (
+    <aside className={`hidden lg:flex lg:w-[46%] xl:w-[600px] shrink-0 flex-col justify-between rounded-[56px] bg-[#1E1B4B] text-white px-10 xl:px-[52px] py-12 ${panelEntranceClass}`}>
+      {brand('lg')}
+
+      <div className="flex flex-col gap-[22px]">
+        <span className="self-start px-3.5 py-[7px] rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-[13px]">
+          Student portal
+        </span>
+        <h1 className="m-0 font-bricolage font-extrabold text-[44px] xl:text-[54px] leading-[1.02] tracking-[-1.5px]">
+          Every guidance program, open to every student.
+        </h1>
+        <p className="m-0 text-lg leading-[1.55] text-[#C7C9F2] max-w-[460px]">
+          Browse the Center's programs, read their materials, and see how much you have learned.
+        </p>
+        <div className="flex flex-col gap-3.5 mt-1.5">
+          {[
+            { icon: CalendarDays, text: 'Revisit programs even if you missed the event' },
+            { icon: BookOpen, text: 'Infographics, videos, and guides from the Center' },
+            { icon: SquareCheckBig, text: 'Short pre- and post-tests that show your progress' },
+          ].map(({ icon: Icon, text }) => (
+            <div key={text} className="flex items-center gap-3.5">
+              <span className="w-10 h-10 rounded-[14px] bg-white/10 flex items-center justify-center shrink-0">
+                <Icon className="w-5 h-5 text-[#FBBF24]" aria-hidden="true" />
+              </span>
+              <span className="text-base leading-[1.4]">{text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3.5">
+        <div className="flex gap-2">
+          {['San Jose', 'Labangan', 'Murtha'].map((campusName) => (
+            <span key={campusName} className="px-3.5 py-[7px] rounded-full bg-white/10 text-[13px] font-semibold">
+              {campusName}
+            </span>
+          ))}
+        </div>
+        <p className="m-0 text-[13px] leading-[1.5] text-[#A5A8E0] max-w-[470px]">{SYSTEM_TITLE}</p>
+      </div>
+    </aside>
+  );
+
   const signIn = (
     <div className={`min-h-screen w-full font-figtree text-[#1E293B] bg-[#1E1B4B] lg:bg-[#EEF0FA] flex flex-col lg:flex-row lg:p-6 lg:gap-6 ${viewMotionClass}`}>
-      {/* DESKTOP PANEL */}
-      <aside className={`hidden lg:flex lg:w-[46%] xl:w-[600px] shrink-0 flex-col justify-between rounded-[56px] bg-[#1E1B4B] text-white px-10 xl:px-[52px] py-12 ${panelEntranceClass}`}>
-        {brand('lg')}
-
-        <div className="flex flex-col gap-[22px]">
-          <span className="self-start px-3.5 py-[7px] rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-[13px]">
-            Student portal
-          </span>
-          <h1 className="m-0 font-bricolage font-extrabold text-[44px] xl:text-[54px] leading-[1.02] tracking-[-1.5px]">
-            Every guidance program, open to every student.
-          </h1>
-          <p className="m-0 text-lg leading-[1.55] text-[#C7C9F2] max-w-[460px]">
-            Browse the Center's programs, read their materials, and see how much you have learned.
-          </p>
-          <div className="flex flex-col gap-3.5 mt-1.5">
-            {[
-              { icon: CalendarDays, text: 'Revisit programs even if you missed the event' },
-              { icon: BookOpen, text: 'Infographics, videos, and guides from the Center' },
-              { icon: SquareCheckBig, text: 'Short pre- and post-tests that show your progress' },
-            ].map(({ icon: Icon, text }) => (
-              <div key={text} className="flex items-center gap-3.5">
-                <span className="w-10 h-10 rounded-[14px] bg-white/10 flex items-center justify-center shrink-0">
-                  <Icon className="w-5 h-5 text-[#FBBF24]" aria-hidden="true" />
-                </span>
-                <span className="text-base leading-[1.4]">{text}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3.5">
-          <div className="flex gap-2">
-            {['San Jose', 'Labangan', 'Murtha'].map((campusName) => (
-              <span key={campusName} className="px-3.5 py-[7px] rounded-full bg-white/10 text-[13px] font-semibold">
-                {campusName}
-              </span>
-            ))}
-          </div>
-          <p className="m-0 text-[13px] leading-[1.5] text-[#A5A8E0] max-w-[470px]">{SYSTEM_TITLE}</p>
-        </div>
-      </aside>
+      {portalPanel}
 
       {/* MOBILE HEADER */}
       <header className={`lg:hidden px-6 pt-7 pb-[34px] text-white flex flex-col gap-[18px] ${panelEntranceClass}`}>
@@ -810,6 +975,134 @@ export default function LoginPage({
 
           <p className="lg:hidden mt-auto mb-0 text-center text-xs leading-[1.5] text-[#6B7285]">
             Web-Based Guidance Program Dissemination and Awareness Assessment System
+          </p>
+        </form>
+      </main>
+    </div>
+  );
+
+  /* =========================================================
+     VERIFY EMAIL (6-digit code)
+  ========================================================= */
+
+  const verifyView = (
+    <div className="min-h-screen w-full font-figtree text-[#1E293B] bg-[#1E1B4B] lg:bg-[#EEF0FA] flex flex-col lg:flex-row lg:p-6 lg:gap-6 motion-view-enter">
+      {portalPanel}
+
+      {/* MOBILE HEADER */}
+      <header className="lg:hidden px-6 pt-7 pb-[34px] text-white flex flex-col gap-[18px]">
+        {brand('sm')}
+        <span className="self-start px-3 py-1.5 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-xs">
+          One last step
+        </span>
+        <h1 className="m-0 font-bricolage font-extrabold text-[34px] leading-[1.04] tracking-[-1px]">
+          Check your email
+        </h1>
+      </header>
+
+      {/* CARD */}
+      <main className="flex-grow flex flex-col bg-white rounded-t-[40px] px-6 pt-[26px] pb-7 lg:bg-transparent lg:rounded-none lg:p-0 lg:items-center lg:justify-center">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleVerifyCode();
+          }}
+          noValidate
+          className="w-full max-w-md mx-auto flex flex-grow lg:flex-grow-0 flex-col gap-[22px] lg:gap-[26px] lg:w-[460px] lg:max-w-none lg:rounded-[40px] lg:bg-white lg:px-11 lg:pt-11 lg:pb-10 lg:shadow-[0_24px_60px_-24px_rgba(30,27,75,0.25)]"
+        >
+          <span className="w-14 h-14 rounded-[18px] bg-[#EEF0FA] flex items-center justify-center" aria-hidden="true">
+            <Mail className="w-7 h-7 text-[#4338CA]" />
+          </span>
+
+          <div className="flex flex-col gap-2">
+            <h2 className="hidden lg:block m-0 font-bricolage font-extrabold text-4xl tracking-[-0.8px] text-[#1E1B4B]">
+              Check your email
+            </h2>
+            <p className="m-0 text-[15px] leading-[1.55] text-[#5B6477]">
+              We sent a 6-digit code to{' '}
+              <strong className="font-bold text-[#1E1B4B] [overflow-wrap:anywhere]">{verifyEmail}</strong>. Enter it below to
+              verify your email and open your account.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label htmlFor="verify-code" className="font-semibold text-sm">Verification code</label>
+            <input
+              ref={codeInputRef}
+              id="verify-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={code}
+              onChange={(e) => {
+                // Digits only, so a pasted "123 456" or "Code: 123456" works.
+                const digits = e.target.value.replace(/\D/g, '').slice(0, 6);
+                setCode(digits);
+                if (verifyMessage?.tone === 'error') setVerifyMessage(null);
+                if (digits.length === 6) handleVerifyCode(digits);
+              }}
+              onPaste={(e) => {
+                const digits = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+                if (!digits) return;
+                e.preventDefault();
+                setCode(digits);
+                if (digits.length === 6) handleVerifyCode(digits);
+              }}
+              disabled={verifying}
+              placeholder="000000"
+              aria-describedby="verify-message verify-help"
+              aria-invalid={verifyMessage?.tone === 'error'}
+              className={`${inputBase} h-16 rounded-2xl text-center font-bricolage font-extrabold !text-[30px] tracking-[0.45em] pl-[0.45em] placeholder:text-[#C0C5D6] disabled:opacity-70 ${
+                verifyMessage?.tone === 'error' ? 'border-rose-400' : ''
+              }`}
+            />
+            <p
+              id="verify-message"
+              role={verifyMessage?.tone === 'error' ? 'alert' : 'status'}
+              className={`m-0 min-h-[20px] text-sm font-semibold ${
+                verifyMessage?.tone === 'error' ? 'text-rose-600' : 'text-[#4338CA]'
+              }`}
+            >
+              {verifyMessage?.text}
+            </p>
+          </div>
+
+          <button
+            type="submit"
+            disabled={verifying || code.length !== 6}
+            className={`h-14 rounded-[18px] bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors motion-press disabled:opacity-60 ${focusRing}`}
+          >
+            {verifying && <Loader2 className="w-5 h-5 animate-spin" />}
+            {verifying ? 'Verifying...' : 'Verify and continue'}
+          </button>
+
+          <div id="verify-help" className="flex flex-col gap-3 p-4 lg:px-5 rounded-[20px] bg-[#EEF0FA]">
+            <p className="m-0 text-sm leading-[1.55] text-[#334155]">
+              <strong className="text-[#1E1B4B]">No email?</strong> Check your spam or junk folder. It comes from
+              guidance@webguidance.online. The code expires in 1 hour.
+            </p>
+            <button
+              type="button"
+              onClick={handleResendCode}
+              disabled={resendIn > 0 || resending}
+              className={`self-start min-h-[44px] px-1 rounded-lg font-bold text-sm text-[#4338CA] hover:text-[#312E81] hover:underline disabled:text-[#5B6477] disabled:no-underline disabled:cursor-not-allowed flex items-center gap-2 ${focusRing}`}
+            >
+              {resending && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+              {resendIn > 0 ? `Resend code in ${resendIn}s` : resending ? 'Sending...' : 'Resend code'}
+            </button>
+          </div>
+
+          <p className="m-0 text-center text-[15px] text-[#5B6477]">
+            Wrong email?{' '}
+            <button
+              type="button"
+              onClick={closeVerifyStep}
+              className={`font-bold text-[#4338CA] hover:text-[#312E81] hover:underline rounded ${focusRing}`}
+            >
+              Back to sign in
+            </button>
           </p>
         </form>
       </main>
@@ -1325,7 +1618,7 @@ export default function LoginPage({
 
   return (
     <>
-      {isRegister ? register : signIn}
+      {verifyEmail ? verifyView : isRegister ? register : signIn}
 
       {/* FORGOT PASSWORD */}
       {showForgotPassword &&

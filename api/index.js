@@ -324,6 +324,25 @@ function stripMarkdown(text) {
         .replace(/`([^`]+)`/g, '$1');
 }
 
+// Sends a student's 6-digit email verification code through Supabase
+// Auth's own "Confirm signup" email (custom SMTP: Resend). Works for an
+// account created unconfirmed with auth.admin.createUser. Best-effort:
+// returns false instead of throwing (e.g. the 60-second resend limit), so
+// the student lands on the code screen and can tap "Resend code".
+async function sendSignupCode(email) {
+    const { error } = await supabaseAnon.auth.resend({ type: 'signup', email });
+    if (error) {
+        console.warn('Verification code not sent:', error.message);
+        return false;
+    }
+    return true;
+}
+
+// Sign-in failed only because the email isn't verified yet.
+function isEmailNotConfirmed(error) {
+    return error?.code === 'email_not_confirmed' || /email not confirmed/i.test(error?.message || '');
+}
+
 // --- ROUTES ---
 
 app.get('/api/health', (req, res) => {
@@ -377,10 +396,15 @@ app.post('/api/register', registerLimiter, async (req, res) => {
         // `users.id` is an unrelated bigint auto-increment id, so demographics
         // can only be linked to the real auth identity via this uuid, not
         // via users.id.
+        //
+        // Created unconfirmed: the student proves they own the email with
+        // the 6-digit code sent below before they can sign in (Supabase
+        // "Confirm email" on). Every other account path (staff, seed
+        // script, the legacy fallback in /api/login) stays confirmed.
         const { data: authCreate, error: authCreateError } = await supabase.auth.admin.createUser({
             email: cleanEmail,
             password: password,
-            email_confirm: true,
+            email_confirm: false,
             user_metadata: { name: cleanName, role: finalRole }
         });
 
@@ -451,7 +475,15 @@ app.post('/api/register', registerLimiter, async (req, res) => {
             console.warn('Activity log write failed (register):', logErr.message);
         }
 
-        res.status(201).json({ message: "Account created!", userId: data[0].id });
+        const codeSent = await sendSignupCode(cleanEmail);
+
+        res.status(201).json({
+            message: "Account created!",
+            userId: data[0].id,
+            email: cleanEmail,
+            verificationRequired: true,
+            codeSent,
+        });
     } catch (error) {
         console.error("Registration Error:", error.message);
         res.status(500).json({ message: error.message });
@@ -691,12 +723,21 @@ app.post('/api/login', loginLimiter, async (req, res) => {
             // old one, so a flat reject here would permanently lock the
             // account out even with the right password. If Auth accepts
             // it, trust that and repair the stale hash instead.
-            const { data: recovery } = await supabaseAnon.auth.signInWithPassword({
+            const { data: recovery, error: recoveryError } = await supabaseAnon.auth.signInWithPassword({
                 email: cleanEmail,
                 password: password,
             });
 
             if (!recovery?.session) {
+                if (isEmailNotConfirmed(recoveryError)) {
+                    const codeSent = await sendSignupCode(cleanEmail);
+                    return res.status(403).json({
+                        code: 'email_not_confirmed',
+                        email: cleanEmail,
+                        codeSent,
+                        message: 'Please verify your email to finish signing in.',
+                    });
+                }
                 return res.status(401).json({ message: "Invalid credentials" });
             }
 
@@ -719,6 +760,20 @@ app.post('/api/login', loginLimiter, async (req, res) => {
             password: password,
         });
 
+        // Registered but never entered the code: send a fresh one and let
+        // the page show the "Enter the code" step.
+        if (authError && isEmailNotConfirmed(authError)) {
+            const codeSent = await sendSignupCode(cleanEmail);
+            return res.status(403).json({
+                code: 'email_not_confirmed',
+                email: cleanEmail,
+                codeSent,
+                message: 'Please verify your email to finish signing in.',
+            });
+        }
+
+        // Older accounts that exist only in `users` (no Supabase Auth
+        // user yet) get one here, already confirmed.
         if (authError) {
             await supabase.auth.admin.createUser({
                 email: cleanEmail,
