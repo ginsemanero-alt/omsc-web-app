@@ -369,10 +369,9 @@ export default function DashboardOverview() {
           .not('program_id', 'is', null)
           .is('archived_at', null),
         dbUserId
-          ? supabase
-              .from('survey_responses')
-              .select('survey_id, attempt_type, score, total_scored, created_at')
-              .eq('user_id', dbUserId)
+          ? // Own responses only, through student_my_responses() (PHASE 30):
+            // a pre-test score stays hidden until the post-test exists.
+            supabase.rpc('student_my_responses')
           : Promise.resolve({ data: [] as ResponseRow[], error: null }),
         dbUserId
           ? supabase

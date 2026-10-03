@@ -49,10 +49,13 @@ interface Survey {
   id: string | number;
   title: string;
   description?: string | null;
-  questions_data?: Question[];
-  // Form B, the parallel post-test form (PHASE 27). Empty/null: the
-  // post-test reuses questions_data.
-  questions_data_post?: Question[] | null;
+  // Question counts per form, for the cards (active_survey_question_counts).
+  // The questions themselves load only when the student starts, through
+  // get_assessment_questions(), without answer keys (PHASE 30). Form B is
+  // the parallel post-test form (PHASE 27); 0 means the post-test reuses
+  // Form A.
+  form_a_count?: number;
+  form_b_count?: number;
   status?: string;
   type?: 'knowledge' | 'opinion';
   program_id?: number | null;
@@ -70,19 +73,36 @@ interface Survey {
 
 type AttemptType = 'pre' | 'post';
 
-// Which form a student gets for their next attempt: Form B for a
-// knowledge post-test when the assessment has one, otherwise Form A
-// (so single-form assessments keep working unchanged).
-function formForAttempt(survey: Survey): 'A' | 'B' {
-  return survey.type === 'knowledge' &&
-    survey.next_attempt === 'post' &&
-    (survey.questions_data_post?.length ?? 0) > 0
-    ? 'B'
-    : 'A';
+// How many questions the student's next attempt has: Form B for a
+// knowledge post-test when the assessment has one, otherwise Form A. The
+// server picks the same form (get_assessment_questions).
+function questionCountForAttempt(survey: Survey): number {
+  const useFormB = survey.type === 'knowledge' && survey.next_attempt === 'post' && (survey.form_b_count ?? 0) > 0;
+  return (useFormB ? survey.form_b_count : survey.form_a_count) ?? 0;
 }
 
-function questionsForAttempt(survey: Survey): Question[] {
-  return formForAttempt(survey) === 'B' ? survey.questions_data_post || [] : survey.questions_data || [];
+// The review a student gets after the post-test (get_assessment_review):
+// each attempt's questions with their answer keys, and their answers.
+interface ReviewAttempt {
+  form: 'A' | 'B';
+  questions: Question[];
+  answers: Record<string, any>;
+  score: number | null;
+  total_scored: number | null;
+  percentage: number | null;
+}
+
+interface AssessmentReview {
+  survey_id: string;
+  title: string;
+  pre: ReviewAttempt | null;
+  post: ReviewAttempt;
+}
+
+// Supabase function errors carry the message raised in the database
+// (e.g. "Post-test locked: View 1 more material to unlock").
+function rpcErrorMessage(error: any, fallback: string): string {
+  return (error?.message as string | undefined)?.trim() || fallback;
 }
 
 const ATTEMPT_LABEL: Record<AttemptType, string> = {
@@ -278,16 +298,15 @@ export default function QuizzesSurveys() {
       setResultsLoading(true);
       setResultsLoadFailed(false);
 
-      const { data: responsesData, error: responsesError } = await supabase
-        .from('survey_responses')
-        .select('id, survey_id, created_at, score, total_scored, percentage, attempt_type')
-        .eq('user_id', dbUserId)
-        .order('created_at', { ascending: false });
+      // Own responses, newest first. A pre-test score comes back empty
+      // until the post-test exists (student_my_responses, PHASE 30).
+      const { data: myResponses, error: responsesError } = await supabase.rpc('student_my_responses');
 
       if (responsesError) throw responsesError;
 
+      const responsesData = (myResponses || []) as any[];
       const surveyIds = [
-        ...new Set((responsesData || []).map((r) => r.survey_id).filter(Boolean)),
+        ...new Set(responsesData.map((r) => r.survey_id).filter(Boolean)),
       ];
 
       let surveysMap: Record<string, any> = {};
@@ -345,25 +364,30 @@ export default function QuizzesSurveys() {
       setLoading(true);
       setSurveysLoadFailed(false);
 
-      const { data: surveysData, error: surveyError } = await supabase
-        .from('surveys')
-        .select('*')
-        .eq('status', 'active')
-        .is('archived_at', null)
-        .order('created_at', { ascending: false });
+      const [surveyRes, countRes, responseRes] = await Promise.all([
+        supabase
+          .from('surveys')
+          .select('id, title, description, category, type, status, program_id, created_at')
+          .eq('status', 'active')
+          .is('archived_at', null)
+          .order('created_at', { ascending: false }),
+        supabase.rpc('active_survey_question_counts'),
+        supabase.rpc('student_my_responses'),
+      ]);
 
-      if (surveyError) throw surveyError;
-
-      const { data: responsesData, error: responsesError } = await supabase
-        .from('survey_responses')
-        .select('survey_id, attempt_type')
-        .eq('user_id', dbUserId);
+      if (surveyRes.error) throw surveyRes.error;
+      const surveysData = surveyRes.data;
+      if (countRes.error) console.warn('Unable to fetch question counts:', countRes.error);
+      const countsBySurvey = new Map<string, { form_a_count: number; form_b_count: number }>(
+        ((countRes.data || []) as any[]).map((c) => [String(c.survey_id), c])
+      );
+      const responsesData = (responseRes.data || []) as { survey_id: string; attempt_type: string | null }[];
+      const responsesError = responseRes.error;
 
       // Post-test lock: same rule as the program page and dashboard
       // (src/lib/materialProgress.ts). If it can't be checked, the lock
-      // holds with a "couldn't check" reason.
-      // TODO(PHASE 1a): submit_assessment must enforce this lock on the
-      // server too; until then it is enforced only here in the UI.
+      // holds with a "couldn't check" reason. submit_assessment enforces
+      // the same rule on the server (PHASE 30), so this is for the UI.
       let materialData: MaterialProgressData | null = null;
       let materialLoadFailed = false;
       try {
@@ -387,7 +411,8 @@ export default function QuizzesSurveys() {
       }
 
       const formattedSurveys: Survey[] =
-        (surveysData || []).map((survey: any) => {
+        (surveysData || []).map((row: any) => {
+          const survey = { ...row, ...countsBySurvey.get(String(row.id)) };
           const attempts = attemptsBySurvey[String(survey.id)];
 
           // Opinion survey: one response and it's done. Knowledge
@@ -452,7 +477,13 @@ export default function QuizzesSurveys() {
     return `Pre-test ${preText}, post-test ${postText}, ${change}`;
   };
 
-  const [activeForm, setActiveForm] = useState<'A' | 'B'>('A');
+  // The questions of the attempt being taken, loaded when it starts from
+  // get_assessment_questions(): the form the server picked (Form B for a
+  // post-test when the assessment has one, otherwise Form A), without
+  // correct answers. The server scores the submission against the same
+  // form.
+  const [activeQuestions, setActiveQuestions] = useState<Question[]>([]);
+  const [startingSurveyId, setStartingSurveyId] = useState<string | number | null>(null);
 
   const activeSurvey = useMemo(() => {
     if (activeSurveyId === null) return null;
@@ -464,18 +495,41 @@ export default function QuizzesSurveys() {
     );
   }, [activeSurveyId, surveys]);
 
-  // The form being taken, fixed when the assessment starts: Form B (the
-  // parallel post-test form, PHASE 27) for a post-test when the
-  // assessment has one, otherwise Form A. Scoring and the review use the
-  // same form, so each is marked against its own answer key.
-  const questions: Question[] = useMemo(() => {
-    if (activeForm === 'B' && activeSurvey?.questions_data_post?.length) {
-      return activeSurvey.questions_data_post;
-    }
-    if (!activeSurvey?.questions_data) return [];
+  const questions: Question[] = activeQuestions;
 
-    return activeSurvey.questions_data;
-  }, [activeSurvey, activeForm]);
+  // The post-test review (answer keys included), loaded on demand. The
+  // server opens it only once this student has submitted the post-test.
+  const [reviews, setReviews] = useState<Record<string, AssessmentReview>>({});
+  const [openReviewId, setOpenReviewId] = useState<string | null>(null);
+  const [reviewLoadingId, setReviewLoadingId] = useState<string | null>(null);
+
+  async function loadReview(surveyId: string | number): Promise<AssessmentReview | null> {
+    const key = String(surveyId);
+    if (reviews[key]) return reviews[key];
+    const { data, error } = await supabase.rpc('get_assessment_review', { p_survey_id: surveyId });
+    if (error || !data) {
+      console.warn('Review unavailable:', error?.message);
+      return null;
+    }
+    setReviews((prev) => ({ ...prev, [key]: data as AssessmentReview }));
+    return data as AssessmentReview;
+  }
+
+  const toggleReview = async (surveyId: string | number) => {
+    const key = String(surveyId);
+    if (openReviewId === key) {
+      setOpenReviewId(null);
+      return;
+    }
+    setReviewLoadingId(key);
+    const review = await loadReview(surveyId);
+    setReviewLoadingId(null);
+    if (!review) {
+      toast({ title: 'Review unavailable', description: 'Please try again in a moment.', variant: 'destructive' });
+      return;
+    }
+    setOpenReviewId(key);
+  };
 
   const currentQuestion = questions[currentQuestionIndex];
 
@@ -491,14 +545,33 @@ export default function QuizzesSurveys() {
    * START SURVEY
    * ---------------------------------------------------------
    */
-  const handleStartSurvey = (survey: Survey) => {
-    if (survey.is_completed) return;
+  const handleStartSurvey = async (survey: Survey) => {
+    if (survey.is_completed || startingSurveyId !== null) return;
     if (survey.post_test_lock) {
       toast({ title: 'Post-test locked', description: survey.post_test_lock });
       return;
     }
 
-    setActiveForm(formForAttempt(survey));
+    setStartingSurveyId(survey.id);
+    const { data, error } = await supabase.rpc('get_assessment_questions', { p_survey_id: survey.id });
+    setStartingSurveyId(null);
+
+    if (error || !data) {
+      toast({
+        title: 'Unable to Open Assessment',
+        description: rpcErrorMessage(error, 'Please try again.'),
+        variant: 'destructive',
+      });
+      fetchActiveSurveys();
+      return;
+    }
+    if (data.post_test_lock) {
+      toast({ title: 'Post-test locked', description: data.post_test_lock });
+      fetchActiveSurveys();
+      return;
+    }
+
+    setActiveQuestions((data.questions || []) as Question[]);
     setActiveSurveyId(survey.id);
     setAnswers({});
     setCurrentQuestionIndex(0);
@@ -517,6 +590,7 @@ export default function QuizzesSurveys() {
     if (submitting) return;
 
     setActiveSurveyId(null);
+    setActiveQuestions([]);
     setAnswers({});
     setCurrentQuestionIndex(0);
     setShowInstructions(false);
@@ -676,27 +750,39 @@ export default function QuizzesSurveys() {
       return;
     }
 
-    const isKnowledge = activeSurvey.type === 'knowledge';
-    const summary = isKnowledge ? computeScoreSummary(questions, answers) : null;
-    const attempt = isKnowledge ? activeSurvey.next_attempt ?? null : null;
-
     try {
       setSubmitting(true);
 
-      const responsePayload = {
-        survey_id: activeSurvey.id,
-        user_id: dbUserId,
-        answers: answers,
-        score: summary ? summary.correct : null,
-        total_scored: summary ? summary.total : null,
-        percentage: summary ? summary.percentage : null,
-      };
-
-      const { error } = await supabase
-        .from('survey_responses')
-        .insert([responsePayload]);
+      // Only the answers go up. submit_assessment (PHASE 30) picks the
+      // form, scores it, rejects a locked post-test and records the
+      // attempt; a pre-test's score isn't returned.
+      const { data: submitted, error } = await supabase.rpc('submit_assessment', {
+        p_survey_id: activeSurvey.id,
+        p_answers: answers,
+      });
 
       if (error) throw error;
+
+      const attempt = (submitted?.attempt_type ?? null) as AttemptType | null;
+
+      // After the post-test the review (with the answer key) opens: the
+      // missed items come from it, scored by the server.
+      let summary: ScoreSummary | null = null;
+      if (attempt === 'post') {
+        const review = await loadReview(activeSurvey.id);
+        const fromReview = review
+          ? computeScoreSummary(review.post.questions, review.post.answers || {})
+          : null;
+        summary = {
+          correct: submitted.score ?? fromReview?.correct ?? 0,
+          total: submitted.total_scored ?? fromReview?.total ?? 0,
+          percentage: submitted.percentage != null ? Number(submitted.percentage) : fromReview?.percentage ?? null,
+          missed: fromReview?.missed ?? [],
+        };
+      } else if (attempt === 'pre') {
+        // The pre-test screen shows no score; this only opens it.
+        summary = { correct: 0, total: 1, percentage: null, missed: [] };
+      }
 
       await fetchActiveSurveys();
       await fetchMyResults();
@@ -728,15 +814,89 @@ export default function QuizzesSurveys() {
 
       toast({
         title: 'Submission Failed',
-        description:
-          error?.message ||
-          'We were unable to submit your response. Please try again.',
+        description: rpcErrorMessage(error, 'We were unable to submit your response. Please try again.'),
         variant: 'destructive',
       });
+      // e.g. the post-test turned out to be locked: refresh the cards.
+      fetchActiveSurveys();
     } finally {
       setSubmitting(false);
     }
   };
+
+  // Missed items with the student's answer, the correct answer, and links
+  // to the program or material each one covers. Only ever called with a
+  // post-test review (answer keys come from get_assessment_review).
+  const renderMissedList = (missed: MissedQuestion[]) => (
+    <div className="mt-8 space-y-4">
+      {missed.map(({ question, studentAnswer }) => (
+        <div
+          key={question.id}
+          className="p-4 sm:p-6 rounded-2xl border border-rose-100 bg-rose-50/50"
+        >
+          <div className="flex items-start gap-3">
+            <XCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+
+            <div className="flex-1 min-w-0">
+              <p className="text-sm sm:text-base font-black text-slate-800 dark:text-slate-100 leading-relaxed">
+                {question.text}
+              </p>
+
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-100">
+                  <p className="text-[9px] font-black uppercase text-rose-500">
+                    Your Answer
+                  </p>
+                  <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
+                    {studentAnswer || 'No answer'}
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-emerald-100">
+                  <p className="text-[9px] font-black uppercase text-emerald-600">
+                    Correct Answer
+                  </p>
+                  <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
+                    {question.correct_option}
+                  </p>
+                </div>
+              </div>
+
+              {(question.related_program_id || question.related_material_id) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {question.related_program_id &&
+                    programTitles[question.related_program_id] && (
+                      <Button
+                        onClick={() => navigate(`/student/programs?program=${question.related_program_id}`)}
+                        variant="outline"
+                        className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
+                      >
+                        <Calendar className="w-3.5 h-3.5" />
+                        {programTitles[question.related_program_id]}
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+
+                  {question.related_material_id &&
+                    materialTitles[question.related_material_id] && (
+                      <Button
+                        onClick={() => navigate('/student/materials')}
+                        variant="outline"
+                        className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
+                      >
+                        <BookOpen className="w-3.5 h-3.5" />
+                        {materialTitles[question.related_material_id]}
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   /*
    * ---------------------------------------------------------
@@ -1107,8 +1267,8 @@ export default function QuizzesSurveys() {
         ) : (
           <div className="space-y-4">
             {results.map((result) => (
+              <div key={result.id} className="space-y-3">
               <Card
-                key={result.id}
                 className="p-5 sm:p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 flex items-center gap-4"
               >
                 <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
@@ -1173,6 +1333,17 @@ export default function QuizzesSurveys() {
                         {preTestComparison(result.survey_id)}
                       </p>
                     )}
+                    {result.attempt_type === 'post' && (
+                      <button
+                        type="button"
+                        onClick={() => toggleReview(result.survey_id)}
+                        aria-expanded={openReviewId === String(result.survey_id)}
+                        className="mt-1 min-h-[44px] px-2 inline-flex items-center gap-1.5 rounded-lg text-sm font-bold text-indigo-700 dark:text-indigo-300 hover:underline focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
+                      >
+                        {reviewLoadingId === String(result.survey_id) && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+                        {openReviewId === String(result.survey_id) ? 'Hide review' : 'Review answers'}
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-wider shrink-0">
@@ -1181,6 +1352,26 @@ export default function QuizzesSurveys() {
                   </span>
                 )}
               </Card>
+
+              {/* Post-test review: Form B answers against Form B's key. */}
+              {result.attempt_type === 'post' && openReviewId === String(result.survey_id) && reviews[openReviewId] && (() => {
+                const review = reviews[openReviewId];
+                const summary = computeScoreSummary(review.post.questions, review.post.answers || {});
+                return (
+                  <section
+                    aria-label={`Review of ${result.title}`}
+                    className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800"
+                  >
+                    <p className="m-0 text-sm font-semibold text-slate-600 dark:text-slate-300">
+                      {summary.missed.length === 0
+                        ? 'You answered every post-test question correctly.'
+                        : `${summary.missed.length} post-test ${summary.missed.length === 1 ? 'question' : 'questions'} to review. Each links to where you can learn more.`}
+                    </p>
+                    {summary.missed.length > 0 && renderMissedList(summary.missed)}
+                  </section>
+                );
+              })()}
+              </div>
             ))}
           </div>
         )
@@ -1307,8 +1498,8 @@ export default function QuizzesSurveys() {
                     <ClipboardList className="w-4 h-4" />
 
                     <span>
-                      {questionsForAttempt(survey).length} question
-                      {questionsForAttempt(survey).length !== 1
+                      {questionCountForAttempt(survey)} question
+                      {questionCountForAttempt(survey) !== 1
                         ? 's'
                         : ''}
                     </span>
@@ -1316,7 +1507,7 @@ export default function QuizzesSurveys() {
 
                   <Button
                     onClick={() => handleStartSurvey(survey)}
-                    disabled={survey.is_completed || !!survey.post_test_lock}
+                    disabled={survey.is_completed || !!survey.post_test_lock || startingSurveyId !== null}
                     aria-describedby={survey.post_test_lock ? `lock-reason-${survey.id}` : undefined}
                     className={`
                       mt-7 w-full h-12 sm:h-14
@@ -1332,6 +1523,7 @@ export default function QuizzesSurveys() {
                     `}
                   >
                     {survey.post_test_lock && <Lock className="w-4 h-4 mr-2" aria-hidden="true" />}
+                    {String(startingSurveyId) === String(survey.id) && <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />}
                     {survey.is_completed
                       ? 'Already Submitted'
                       : survey.next_attempt === 'pre'
@@ -1870,76 +2062,7 @@ export default function QuizzesSurveys() {
                   </div>
                 )}
 
-                {submittedAttempt !== 'pre' && scoreSummary.missed.length > 0 && (
-                  <div className="mt-8 space-y-4">
-                    {scoreSummary.missed.map(({ question, studentAnswer }) => (
-                      <div
-                        key={question.id}
-                        className="p-4 sm:p-6 rounded-2xl border border-rose-100 bg-rose-50/50"
-                      >
-                        <div className="flex items-start gap-3">
-                          <XCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
-
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm sm:text-base font-black text-slate-800 dark:text-slate-100 leading-relaxed">
-                              {question.text}
-                            </p>
-
-                            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-100">
-                                <p className="text-[9px] font-black uppercase text-rose-500">
-                                  Your Answer
-                                </p>
-                                <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
-                                  {studentAnswer || 'No answer'}
-                                </p>
-                              </div>
-
-                              <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-emerald-100">
-                                <p className="text-[9px] font-black uppercase text-emerald-600">
-                                  Correct Answer
-                                </p>
-                                <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
-                                  {question.correct_option}
-                                </p>
-                              </div>
-                            </div>
-
-                            {(question.related_program_id || question.related_material_id) && (
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {question.related_program_id &&
-                                  programTitles[question.related_program_id] && (
-                                    <Button
-                                      onClick={() => navigate('/student/programs')}
-                                      variant="outline"
-                                      className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
-                                    >
-                                      <Calendar className="w-3.5 h-3.5" />
-                                      {programTitles[question.related_program_id]}
-                                      <ArrowRight className="w-3.5 h-3.5" />
-                                    </Button>
-                                  )}
-
-                                {question.related_material_id &&
-                                  materialTitles[question.related_material_id] && (
-                                    <Button
-                                      onClick={() => navigate('/student/materials')}
-                                      variant="outline"
-                                      className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
-                                    >
-                                      <BookOpen className="w-3.5 h-3.5" />
-                                      {materialTitles[question.related_material_id]}
-                                      <ArrowRight className="w-3.5 h-3.5" />
-                                    </Button>
-                                  )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {submittedAttempt !== 'pre' && scoreSummary.missed.length > 0 && renderMissedList(scoreSummary.missed)}
 
                 <Button
                   onClick={handleCloseSurvey}

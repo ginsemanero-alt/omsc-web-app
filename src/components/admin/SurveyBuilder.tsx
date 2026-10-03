@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { supabase } from "../../lib/supabase";
 import { logActivity } from "../../lib/activityLog";
+import { SURVEY_COLUMNS, withAdminForms } from "../../lib/surveyForms";
 import { notifyStudents } from "../../lib/notifyStudents";
 import { useAuth } from "../../hooks/useAuth";
 import { IEC_CATEGORIES } from "../../lib/iecCategories";
@@ -263,13 +264,15 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
 
       const { data, error } = await supabase
         .from("surveys")
-        .select("*")
+        .select(SURVEY_COLUMNS)
         .is("archived_at", null)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      setSurveys((data || []) as Survey[]);
+      // Both forms (answer keys included) come from admin_survey_forms():
+      // the columns themselves aren't readable directly (PHASE 30).
+      setSurveys((await withAdminForms((data || []) as any[])) as Survey[]);
       onChanged?.();
     } catch (err: any) {
       toast({
@@ -387,7 +390,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
           status: "draft",
           questions_data: [],
         },
-      ]).select();
+      ]).select("id");
 
       if (error) throw error;
       logActivity({ actorEmail: user?.email, actorName: userName, action: "create", entityType: "survey", entityId: created?.[0]?.id, entityLabel: title });
@@ -640,7 +643,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
           questions_data: survey.questions_data || [],
           questions_data_post: survey.questions_data_post || null,
         },
-      ]).select();
+      ]).select("id");
 
       if (error) throw error;
       logActivity({ actorEmail: user?.email, actorName: userName, action: "create", entityType: "survey", entityId: copy?.[0]?.id, entityLabel: `${survey.title} - Copy`, details: `duplicated from "${survey.title}"` });

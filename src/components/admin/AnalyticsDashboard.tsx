@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
+import { SURVEY_COLUMNS, withAdminForms } from "../../lib/surveyForms";
 
 import { Card } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
@@ -524,7 +525,7 @@ export default function AnalyticsDashboard() {
 
         supabase
           .from("surveys")
-          .select("*")
+          .select(SURVEY_COLUMNS)
           .is("archived_at", null)
           .order("created_at", { ascending: false }),
 
@@ -592,7 +593,15 @@ export default function AnalyticsDashboard() {
 
       setProfiles((profilesResult.data || []) as Profile[]);
       setPrograms((programsResult.data || []) as GuidanceProgram[]);
-      setSurveys((surveysResult.data || []) as Survey[]);
+      // The forms (item analysis needs the answer keys) come from
+      // admin_survey_forms(): the columns aren't readable directly.
+      let surveyRows = (surveysResult.data || []) as any[];
+      try {
+        surveyRows = await withAdminForms(surveyRows);
+      } catch (formsError) {
+        console.error("Survey forms:", formsError);
+      }
+      setSurveys(surveyRows as Survey[]);
       // Knowledge assessments are now taken twice (pre-test + post-test,
       // PHASE 22). Every section below predates that and treats one row
       // as one student's answer, so keep only each student's latest
