@@ -43,6 +43,9 @@ export interface LearningGainRow {
   paired_n: number;
   incomplete_n: number;
   ceiling_n: number;
+  // Opened one of the program's linked IEC materials at or before the
+  // pre-test: left out of every other count and mean (PHASE 31).
+  viewed_before_pre_n: number;
   mean_pre: number | null;
   mean_post: number | null;
   mean_gain: number | null;
@@ -70,6 +73,7 @@ export function emptyRow(dimension: LearningGainDimension, key: string): Learnin
     paired_n: 0,
     incomplete_n: 0,
     ceiling_n: 0,
+    viewed_before_pre_n: 0,
     mean_pre: null,
     mean_post: null,
     mean_gain: null,

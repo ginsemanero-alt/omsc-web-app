@@ -1875,3 +1875,335 @@ NOTIFY pgrst, 'reload schema';
 -- DROP FUNCTION IF EXISTS assessment_form_for(surveys, text);
 -- DROP FUNCTION IF EXISTS strip_answer_key(jsonb);
 -- NOTIFY pgrst, 'reload schema';
+
+-- =========================================================
+-- PHASE 31: Learning Gain counts only true pre-tests
+-- =========================================================
+-- A student counts in a program's gain only if their pre-test was
+-- submitted before they first opened any IEC material linked to that
+-- program (material_views.first_viewed_at, program_materials). Students
+-- who opened one at or before the pre-test are left out of paired_n,
+-- incomplete_n, ceiling_n and every mean, and counted separately in
+-- viewed_before_pre_n (per row, like the other counts). Students with no
+-- recorded view before the pre-test count as before, including everyone
+-- from before PHASE 29 (views weren't recorded then).
+--
+-- Same signature as PHASE 23, so CREATE OR REPLACE keeps the grants.
+
+CREATE OR REPLACE FUNCTION learning_gain_summary(
+  p_program_id    integer DEFAULT NULL,
+  p_course        text    DEFAULT NULL,
+  p_year_level    text    DEFAULT NULL,
+  p_gender        text    DEFAULT NULL,
+  p_age_bracket   text    DEFAULT NULL,
+  p_academic_year integer DEFAULT NULL,
+  p_age_brackets  jsonb   DEFAULT '[
+    {"label": "17–18",        "min": 17, "max": 18},
+    {"label": "19–20",        "min": 19, "max": 20},
+    {"label": "21–22",        "min": 21, "max": 22},
+    {"label": "23 and above", "min": 23, "max": null}
+  ]'::jsonb
+) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE
+  result jsonb;
+BEGIN
+  IF NOT is_admin() THEN
+    RAISE EXCEPTION 'Only admins can view learning gain analytics'
+      USING ERRCODE = '42501';
+  END IF;
+
+  WITH per_student AS (
+    -- One row per student per assessment: their pre and post scores.
+    SELECT
+      r.user_id,
+      r.survey_id,
+      s.program_id,
+      MAX(COALESCE(r.score::numeric * 100 / NULLIF(r.total_scored, 0), r.percentage))
+        FILTER (WHERE r.attempt_type = 'pre')  AS pre,
+      MAX(COALESCE(r.score::numeric * 100 / NULLIF(r.total_scored, 0), r.percentage))
+        FILTER (WHERE r.attempt_type = 'post') AS post,
+      MIN(r.created_at) FILTER (WHERE r.attempt_type = 'pre') AS pre_at
+    FROM survey_responses r
+    JOIN surveys s ON s.id = r.survey_id
+    WHERE s.type = 'knowledge'
+      AND s.program_id IS NOT NULL
+      AND r.attempt_type IN ('pre', 'post')
+    GROUP BY r.user_id, r.survey_id, s.program_id
+  ),
+  students AS (
+    SELECT
+      ps.*,
+      COALESCE(NULLIF(TRIM(prof.program), ''), 'Not specified')    AS course,
+      COALESCE(NULLIF(TRIM(prof.year_level), ''), 'Not specified') AS year_level,
+      COALESCE(NULLIF(TRIM(prof.gender), ''), 'Not specified')     AS gender,
+      CASE WHEN prof.is_pwd THEN 'PWD' ELSE 'Non-PWD' END          AS pwd,
+      CASE WHEN prof.is_ip  THEN 'IP'  ELSE 'Non-IP'  END          AS ip,
+      -- PHASE 31: opened one of the program's linked IEC materials at or
+      -- before the pre-test, so the pre-test isn't a true baseline.
+      EXISTS (
+        SELECT 1
+          FROM material_views mv
+          JOIN program_materials pm ON pm.material_id = mv.material_id
+         WHERE pm.program_id = ps.program_id
+           AND mv.user_id = ps.user_id
+           AND mv.first_viewed_at <= ps.pre_at
+      ) AS viewed_before_pre,
+      CASE
+        WHEN prof.age IS NULL THEN 'Not specified'
+        ELSE COALESCE(
+          (SELECT b ->> 'label'
+             FROM jsonb_array_elements(p_age_brackets) b
+            WHERE prof.age >= (b ->> 'min')::int
+              AND (b ->> 'max' IS NULL OR prof.age <= (b ->> 'max')::int)
+            LIMIT 1),
+          'Outside brackets')
+      END AS age_bracket
+    FROM per_student ps
+    JOIN users u ON u.id = ps.user_id AND NOT u.is_test_account
+    LEFT JOIN auth.users au ON lower(au.email) = lower(u.email)
+    LEFT JOIN LATERAL (
+      SELECT p.*
+        FROM profiles p
+       WHERE p.id = au.id
+          OR (u.student_id IS NOT NULL AND p.student_id = u.student_id)
+       ORDER BY (p.id = au.id) DESC NULLS LAST
+       LIMIT 1
+    ) prof ON true
+    WHERE ps.pre IS NOT NULL
+  ),
+  filtered AS (
+    SELECT *
+      FROM students
+     WHERE (p_program_id    IS NULL OR program_id  = p_program_id)
+       AND (p_course        IS NULL OR course      = p_course)
+       AND (p_year_level    IS NULL OR year_level  = p_year_level)
+       AND (p_gender        IS NULL OR gender      = p_gender)
+       AND (p_age_bracket   IS NULL OR age_bracket = p_age_bracket)
+       AND (p_academic_year IS NULL OR EXTRACT(YEAR FROM pre_at)::int = p_academic_year)
+  ),
+  grouped AS (
+    SELECT
+      CASE
+        WHEN GROUPING(program_id)  = 0 THEN 'program'
+        WHEN GROUPING(course)      = 0 THEN 'course'
+        WHEN GROUPING(gender)      = 0 THEN 'gender'
+        WHEN GROUPING(age_bracket) = 0 THEN 'age_bracket'
+        WHEN GROUPING(year_level)  = 0 THEN 'year_level'
+        WHEN GROUPING(pwd)         = 0 THEN 'pwd'
+        WHEN GROUPING(ip)          = 0 THEN 'ip'
+        ELSE 'overall'
+      END AS dimension,
+      COALESCE(program_id::text, course, gender, age_bracket, year_level, pwd, ip, 'All') AS key,
+      COUNT(*) FILTER (WHERE post IS NOT NULL AND NOT viewed_before_pre)                AS paired_n,
+      COUNT(*) FILTER (WHERE post IS NULL     AND NOT viewed_before_pre)                AS incomplete_n,
+      COUNT(*) FILTER (WHERE post IS NOT NULL AND NOT viewed_before_pre AND pre >= 100) AS ceiling_n,
+      COUNT(*) FILTER (WHERE viewed_before_pre)                                         AS viewed_before_pre_n,
+      AVG(pre)                FILTER (WHERE post IS NOT NULL AND NOT viewed_before_pre) AS mean_pre,
+      AVG(post)               FILTER (WHERE post IS NOT NULL AND NOT viewed_before_pre) AS mean_post,
+      AVG(post - pre)         FILTER (WHERE post IS NOT NULL AND NOT viewed_before_pre) AS mean_gain,
+      STDDEV_SAMP(post - pre) FILTER (WHERE post IS NOT NULL AND NOT viewed_before_pre) AS sd_diff
+    FROM filtered
+    GROUP BY GROUPING SETS (
+      (program_id), (course), (gender), (age_bracket), (year_level), (pwd), (ip), ()
+    )
+  )
+  SELECT jsonb_build_object(
+    'rows', COALESCE((
+      SELECT jsonb_agg(jsonb_build_object(
+        'dimension',    g.dimension,
+        'key',          g.key,
+        'paired_n',     g.paired_n,
+        'incomplete_n', g.incomplete_n,
+        'ceiling_n',    g.ceiling_n,
+        'viewed_before_pre_n', g.viewed_before_pre_n,
+        'mean_pre',     ROUND(g.mean_pre, 2),
+        'mean_post',    ROUND(g.mean_post, 2),
+        'mean_gain',    ROUND(g.mean_gain, 2),
+        'sd_diff',      ROUND(g.sd_diff, 4),
+        'norm_gain',    CASE
+                          WHEN g.mean_pre IS NULL OR g.mean_pre >= 100 THEN NULL
+                          ELSE ROUND((g.mean_post - g.mean_pre) / (100 - g.mean_pre), 4)
+                        END
+      ))
+      FROM grouped g
+    ), '[]'::jsonb),
+    -- Filter choices, from all (unfiltered) data so picking one filter
+    -- never hides the options of another.
+    'options', jsonb_build_object(
+      'programs', COALESCE((
+        SELECT jsonb_agg(jsonb_build_object('id', p.id, 'title', p.title) ORDER BY p.title)
+          FROM programs p
+         WHERE EXISTS (
+           SELECT 1 FROM surveys s
+            WHERE s.program_id = p.id AND s.type = 'knowledge' AND s.archived_at IS NULL
+         )
+      ), '[]'::jsonb),
+      'courses',     COALESCE((SELECT jsonb_agg(DISTINCT course)     FROM students), '[]'::jsonb),
+      'year_levels', COALESCE((SELECT jsonb_agg(DISTINCT year_level) FROM students), '[]'::jsonb),
+      'genders',     COALESCE((SELECT jsonb_agg(DISTINCT gender)     FROM students), '[]'::jsonb),
+      'years',       COALESCE((SELECT jsonb_agg(DISTINCT EXTRACT(YEAR FROM pre_at)::int) FROM students), '[]'::jsonb)
+    )
+  ) INTO result;
+
+  RETURN result;
+END $$;
+
+REVOKE ALL ON FUNCTION learning_gain_summary(integer, text, text, text, text, integer, jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION learning_gain_summary(integer, text, text, text, text, integer, jsonb) TO authenticated;
+
+-- ---------------------------------------------------------
+-- ROLLBACK of PHASE 31 (run only to undo it): restores the PHASE 23
+-- version, which counts every student with a pre-test.
+-- ---------------------------------------------------------
+-- CREATE OR REPLACE FUNCTION learning_gain_summary(
+--   p_program_id    integer DEFAULT NULL,
+--   p_course        text    DEFAULT NULL,
+--   p_year_level    text    DEFAULT NULL,
+--   p_gender        text    DEFAULT NULL,
+--   p_age_bracket   text    DEFAULT NULL,
+--   p_academic_year integer DEFAULT NULL,
+--   p_age_brackets  jsonb   DEFAULT '[
+--     {"label": "17–18",        "min": 17, "max": 18},
+--     {"label": "19–20",        "min": 19, "max": 20},
+--     {"label": "21–22",        "min": 21, "max": 22},
+--     {"label": "23 and above", "min": 23, "max": null}
+--   ]'::jsonb
+-- ) RETURNS jsonb
+-- LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+-- AS $$
+-- DECLARE
+--   result jsonb;
+-- BEGIN
+--   IF NOT is_admin() THEN
+--     RAISE EXCEPTION 'Only admins can view learning gain analytics'
+--       USING ERRCODE = '42501';
+--   END IF;
+--
+--   WITH per_student AS (
+--     -- One row per student per assessment: their pre and post scores.
+--     SELECT
+--       r.user_id,
+--       r.survey_id,
+--       s.program_id,
+--       MAX(COALESCE(r.score::numeric * 100 / NULLIF(r.total_scored, 0), r.percentage))
+--         FILTER (WHERE r.attempt_type = 'pre')  AS pre,
+--       MAX(COALESCE(r.score::numeric * 100 / NULLIF(r.total_scored, 0), r.percentage))
+--         FILTER (WHERE r.attempt_type = 'post') AS post,
+--       MIN(r.created_at) FILTER (WHERE r.attempt_type = 'pre') AS pre_at
+--     FROM survey_responses r
+--     JOIN surveys s ON s.id = r.survey_id
+--     WHERE s.type = 'knowledge'
+--       AND s.program_id IS NOT NULL
+--       AND r.attempt_type IN ('pre', 'post')
+--     GROUP BY r.user_id, r.survey_id, s.program_id
+--   ),
+--   students AS (
+--     SELECT
+--       ps.*,
+--       COALESCE(NULLIF(TRIM(prof.program), ''), 'Not specified')    AS course,
+--       COALESCE(NULLIF(TRIM(prof.year_level), ''), 'Not specified') AS year_level,
+--       COALESCE(NULLIF(TRIM(prof.gender), ''), 'Not specified')     AS gender,
+--       CASE WHEN prof.is_pwd THEN 'PWD' ELSE 'Non-PWD' END          AS pwd,
+--       CASE WHEN prof.is_ip  THEN 'IP'  ELSE 'Non-IP'  END          AS ip,
+--       CASE
+--         WHEN prof.age IS NULL THEN 'Not specified'
+--         ELSE COALESCE(
+--           (SELECT b ->> 'label'
+--              FROM jsonb_array_elements(p_age_brackets) b
+--             WHERE prof.age >= (b ->> 'min')::int
+--               AND (b ->> 'max' IS NULL OR prof.age <= (b ->> 'max')::int)
+--             LIMIT 1),
+--           'Outside brackets')
+--       END AS age_bracket
+--     FROM per_student ps
+--     JOIN users u ON u.id = ps.user_id AND NOT u.is_test_account
+--     LEFT JOIN auth.users au ON lower(au.email) = lower(u.email)
+--     LEFT JOIN LATERAL (
+--       SELECT p.*
+--         FROM profiles p
+--        WHERE p.id = au.id
+--           OR (u.student_id IS NOT NULL AND p.student_id = u.student_id)
+--        ORDER BY (p.id = au.id) DESC NULLS LAST
+--        LIMIT 1
+--     ) prof ON true
+--     WHERE ps.pre IS NOT NULL
+--   ),
+--   filtered AS (
+--     SELECT *
+--       FROM students
+--      WHERE (p_program_id    IS NULL OR program_id  = p_program_id)
+--        AND (p_course        IS NULL OR course      = p_course)
+--        AND (p_year_level    IS NULL OR year_level  = p_year_level)
+--        AND (p_gender        IS NULL OR gender      = p_gender)
+--        AND (p_age_bracket   IS NULL OR age_bracket = p_age_bracket)
+--        AND (p_academic_year IS NULL OR EXTRACT(YEAR FROM pre_at)::int = p_academic_year)
+--   ),
+--   grouped AS (
+--     SELECT
+--       CASE
+--         WHEN GROUPING(program_id)  = 0 THEN 'program'
+--         WHEN GROUPING(course)      = 0 THEN 'course'
+--         WHEN GROUPING(gender)      = 0 THEN 'gender'
+--         WHEN GROUPING(age_bracket) = 0 THEN 'age_bracket'
+--         WHEN GROUPING(year_level)  = 0 THEN 'year_level'
+--         WHEN GROUPING(pwd)         = 0 THEN 'pwd'
+--         WHEN GROUPING(ip)          = 0 THEN 'ip'
+--         ELSE 'overall'
+--       END AS dimension,
+--       COALESCE(program_id::text, course, gender, age_bracket, year_level, pwd, ip, 'All') AS key,
+--       COUNT(*) FILTER (WHERE post IS NOT NULL)                AS paired_n,
+--       COUNT(*) FILTER (WHERE post IS NULL)                    AS incomplete_n,
+--       COUNT(*) FILTER (WHERE post IS NOT NULL AND pre >= 100) AS ceiling_n,
+--       AVG(pre)                FILTER (WHERE post IS NOT NULL) AS mean_pre,
+--       AVG(post)               FILTER (WHERE post IS NOT NULL) AS mean_post,
+--       AVG(post - pre)         FILTER (WHERE post IS NOT NULL) AS mean_gain,
+--       STDDEV_SAMP(post - pre) FILTER (WHERE post IS NOT NULL) AS sd_diff
+--     FROM filtered
+--     GROUP BY GROUPING SETS (
+--       (program_id), (course), (gender), (age_bracket), (year_level), (pwd), (ip), ()
+--     )
+--   )
+--   SELECT jsonb_build_object(
+--     'rows', COALESCE((
+--       SELECT jsonb_agg(jsonb_build_object(
+--         'dimension',    g.dimension,
+--         'key',          g.key,
+--         'paired_n',     g.paired_n,
+--         'incomplete_n', g.incomplete_n,
+--         'ceiling_n',    g.ceiling_n,
+--         'mean_pre',     ROUND(g.mean_pre, 2),
+--         'mean_post',    ROUND(g.mean_post, 2),
+--         'mean_gain',    ROUND(g.mean_gain, 2),
+--         'sd_diff',      ROUND(g.sd_diff, 4),
+--         'norm_gain',    CASE
+--                           WHEN g.mean_pre IS NULL OR g.mean_pre >= 100 THEN NULL
+--                           ELSE ROUND((g.mean_post - g.mean_pre) / (100 - g.mean_pre), 4)
+--                         END
+--       ))
+--       FROM grouped g
+--     ), '[]'::jsonb),
+--     -- Filter choices, from all (unfiltered) data so picking one filter
+--     -- never hides the options of another.
+--     'options', jsonb_build_object(
+--       'programs', COALESCE((
+--         SELECT jsonb_agg(jsonb_build_object('id', p.id, 'title', p.title) ORDER BY p.title)
+--           FROM programs p
+--          WHERE EXISTS (
+--            SELECT 1 FROM surveys s
+--             WHERE s.program_id = p.id AND s.type = 'knowledge' AND s.archived_at IS NULL
+--          )
+--       ), '[]'::jsonb),
+--       'courses',     COALESCE((SELECT jsonb_agg(DISTINCT course)     FROM students), '[]'::jsonb),
+--       'year_levels', COALESCE((SELECT jsonb_agg(DISTINCT year_level) FROM students), '[]'::jsonb),
+--       'genders',     COALESCE((SELECT jsonb_agg(DISTINCT gender)     FROM students), '[]'::jsonb),
+--       'years',       COALESCE((SELECT jsonb_agg(DISTINCT EXTRACT(YEAR FROM pre_at)::int) FROM students), '[]'::jsonb)
+--     )
+--   ) INTO result;
+--
+--   RETURN result;
+-- END $$;
+--
+-- REVOKE ALL ON FUNCTION learning_gain_summary(integer, text, text, text, text, integer, jsonb) FROM PUBLIC, anon;
+-- GRANT EXECUTE ON FUNCTION learning_gain_summary(integer, text, text, text, text, integer, jsonb) TO authenticated;

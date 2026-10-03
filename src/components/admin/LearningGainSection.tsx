@@ -140,6 +140,7 @@ function normalizeRow(raw: any): LearningGainRow {
     paired_n: Number(raw.paired_n) || 0,
     incomplete_n: Number(raw.incomplete_n) || 0,
     ceiling_n: Number(raw.ceiling_n) || 0,
+    viewed_before_pre_n: Number(raw.viewed_before_pre_n) || 0,
     mean_pre: asNumber(raw.mean_pre),
     mean_post: asNumber(raw.mean_post),
     mean_gain: asNumber(raw.mean_gain),
@@ -528,7 +529,16 @@ export default function LearningGainSection() {
                 </span>
                 <span className="font-extrabold text-[#1E1B4B]">{overall.incomplete_n}</span>
               </div>
-              <p className="m-0 text-[13px] text-[#5B6477]">Test accounts are excluded.</p>
+              <div className="flex justify-between gap-3 px-4 py-3 rounded-2xl bg-[#F5F6FB]">
+                <span className="text-sm text-[#334155]">
+                  Viewed materials before the pre-test (not counted)
+                </span>
+                <span className="font-extrabold text-[#1E1B4B]">{overall.viewed_before_pre_n}</span>
+              </div>
+              <p className="m-0 text-[13px] text-[#5B6477]">
+                Test accounts are excluded. A pre-test taken after opening the program's materials
+                isn't a true starting point, so those students are left out of the gain.
+              </p>
             </div>
             <div className="px-6 py-6 md:px-7 rounded-[32px] bg-white flex flex-col gap-2">
               <h3 className="m-0 font-bold text-lg text-[#1E1B4B]">How to read the t-test</h3>
