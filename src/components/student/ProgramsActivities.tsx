@@ -24,6 +24,7 @@ import { usePagination } from '../../hooks/usePagination';
 import { PaginationControls } from '../../components/ui/pagination-controls';
 import ProgramEntryTimeline from '../shared/ProgramEntryTimeline';
 import PhotoViewer, { collectProgramPhotos, viewerAt, type PhotoViewerState } from '../shared/PhotoViewer';
+import ZoomableImage from '../shared/ZoomableImage';
 
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a handout PDF preview.
@@ -993,10 +994,10 @@ export default function ProgramsActivities() {
               >
                 <PdfPreview url={previewHandout.url} />
               </Suspense>
-            ) : previewHandout && /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(previewHandout.url) ? (
-              <div className="p-4 w-full h-full flex items-center justify-center">
-                <img src={previewHandout.url} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" alt={previewHandout.title} />
-              </div>
+            ) : previewHandout && (previewHandout.type === 'Image' || /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(previewHandout.url)) ? (
+              // Same zoom as the IEC Library: + / − buttons, pinch, and
+              // drag to move around once zoomed in.
+              <ZoomableImage src={previewHandout.url} alt={previewHandout.title} className="p-4" />
             ) : (
               <div className="text-center px-6">
                 <HardDrive className="w-16 h-16 text-slate-700 dark:text-slate-200 mx-auto" />
