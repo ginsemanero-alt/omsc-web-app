@@ -2207,3 +2207,153 @@ GRANT EXECUTE ON FUNCTION learning_gain_summary(integer, text, text, text, text,
 --
 -- REVOKE ALL ON FUNCTION learning_gain_summary(integer, text, text, text, text, integer, jsonb) FROM PUBLIC, anon;
 -- GRANT EXECUTE ON FUNCTION learning_gain_summary(integer, text, text, text, text, integer, jsonb) TO authenticated;
+
+
+-- =========================================================
+-- PHASE 32: Material reach by course (admin-only RPC)
+-- =========================================================
+-- For each course (profiles.program) and year level: how many students
+-- have an account, and how many opened at least one linked IEC material
+-- (material_views joined to program_materials). With p_iec_program_id
+-- NULL any linked material counts; with a program id only that
+-- program's links count. Archived programs and archived materials are
+-- ignored. Test accounts are excluded unless p_include_test is true.
+-- Counts only: no names, emails or ids are returned.
+--
+-- Filters follow the Analytics dashboard: campus, course, gender and
+-- year level compare case-insensitively (year level is normalised the
+-- way the client's getYearLevel does); age is a min/max range; academic
+-- year is the year of profiles.created_at. Students without a profile
+-- are counted as "Not specified" and drop out when a profile filter is set.
+--
+-- Views before PHASE 29 were never recorded, so older students can look
+-- less reached than they were.
+
+CREATE OR REPLACE FUNCTION material_reach_summary(
+  p_campus         text    DEFAULT NULL,
+  p_course         text    DEFAULT NULL,
+  p_year_level     text    DEFAULT NULL,
+  p_gender         text    DEFAULT NULL,
+  p_age_min        integer DEFAULT NULL,
+  p_age_max        integer DEFAULT NULL,
+  p_academic_year  integer DEFAULT NULL,
+  p_iec_program_id integer DEFAULT NULL,
+  p_include_test   boolean DEFAULT false
+) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE
+  result jsonb;
+BEGIN
+  IF NOT is_admin() THEN
+    RAISE EXCEPTION 'Only admins can view material reach analytics'
+      USING ERRCODE = '42501';
+  END IF;
+
+  WITH linked AS (
+    SELECT DISTINCT pm.material_id
+      FROM program_materials pm
+      JOIN programs  pr ON pr.id = pm.program_id  AND pr.archived_at IS NULL
+      JOIN materials m  ON m.id  = pm.material_id AND m.archived_at  IS NULL
+     WHERE p_iec_program_id IS NULL OR pm.program_id = p_iec_program_id
+  ),
+  students AS (
+    SELECT
+      u.id AS user_id,
+      COALESCE(NULLIF(TRIM(prof.program), ''), 'Not specified') AS course,
+      CASE TRIM(COALESCE(prof.year_level, ''))
+        WHEN ''  THEN 'Not Specified'
+        WHEN '1' THEN '1st Year'
+        WHEN '2' THEN '2nd Year'
+        WHEN '3' THEN '3rd Year'
+        WHEN '4' THEN '4th Year'
+        WHEN '5' THEN '5th Year'
+        ELSE TRIM(prof.year_level)
+      END AS year_level,
+      prof.campus, prof.gender, prof.age, prof.created_at AS profile_created_at,
+      EXISTS (
+        SELECT 1 FROM material_views mv
+         WHERE mv.user_id = u.id
+           AND mv.material_id IN (SELECT material_id FROM linked)
+      ) AS reached
+    FROM users u
+    LEFT JOIN auth.users au ON lower(au.email) = lower(u.email)
+    LEFT JOIN LATERAL (
+      SELECT p.program, p.year_level, p.campus, p.gender, p.age, p.created_at
+        FROM profiles p
+       WHERE p.id = au.id
+          OR (u.student_id IS NOT NULL AND p.student_id = u.student_id)
+       ORDER BY (p.id = au.id) DESC NULLS LAST
+       LIMIT 1
+    ) prof ON true
+    WHERE u.role = 'student'
+      AND u.archived_at IS NULL
+      AND (p_include_test OR NOT u.is_test_account)
+  ),
+  filtered AS (
+    SELECT *
+      FROM students
+     WHERE (p_campus   IS NULL OR lower(TRIM(COALESCE(campus, ''))) = lower(TRIM(p_campus)))
+       AND (p_course   IS NULL OR lower(course) = lower(TRIM(p_course)))
+       AND (p_year_level IS NULL OR lower(year_level) = lower(TRIM(p_year_level)))
+       AND (p_gender   IS NULL OR lower(TRIM(COALESCE(gender, ''))) = lower(TRIM(p_gender)))
+       AND ((p_age_min IS NULL AND p_age_max IS NULL)
+            OR (age IS NOT NULL
+                AND (p_age_min IS NULL OR age >= p_age_min)
+                AND (p_age_max IS NULL OR age <= p_age_max)))
+       AND (p_academic_year IS NULL
+            OR EXTRACT(YEAR FROM profile_created_at)::int = p_academic_year)
+  ),
+  by_course AS (
+    SELECT course AS key, COUNT(*) AS students, COUNT(*) FILTER (WHERE reached) AS reached
+      FROM filtered GROUP BY course
+  ),
+  by_year AS (
+    SELECT year_level AS key, COUNT(*) AS students, COUNT(*) FILTER (WHERE reached) AS reached
+      FROM filtered GROUP BY year_level
+  )
+  SELECT jsonb_build_object(
+    'by_course', COALESCE((
+      SELECT jsonb_agg(jsonb_build_object(
+               'key', key, 'students', students, 'reached', reached,
+               'pct', ROUND(100.0 * reached / NULLIF(students, 0), 1))
+             ORDER BY reached::numeric / NULLIF(students, 0) ASC NULLS LAST, students DESC, key)
+        FROM by_course
+    ), '[]'::jsonb),
+    'by_year_level', COALESCE((
+      SELECT jsonb_agg(jsonb_build_object(
+               'key', key, 'students', students, 'reached', reached,
+               'pct', ROUND(100.0 * reached / NULLIF(students, 0), 1))
+             ORDER BY CASE key WHEN '1st Year' THEN 1 WHEN '2nd Year' THEN 2 WHEN '3rd Year' THEN 3
+                               WHEN '4th Year' THEN 4 WHEN '5th Year' THEN 5
+                               WHEN 'Not Specified' THEN 99 ELSE 50 END, key)
+        FROM by_year
+    ), '[]'::jsonb),
+    'overall', (
+      SELECT jsonb_build_object(
+               'students', COUNT(*), 'reached', COUNT(*) FILTER (WHERE reached),
+               'pct', ROUND(100.0 * COUNT(*) FILTER (WHERE reached) / NULLIF(COUNT(*), 0), 1))
+        FROM filtered
+    ),
+    'linked_materials', (SELECT COUNT(*) FROM linked),
+    'options', jsonb_build_object(
+      'iec_programs', COALESCE((
+        SELECT jsonb_agg(jsonb_build_object('id', p.id, 'title', p.title) ORDER BY p.title)
+          FROM programs p WHERE p.archived_at IS NULL
+      ), '[]'::jsonb)
+    )
+  ) INTO result;
+
+  RETURN result;
+END $$;
+
+REVOKE ALL ON FUNCTION material_reach_summary(text, text, text, text, integer, integer, integer, integer, boolean) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION material_reach_summary(text, text, text, text, integer, integer, integer, integer, boolean) TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
+-- ---------------------------------------------------------
+-- ROLLBACK of PHASE 32 (run only to undo it).
+-- ---------------------------------------------------------
+-- DROP FUNCTION IF EXISTS material_reach_summary(text, text, text, text, integer, integer, integer, integer, boolean);
+-- NOTIFY pgrst, 'reload schema';

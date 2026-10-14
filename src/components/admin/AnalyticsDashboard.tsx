@@ -63,6 +63,12 @@ import autoTable from "jspdf-autotable";
 import { fetchAnalyticsInsight, type AnalyticsInsightResult } from "../../lib/analyticsInsight";
 import { campusLabel } from "../../lib/campuses";
 import LearningGainSection from "./LearningGainSection";
+import MaterialReachSection from "./MaterialReachSection";
+import {
+  fetchMaterialReach,
+  UNFILTERED_REACH,
+  type MaterialReachSummary,
+} from "../../lib/materialReach";
 import {
   AGE_BRACKETS,
   SMALL_SAMPLE_N,
@@ -479,6 +485,66 @@ export default function AnalyticsDashboard() {
     setSelectedCampus(value);
     setSelectedProgram("all");
   };
+
+  /* MATERIAL REACH BY COURSE (PHASE 32) — the aggregation is the
+     material_reach_summary RPC; it follows the filters above plus its own
+     IEC program selector and test-accounts switch (this section only). */
+
+  const [reachIecProgramId, setReachIecProgramId] = useState("all");
+  const [reachIncludeTest, setReachIncludeTest] = useState(false);
+  const [materialReach, setMaterialReach] = useState<MaterialReachSummary | null>(null);
+  const [reachLoading, setReachLoading] = useState(false);
+  const [reachError, setReachError] = useState<string | null>(null);
+
+  const reachFilters = useMemo(
+    () => ({
+      campus: selectedCampus,
+      course: selectedProgram,
+      yearLevel: selectedYearLevel,
+      gender: selectedGender,
+      age: selectedAge,
+      academicYear: selectedAcademicYear,
+      iecProgramId: reachIecProgramId,
+      includeTest: reachIncludeTest,
+    }),
+    [
+      selectedCampus,
+      selectedProgram,
+      selectedYearLevel,
+      selectedGender,
+      selectedAge,
+      selectedAcademicYear,
+      reachIecProgramId,
+      reachIncludeTest,
+    ]
+  );
+
+  const onLearningTab = activeTab === "learning";
+
+  useEffect(() => {
+    // The Learning gain tab has its own data and filters.
+    if (onLearningTab) return;
+
+    let stale = false;
+    setReachLoading(true);
+    setReachError(null);
+
+    fetchMaterialReach(reachFilters)
+      .then((result) => {
+        if (!stale) setMaterialReach(result);
+      })
+      .catch((err) => {
+        console.error("Material reach:", err);
+        if (!stale) setReachError(err?.message || "Unknown error");
+      })
+      .finally(() => {
+        if (!stale) setReachLoading(false);
+      });
+
+    return () => {
+      stale = true;
+    };
+  }, [onLearningTab, reachFilters]);
 
   /* EXPORT REPORT — ported from the retired ReportsCenter screen; its
      own date-range filter, independent of the dropdowns above. */
@@ -2279,7 +2345,9 @@ export default function AnalyticsDashboard() {
   // downloads, so that section isn't duplicated here — Recent IEC
   // Materials is kept since it's the one piece the old Export Report
   // never had.
-  const exportReportPDF = () => {
+  const pctPdf = (pct: number | null) => (pct === null ? "—" : `${pct}%`);
+
+  const exportReportPDF = async () => {
     setGeneratingReport(true);
 
     try {
@@ -2517,6 +2585,143 @@ export default function AnalyticsDashboard() {
         styles: { fontSize: 12 },
       });
 
+      // SECTION 8 — Material Reach by Course (PHASE 32). Uses what is on
+      // screen (the dashboard filters, IEC program and test-accounts
+      // switch), fetching it if the screen has not loaded it yet.
+      let reachForPdf = materialReach;
+      if (!reachForPdf) {
+        try {
+          reachForPdf = await fetchMaterialReach(reachFilters);
+        } catch (reachFetchError) {
+          console.error("Material reach (PDF):", reachFetchError);
+        }
+      }
+
+      doc.addPage();
+      addHeader();
+      nextY = 46;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(15);
+      doc.text("Material Reach by Course", 14, nextY);
+      nextY += 5;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100);
+      const reachFilterBits = [
+        selectedCampus !== "all" && `Campus: ${selectedCampus}`,
+        selectedProgram !== "all" && `Course: ${selectedProgram}`,
+        selectedYearLevel !== "all" && `Year level: ${selectedYearLevel}`,
+        selectedGender !== "all" && `Gender: ${selectedGender}`,
+        selectedAge !== "all" && `Age: ${selectedAge}`,
+        selectedAcademicYear !== "all" && `Academic year: ${selectedAcademicYear}`,
+      ].filter(Boolean) as string[];
+      const reachProgramTitle =
+        reachIecProgramId === "all"
+          ? "All programs"
+          : reachForPdf?.options.iec_programs.find((p) => String(p.id) === reachIecProgramId)?.title.trim() ||
+            `Program ${reachIecProgramId}`;
+      const reachScope = [
+        `IEC program: ${reachProgramTitle}`,
+        ...(reachFilterBits.length ? reachFilterBits : ["No dashboard filters"]),
+        reachIncludeTest ? "Test accounts included" : "Test accounts excluded",
+      ].join(" | ");
+      doc.text(doc.splitTextToSize(reachScope, 180), 14, nextY);
+      nextY += 7;
+
+      if (!reachForPdf) {
+        doc.setFont("helvetica", "italic");
+        doc.text("Material reach could not be loaded.", 14, nextY);
+      } else if (reachForPdf.overall.students === 0) {
+        doc.setFont("helvetica", "italic");
+        doc.text("No students match the current filters.", 14, nextY);
+      } else {
+        const reachRows = reachForPdf.by_course;
+        const reachSmall = (n: number) => (n < SMALL_SAMPLE_N ? " (small sample)" : "");
+
+        // Native bar chart: % reached per course, lowest first.
+        const labelWidth = 62;
+        const barMaxWidth = 100;
+        const barHeight = 5;
+        const barGap = 3;
+        for (const row of reachRows) {
+          if (nextY + barHeight > 275) {
+            doc.addPage();
+            addHeader();
+            nextY = 46;
+          }
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8);
+          doc.setTextColor(30);
+          const label = doc.splitTextToSize(row.key, labelWidth - 2)[0];
+          doc.text(label, 14, nextY + 3.8);
+          doc.setFillColor(238, 240, 250);
+          doc.rect(14 + labelWidth, nextY, barMaxWidth, barHeight, "F");
+          doc.setFillColor(79, 70, 229);
+          const barWidth = (barMaxWidth * (row.pct ?? 0)) / 100;
+          if (barWidth > 0) doc.rect(14 + labelWidth, nextY, barWidth, barHeight, "F");
+          doc.text(pctPdf(row.pct), 14 + labelWidth + barMaxWidth + 2, nextY + 3.8);
+          nextY += barHeight + barGap;
+        }
+        nextY += 4;
+
+        autoTable(doc, {
+          startY: nextY,
+          head: [["Course", "Students", "Opened at least one", "Reached"]],
+          body: reachRows.map((row) => [
+            `${row.key}${reachSmall(row.students)}`,
+            row.students,
+            row.reached,
+            pctPdf(row.pct),
+          ]),
+          headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
+          styles: { fontSize: 12 },
+        });
+        nextY = (doc.lastAutoTable?.finalY || nextY) + 10;
+
+        if (nextY > 250) {
+          doc.addPage();
+          addHeader();
+          nextY = 46;
+        }
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.setTextColor(15);
+        doc.text("Material Reach by Year Level", 14, nextY);
+        nextY += 6;
+
+        autoTable(doc, {
+          startY: nextY,
+          head: [["Year level", "Students", "Opened at least one", "Reached"]],
+          body: reachForPdf.by_year_level.map((row) => [
+            `${row.key}${reachSmall(row.students)}`,
+            row.students,
+            row.reached,
+            pctPdf(row.pct),
+          ]),
+          headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
+          styles: { fontSize: 12 },
+        });
+        nextY = (doc.lastAutoTable?.finalY || nextY) + 6;
+
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(8);
+        doc.setTextColor(100);
+        const reachNotes = doc.splitTextToSize(
+          "Percentages are based on students with an account in the system, not on total enrollment. " +
+            "Material views are recorded only since IEC materials were linked to programs, so reach for earlier students may be understated.",
+          180
+        );
+        if (nextY + reachNotes.length * 4 > 280) {
+          doc.addPage();
+          addHeader();
+          nextY = 46;
+        }
+        doc.text(reachNotes, 14, nextY);
+      }
+
       doc.save(`OMSU_Guidance_Analytics_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
     } finally {
       setGeneratingReport(false);
@@ -2643,6 +2848,28 @@ export default function AnalyticsDashboard() {
     };
   };
 
+  // Material reach by course for the AI Insight: counts only, unfiltered,
+  // test accounts excluded (not the on-screen toggle), all IEC programs.
+  const fetchMaterialReachForInsight = async () => {
+    try {
+      const reach = await fetchMaterialReach(UNFILTERED_REACH);
+      return {
+        about:
+          "Share of students (with an account in the system, not total enrollment) who opened at least one linked IEC material, per course. Counts only. Views were only recorded since materials were linked to programs, so earlier students may be understated. Not affected by the dashboard filters.",
+        overall: reach.overall,
+        byCourse: reach.by_course.map((row) => ({
+          course: row.key,
+          students: row.students,
+          openedAtLeastOne: row.reached,
+          percentReached: row.pct,
+          smallSample: row.students < SMALL_SAMPLE_N,
+        })),
+      };
+    } catch {
+      return { unavailable: true };
+    }
+  };
+
   const handleGenerateInsight = async (regenerate = false) => {
     setInsightLoading(true);
     setInsightError(null);
@@ -2651,7 +2878,11 @@ export default function AnalyticsDashboard() {
       const result = await fetchAnalyticsInsight(
         "full_dashboard",
         "Full Analytics Dashboard",
-        { ...buildInsightMetrics(), learningGain: await fetchLearningGainForInsight() },
+        {
+          ...buildInsightMetrics(),
+          learningGain: await fetchLearningGainForInsight(),
+          materialReach: await fetchMaterialReachForInsight(),
+        },
         regenerate
       );
       setInsight(result);
@@ -4066,6 +4297,16 @@ export default function AnalyticsDashboard() {
             )}
 
           </Card>
+
+          <MaterialReachSection
+            data={materialReach}
+            loading={reachLoading}
+            error={reachError}
+            iecProgramId={reachIecProgramId}
+            onIecProgramChange={setReachIecProgramId}
+            includeTest={reachIncludeTest}
+            onIncludeTestChange={setReachIncludeTest}
+          />
 
           </div>
         )}
