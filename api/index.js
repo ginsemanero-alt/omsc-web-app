@@ -67,10 +67,27 @@ const loginLimiter = rateLimit({
     handler: rateLimitHandler,
 });
 
-// Registration spam / mass fake-account creation.
-const registerLimiter = rateLimit({
+// Registration spam / mass fake-account creation. Two limiters, both must
+// pass. A flat per-IP cap of 5/hour locked out whole campuses: students on
+// campus Wi-Fi (NAT) share one public IP, so a class registering together
+// hit it after five people.
+//   1. Per IP + email, 5/hour: one person retrying, or a script hammering
+//      one address, is capped.
+//   2. Per IP, 60/hour: a loose ceiling on mass account creation from one
+//      address, high enough for a shared campus IP.
+// Like every limiter here these are in-memory (see the note above).
+const registerEmailLimiter = rateLimit({
     windowMs: 60 * 60 * 1000,
     limit: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${(req.body?.email || '').trim().toLowerCase()}`,
+    handler: rateLimitHandler,
+});
+
+const registerIpLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 60,
     standardHeaders: true,
     legacyHeaders: false,
     handler: rateLimitHandler,
@@ -354,7 +371,7 @@ app.get('/api/health', (req, res) => {
 // step: bumping one without the other blocks registration.
 const CURRENT_CONSENT_VERSION = '2026-10';
 
-app.post('/api/register', registerLimiter, async (req, res) => {
+app.post('/api/register', registerIpLimiter, registerEmailLimiter, async (req, res) => {
     const {
         studentId, name, email, password, campus,
         program, yearLevel, status, age, gender, isIp, isPwd, consentVersion

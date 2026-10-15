@@ -12,39 +12,43 @@ export const PRIVACY_NOTICE_VERSION = '2026-10';
 export const GUIDANCE_OFFICE_EMAIL = 'guidance@omsc.edu.ph';
 
 // ---------------------------------------------------------------------
-// Waiting for the Guidance and Testing Center. Replace each placeholder
-// with the confirmed value; nothing else needs to change. Do not deploy
-// the notice to students while any of these is still a placeholder.
+// Waiting for the Guidance and Testing Center. Fill in each value to
+// replace its fallback wording; nothing else needs to change. While a
+// value is empty the notice shows the fallback below instead. Never put a
+// guessed name, email or period here.
 // ---------------------------------------------------------------------
-const TO_CONFIRM = '[To be confirmed by the Guidance and Testing Center]';
 
 // TODO: confirm with Guidance Center — how long records are kept, e.g.
-// "for as long as you are enrolled, then for X years".
-export const RETENTION_PERIOD = TO_CONFIRM;
+// "for as long as you are enrolled, then for X years". Read as
+// "We keep your information <RETENTION_PERIOD>."
+export const RETENTION_PERIOD = '';
 
 // TODO: confirm with Guidance Center — the University Data Protection Officer.
-export const DPO_NAME = TO_CONFIRM;
+export const DPO_NAME = '';
 
 // TODO: confirm with Guidance Center — the Data Protection Officer's email.
-export const DPO_EMAIL = TO_CONFIRM;
+export const DPO_EMAIL = '';
 
 // TODO: confirm with Guidance Center — what the Center requires when a
 // student is under 18 (shown beside the age field at registration).
-export const UNDER_18_POLICY = TO_CONFIRM;
+export const UNDER_18_POLICY = '';
 
-const PLACEHOLDERS: Record<string, string> = { RETENTION_PERIOD, DPO_NAME, DPO_EMAIL, UNDER_18_POLICY };
+// Shown in place of any value that is still empty.
+const RETENTION_FALLBACK = `For questions about how long your data is kept or about data protection, contact the Guidance and Testing Center at ${GUIDANCE_OFFICE_EMAIL}.`;
+const UNDER_18_FALLBACK = 'If you are under 18, please inform your parent or guardian before registering.';
 
-export const isPlaceholder = (value: string) => value === TO_CONFIRM;
+// The note shown beside the age field when a student enters an age under 18.
+export const UNDER_18_NOTE = UNDER_18_POLICY.trim() || UNDER_18_FALLBACK;
 
-// Development only: say which values are still missing.
+// Development only: say which values are still empty.
 if (import.meta.env.DEV) {
-  const missing = Object.entries(PLACEHOLDERS)
-    .filter(([, value]) => isPlaceholder(value))
+  const missing = Object.entries({ RETENTION_PERIOD, DPO_NAME, DPO_EMAIL, UNDER_18_POLICY })
+    .filter(([, value]) => !value.trim())
     .map(([name]) => name);
   if (missing.length > 0) {
     console.warn(
-      `[privacyNotice] Still placeholders in src/lib/privacyNotice.ts: ${missing.join(', ')}. ` +
-        'Get the values from the Guidance and Testing Center before deploying.'
+      `[privacyNotice] Empty in src/lib/privacyNotice.ts (fallback wording is shown): ${missing.join(', ')}. ` +
+        'Get the values from the Guidance and Testing Center.'
     );
   }
 }
@@ -102,7 +106,7 @@ export const NOTICE_SECTIONS: NoticeSection[] = [
   {
     id: 'retention',
     title: 'How long we keep it',
-    paragraphs: [`We keep your information ${RETENTION_PERIOD}.`],
+    paragraphs: [RETENTION_PERIOD.trim() ? `We keep your information ${RETENTION_PERIOD.trim()}.` : RETENTION_FALLBACK],
   },
   {
     id: 'rights',
@@ -130,7 +134,10 @@ export const NOTICE_SECTIONS: NoticeSection[] = [
     title: 'Who to contact',
     items: [
       `Guidance Office: ${GUIDANCE_OFFICE_EMAIL}`,
-      `University Data Protection Officer: ${DPO_NAME}, ${DPO_EMAIL}`,
+      // Only what has actually been confirmed; nothing is shown for a missing value.
+      ...(DPO_NAME.trim() || DPO_EMAIL.trim()
+        ? [`University Data Protection Officer: ${[DPO_NAME.trim(), DPO_EMAIL.trim()].filter(Boolean).join(', ')}`]
+        : []),
     ],
   },
 ];

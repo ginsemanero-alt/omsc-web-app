@@ -29,7 +29,7 @@ import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/activityLog';
 import { PROGRAMS_BY_CAMPUS } from '../lib/programs';
 import { motionDelay, prefersReducedMotion, replayAnimation } from '../lib/motion';
-import { PRIVACY_NOTICE_VERSION, UNDER_18_POLICY, isPlaceholder } from '../lib/privacyNotice';
+import { PRIVACY_NOTICE_VERSION, UNDER_18_NOTE } from '../lib/privacyNotice';
 import PrivacyNoticeBody from '../components/shared/PrivacyNoticeBody';
 import ConsentCheckbox from '../components/shared/ConsentCheckbox';
 
@@ -1277,8 +1277,7 @@ export default function LoginPage({
               role="note"
               className="m-0 rounded-[14px] bg-[#FEF3C7] px-3.5 py-2.5 text-[13px] leading-[1.5] text-[#92400E]"
             >
-              Because you are under 18, a parent or guardian should be informed that you are registering.{' '}
-              {!isPlaceholder(UNDER_18_POLICY) && UNDER_18_POLICY}
+              {UNDER_18_NOTE}
             </p>
           )}
         </div>
