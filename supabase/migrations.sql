@@ -2357,3 +2357,93 @@ NOTIFY pgrst, 'reload schema';
 -- ---------------------------------------------------------
 -- DROP FUNCTION IF EXISTS material_reach_summary(text, text, text, text, integer, integer, integer, integer, boolean);
 -- NOTIFY pgrst, 'reload schema';
+
+
+-- =========================================================
+-- PHASE 33: Data privacy consent (RA 10173)
+-- =========================================================
+-- users.consent_version / consent_given_at hold the student's CURRENT
+-- consent (the app gates on consent_version = the current notice version).
+-- Existing accounts keep NULL, so each student sees the consent screen
+-- once at their next sign-in. Admins and staff are not gated.
+--
+-- consent_log is the append-only history: one row each time a student
+-- agrees. Rows are written only by record_my_consent() (existing
+-- students) and /api/register (service role, new students). Students can
+-- read only their own rows, admins can read all, and nobody can update
+-- or delete through the API (no privileges, no policies, plus a trigger
+-- that rejects UPDATE). Rows go only when the user is deleted (CASCADE),
+-- which is how a data-erasure request is honored.
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_given_at timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_version  text;
+
+CREATE TABLE IF NOT EXISTS consent_log (
+  id              bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id         bigint      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  consent_version text        NOT NULL,
+  given_at        timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS consent_log_user_id_idx ON consent_log (user_id);
+
+ALTER TABLE consent_log ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS consent_log_select_own_or_admin ON consent_log;
+CREATE POLICY consent_log_select_own_or_admin ON consent_log
+  FOR SELECT USING (is_admin() OR user_id = current_student_id());
+
+REVOKE ALL ON consent_log FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON consent_log TO authenticated;
+
+CREATE OR REPLACE FUNCTION consent_log_no_update() RETURNS trigger
+LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN
+  RAISE EXCEPTION 'consent_log is append-only';
+END $$;
+
+DROP TRIGGER IF EXISTS consent_log_no_update ON consent_log;
+CREATE TRIGGER consent_log_no_update
+  BEFORE UPDATE ON consent_log
+  FOR EACH ROW EXECUTE FUNCTION consent_log_no_update();
+
+-- A signed-in student records their own consent to the given notice
+-- version. Calling it again for the version already on file does nothing.
+CREATE OR REPLACE FUNCTION record_my_consent(p_version text) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user bigint := current_student_id();
+BEGIN
+  IF v_user IS NULL THEN
+    RAISE EXCEPTION 'Only students can record consent' USING ERRCODE = '42501';
+  END IF;
+  IF p_version IS NULL OR p_version !~ '^\d{4}-\d{2}$' THEN
+    RAISE EXCEPTION 'Invalid consent version' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (SELECT 1 FROM users WHERE id = v_user AND consent_version = p_version) THEN
+    RETURN;
+  END IF;
+
+  UPDATE users
+     SET consent_given_at = now(),
+         consent_version  = p_version
+   WHERE id = v_user;
+
+  INSERT INTO consent_log (user_id, consent_version) VALUES (v_user, p_version);
+END $$;
+
+REVOKE ALL ON FUNCTION record_my_consent(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION record_my_consent(text) TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
+-- ---------------------------------------------------------
+-- ROLLBACK of PHASE 33 (run only to undo it). Deletes every recorded
+-- consent, current and historical.
+-- ---------------------------------------------------------
+-- DROP FUNCTION IF EXISTS record_my_consent(text);
+-- DROP TABLE IF EXISTS consent_log;
+-- DROP FUNCTION IF EXISTS consent_log_no_update();
+-- ALTER TABLE users DROP COLUMN IF EXISTS consent_version;
+-- ALTER TABLE users DROP COLUMN IF EXISTS consent_given_at;
+-- NOTIFY pgrst, 'reload schema';

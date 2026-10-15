@@ -56,7 +56,16 @@ export default function SiteFooter() {
 
         <div className="pt-4 lg:pt-[22px] border-t border-[#D5D9EA] flex flex-col sm:flex-row sm:justify-between gap-2 sm:gap-8 text-xs lg:text-[13px] leading-[1.5] text-[#5B6477]">
           <span>{SYSTEM_TITLE}</span>
-          <span className="shrink-0">© {new Date().getFullYear()}</span>
+          <span className="shrink-0 flex flex-wrap items-center gap-x-4">
+            <Link
+              to="/privacy"
+              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+              className={`min-h-[44px] inline-flex items-center font-medium text-[#334155] hover:text-[#4338CA] hover:underline rounded ${focusRing}`}
+            >
+              Privacy Notice
+            </Link>
+            <span>© {new Date().getFullYear()}</span>
+          </span>
         </div>
       </div>
     </footer>

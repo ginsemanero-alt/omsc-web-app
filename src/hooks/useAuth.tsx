@@ -16,6 +16,12 @@ interface AuthContextValue {
   // users.name — surfaced mainly so admin actions can be attributed to a
   // real person (see src/lib/activityLog.ts) instead of just an email.
   userName: string | null;
+  // users.consent_version — the version of the Data Privacy Notice the
+  // signed-in student agreed to (NULL = never). Read by ConsentGate.
+  consentVersion: string | null;
+  // False until the consent version has been read for the current session.
+  consentLoaded: boolean;
+  refreshConsent: () => Promise<void>;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -45,11 +51,28 @@ async function fetchUserRecord(email: string): Promise<{ role: Role; dbUserId: n
   };
 }
 
+// Separate from fetchUserRecord on purpose: if this read ever fails (e.g.
+// the consent columns are not there yet) sign-in must keep working, and the
+// student is simply asked for consent again.
+async function fetchConsentVersion(email: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('consent_version')
+    .eq('email', email)
+    .is('archived_at', null)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return (data.consent_version as string | null) ?? null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<Role>(null);
   const [dbUserId, setDbUserId] = useState<number | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
+  const [consentVersion, setConsentVersion] = useState<string | null>(null);
+  const [consentLoaded, setConsentLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -79,8 +102,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ? await fetchUserRecord(sessionUser.email)
             : { role: null, dbUserId: null, userName: null };
 
+          // Only students are asked for consent (staff are not gated).
+          const consent =
+            sessionUser?.email && record.role === 'student'
+              ? await fetchConsentVersion(sessionUser.email)
+              : null;
+
           if (!isMounted) return;
 
+          setConsentVersion(consent);
+          setConsentLoaded(true);
           setUser(sessionUser);
           setRole(record.role);
           setDbUserId(record.dbUserId);
@@ -96,8 +127,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const refreshConsent = async () => {
+    if (!user?.email) return;
+    setConsentVersion(await fetchConsentVersion(user.email));
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
+    setConsentVersion(null);
+    setConsentLoaded(false);
     setUser(null);
     setRole(null);
     setDbUserId(null);
@@ -105,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, dbUserId, userName, loading, signOut }}>
+    <AuthContext.Provider value={{ user, role, dbUserId, userName, consentVersion, consentLoaded, refreshConsent, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

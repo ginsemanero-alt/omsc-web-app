@@ -6,9 +6,11 @@ import { Loader2 } from 'lucide-react';
 // Auth
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import ProtectedRoute from './components/ProtectedRoute';
+import ConsentGate from './components/ConsentGate';
 
 // Layout
 import Layout from "./components/layout/Layout";
+import PrivacyNoticeBar from './components/layout/PrivacyNoticeBar';
 
 // Pages
 import HomePage from './pages/HomePage';
@@ -31,6 +33,7 @@ const TakeSurvey = lazy(() => import('./components/student/QuizzesSurveys'));
 import ProgramsPage from './pages/ProgramsPage';
 import MaterialsPage from './pages/MaterialsPage';
 import AboutPage from './pages/AboutPage';
+import PrivacyPage from './pages/PrivacyPage';
 
 function RouteLoadingFallback() {
   return (
@@ -79,6 +82,7 @@ function AppContent() {
           <Route path="/programs" element={<Layout><ProgramsPage /></Layout>} />
           <Route path="/materials" element={<Layout><MaterialsPage /></Layout>} />
           <Route path="/about" element={<Layout><AboutPage /></Layout>} />
+          <Route path="/privacy" element={<Layout><PrivacyPage /></Layout>} />
 
           {/* FIX #5: /take-survey/:id now points to the correct TakeSurvey component,
               not SurveysPage. The :id param will be accessible via useParams() inside it. */}
@@ -101,7 +105,9 @@ function AppContent() {
             path="/student/*"
             element={
               <ProtectedRoute role="student">
-                <StudentDashboard onLogout={handleLogout} />
+                <ConsentGate onSignOut={handleLogout}>
+                  <StudentDashboard onLogout={handleLogout} />
+                </ConsentGate>
               </ProtectedRoute>
             }
           />
@@ -121,6 +127,7 @@ function AppContent() {
 
         </Routes>
       </Suspense>
+      <PrivacyNoticeBar />
       <Toaster />
     </div>
   );

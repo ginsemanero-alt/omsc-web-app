@@ -29,6 +29,9 @@ import { supabase } from '../lib/supabase';
 import { logActivity } from '../lib/activityLog';
 import { PROGRAMS_BY_CAMPUS } from '../lib/programs';
 import { motionDelay, prefersReducedMotion, replayAnimation } from '../lib/motion';
+import { PRIVACY_NOTICE_VERSION, UNDER_18_POLICY, isPlaceholder } from '../lib/privacyNotice';
+import PrivacyNoticeBody from '../components/shared/PrivacyNoticeBody';
+import ConsentCheckbox from '../components/shared/ConsentCheckbox';
 
 // How long the sign in <-> register switch plays before the view changes.
 const VIEW_SWITCH_MS = 200;
@@ -48,7 +51,9 @@ interface LoginPageProps {
 
 type Gender = 'Male' | 'Female' | 'Other';
 type YesNo = 'Yes' | 'No';
-type RegisterStep = 1 | 2 | 3;
+// Step 0 is the Data privacy consent, shown before the three numbered
+// steps; nothing is collected until it is agreed to.
+type RegisterStep = 0 | 1 | 2 | 3;
 
 const CAMPUSES = [
   'San Jose Campus',
@@ -68,6 +73,10 @@ const SYSTEM_TITLE =
 
 // The three registration steps: what the student fills in on each.
 const REGISTER_STEPS: Record<RegisterStep, { title: string; description: string }> = {
+  0: {
+    title: 'Data privacy consent',
+    description: 'Read how your information is collected and used. Nothing is collected until you agree.',
+  },
   1: {
     title: 'Account details',
     description: 'Use the name, student ID, and institutional email on your school records.',
@@ -77,8 +86,8 @@ const REGISTER_STEPS: Record<RegisterStep, { title: string; description: string 
     description: 'These help the Guidance Center see which students its programs are reaching.',
   },
   3: {
-    title: 'Password and consent',
-    description: 'Choose a password, then review how your information is used.',
+    title: 'Password',
+    description: 'Choose a password to finish creating your account.',
   },
 };
 
@@ -102,8 +111,9 @@ export default function LoginPage({
   // themselves.
   const [searchParams] = useSearchParams();
   const [isRegister, setIsRegister] = useState(() => searchParams.get('mode') === 'register');
-  const [registerStep, setRegisterStep] = useState<RegisterStep>(1);
+  const [registerStep, setRegisterStep] = useState<RegisterStep>(0);
   const [showTerms, setShowTerms] = useState(false);
+  // The Data privacy consent checkbox (step 0).
   const [agreed, setAgreed] = useState(false);
 
   const [email, setEmail] = useState('');
@@ -261,7 +271,7 @@ export default function LoginPage({
     setAgreed(false);
     setShowPassword(false);
     setShowConfirmPassword(false);
-    setRegisterStep(1);
+    setRegisterStep(0);
   };
 
   const fail = (title: string, description: string) => {
@@ -273,6 +283,11 @@ export default function LoginPage({
   // the current step is complete. Same rules and messages as before the
   // form was split into steps.
   const validateStep = (step: RegisterStep) => {
+    if (step === 0) {
+      if (!agreed) return fail('CONSENT REQUIRED', 'Please read the notice and agree to continue.');
+      return true;
+    }
+
     if (step === 1) {
       if (name.trim().length < 3) return fail('INVALID NAME', 'Please enter your complete name.');
       if (!studentId.trim()) return fail('STUDENT ID REQUIRED', 'Please enter your official Student ID number.');
@@ -298,11 +313,10 @@ export default function LoginPage({
       return fail('WEAK PASSWORD', 'Password must be at least 8 characters and contain uppercase, lowercase, and a number.');
     }
     if (password !== confirmPassword) return fail('PASSWORD MISMATCH', 'Passwords do not match.');
-    if (!agreed) return fail('ACTION REQUIRED', 'Please read and agree to the Guidance Terms & Privacy Policy.');
     return true;
   };
 
-  const validateRegistration = () => validateStep(1) && validateStep(2) && validateStep(3);
+  const validateRegistration = () => validateStep(0) && validateStep(1) && validateStep(2) && validateStep(3);
 
   const goToNextStep = () => {
     if (registerStep < 3 && validateStep(registerStep)) {
@@ -311,7 +325,7 @@ export default function LoginPage({
   };
 
   const goToPreviousStep = () => {
-    if (registerStep > 1) setRegisterStep((registerStep - 1) as RegisterStep);
+    if (registerStep > 0) setRegisterStep((registerStep - 1) as RegisterStep);
   };
 
   // Everything after a successful /api/login: the Supabase session, the
@@ -540,6 +554,10 @@ export default function LoginPage({
           isIp,
           isPwd,
 
+          // The notice version agreed to at step 0; the server rejects
+          // the request without it.
+          consentVersion: PRIVACY_NOTICE_VERSION,
+
           status: 'active',
         }
       : {
@@ -612,7 +630,7 @@ export default function LoginPage({
   const handleToggleMode = () => {
     setIsRegister(!isRegister);
     setAgreed(false);
-    setRegisterStep(1);
+    setRegisterStep(0);
 
     if (!isRegister) {
       setPassword('');
@@ -631,7 +649,7 @@ export default function LoginPage({
       switchTimerRef.current = null;
       focusHeadingAfterSwitchRef.current = true;
       // A new view starts with the view fade only, not a step slide.
-      stepMotionRef.current = { step: 1, direction: null };
+      stepMotionRef.current = { step: 0, direction: null };
       handleToggleMode();
       setSwitchingOut(false);
       setViewEntrance('switch');
@@ -1250,8 +1268,19 @@ export default function LoginPage({
             value={age}
             onChange={(e) => setAge(e.target.value)}
             placeholder="e.g. 20"
+            aria-describedby={Number(age) > 0 && Number(age) < 18 ? 'reg-age-minor' : undefined}
             className={`${inputBase} h-12 rounded-[14px] px-3.5 lg:px-4`}
           />
+          {Number(age) > 0 && Number(age) < 18 && (
+            <p
+              id="reg-age-minor"
+              role="note"
+              className="m-0 rounded-[14px] bg-[#FEF3C7] px-3.5 py-2.5 text-[13px] leading-[1.5] text-[#92400E]"
+            >
+              Because you are under 18, a parent or guardian should be informed that you are registering.{' '}
+              {!isPlaceholder(UNDER_18_POLICY) && UNDER_18_POLICY}
+            </p>
+          )}
         </div>
 
         {choiceGroup(
@@ -1341,37 +1370,28 @@ export default function LoginPage({
         )}
       </ul>
 
-      <label
-        htmlFor="reg-terms"
-        className={`flex gap-3.5 items-start p-4 lg:px-5 lg:py-[18px] rounded-[20px] lg:rounded-[22px] cursor-pointer border-[1.5px] transition-colors ${
-          agreed ? 'bg-emerald-50 border-emerald-300' : 'bg-[#EEF0FA] border-transparent'
-        }`}
-      >
-        <span className="relative flex items-center shrink-0 mt-0.5">
-          <input
-            id="reg-terms"
-            type="checkbox"
-            checked={agreed}
-            onChange={(e) => setAgreed(e.target.checked)}
-            className={`peer h-[22px] w-[22px] appearance-none rounded-md border-2 border-[#A5ADC6] bg-white checked:bg-[#4F46E5] checked:border-[#4F46E5] cursor-pointer transition-colors ${focusRing}`}
-          />
-          <Check className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 pointer-events-none" strokeWidth={3} />
-        </span>
-        <span className="text-sm leading-[1.55] text-[#334155]">
-          I agree to the{' '}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              setShowTerms(true);
-            }}
-            className={`font-bold text-[#4338CA] hover:text-[#312E81] hover:underline rounded ${focusRing}`}
-          >
-            Guidance Terms &amp; Privacy Policy
-          </button>
-          , and confirm the information I gave is true.
-        </span>
-      </label>
+      <p className="m-0 text-sm leading-[1.55] text-[#5B6477]">
+        You agreed to the Data Privacy Notice at the start. You can{' '}
+        <button
+          type="button"
+          onClick={() => setShowTerms(true)}
+          className={`font-bold text-[#4338CA] hover:text-[#312E81] hover:underline rounded ${focusRing}`}
+        >
+          read it again
+        </button>
+        . Please make sure the information you gave is true.
+      </p>
+    </>
+  );
+
+  // Step 0: the Data privacy consent. Nothing is collected until the
+  // checkbox is checked; Continue stays disabled until then.
+  const stepZeroFields = (
+    <>
+      <div className="rounded-[20px] border-[1.5px] border-[#DDE1EE] p-5 lg:p-6">
+        <PrivacyNoticeBody headingLevel="h3" />
+      </div>
+      <ConsentCheckbox id="reg-consent" checked={agreed} onChange={setAgreed} />
     </>
   );
 
@@ -1450,15 +1470,15 @@ export default function LoginPage({
         <div className="flex items-center gap-2.5">
           <button
             type="button"
-            onClick={registerStep === 1 ? switchMode : goToPreviousStep}
-            aria-label={registerStep === 1 ? 'Back to sign in' : 'Previous step'}
+            onClick={registerStep === 0 ? switchMode : goToPreviousStep}
+            aria-label={registerStep === 0 ? 'Back to sign in' : 'Previous step'}
             className={`w-11 h-11 rounded-[14px] bg-white/10 flex items-center justify-center ${focusRing}`}
           >
             <ArrowLeft className="w-5 h-5" aria-hidden="true" />
           </button>
           <span className="font-bold text-base">Create your account</span>
           <span className="ml-auto px-[11px] py-1.5 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-xs whitespace-nowrap">
-            Step {registerStep} of 3
+            {registerStep === 0 ? 'Before you start' : `Step ${registerStep} of 3`}
           </span>
           {homeButton(true)}
         </div>
@@ -1501,7 +1521,7 @@ export default function LoginPage({
         >
           <div className="hidden lg:flex flex-col gap-2.5">
             <span className="self-start px-3 py-1.5 rounded-full bg-[#EEF0FA] text-[#4338CA] font-bold text-[13px]">
-              Step {registerStep} of 3
+              {registerStep === 0 ? 'Before you start' : `Step ${registerStep} of 3`}
             </span>
             <h2
               data-view-heading
@@ -1513,12 +1533,13 @@ export default function LoginPage({
             <p className="m-0 text-[15px] leading-[1.5] text-[#5B6477]">{stepInfo.description}</p>
           </div>
 
+          {registerStep === 0 && stepZeroFields}
           {registerStep === 1 && stepOneFields}
           {registerStep === 2 && stepTwoFields}
           {registerStep === 3 && stepThreeFields}
 
           <div className="mt-auto pt-2 flex flex-col-reverse gap-3 lg:flex-row lg:justify-between lg:items-center">
-            {registerStep > 1 ? (
+            {registerStep > 0 ? (
               <button
                 type="button"
                 onClick={goToPreviousStep}
@@ -1541,8 +1562,8 @@ export default function LoginPage({
 
             <button
               type="submit"
-              disabled={isLoading}
-              className={`h-14 lg:h-[52px] w-full lg:w-auto px-[34px] rounded-[18px] lg:rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors motion-press disabled:opacity-70 ${focusRing}`}
+              disabled={isLoading || (registerStep === 0 && !agreed)}
+              className={`h-14 lg:h-[52px] w-full lg:w-auto px-[34px] rounded-[18px] lg:rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors motion-press disabled:opacity-50 disabled:cursor-not-allowed ${focusRing}`}
             >
               {registerStep < 3 ? (
                 'Continue'
@@ -1564,7 +1585,7 @@ export default function LoginPage({
             </button>
           </div>
 
-          {registerStep === 1 && (
+          {registerStep === 0 && (
             <p className="lg:hidden m-0 text-center text-[15px] text-[#5B6477]">
               Already have an account?{' '}
               <button
@@ -1682,33 +1703,17 @@ export default function LoginPage({
         modalShell(
           () => setShowTerms(false),
           <ShieldCheck className="w-6 h-6 text-[#4338CA]" />,
-          'Privacy and terms',
+          'Privacy Notice',
           <>
-            <div className="flex flex-col gap-5 max-h-[55vh] overflow-y-auto pr-2">
-              {[
-                { title: 'Information accuracy', text: 'You certify that the information you provide during registration is true and accurate.' },
-                { title: 'Purpose of data collection', text: 'Student information may be used for account management, guidance program dissemination, survey administration, and aggregated system analytics.' },
-                { title: 'Analytics', text: 'Demographic information such as program, year level, age, gender, PWD status, and IP status may be used to generate aggregated awareness analytics.' },
-                { title: 'Confidentiality', text: 'Individual student information and survey responses should be handled confidentially and should not be unnecessarily exposed in public reports.' },
-                { title: 'Account security', text: 'Students are responsible for keeping their account credentials secure.' },
-              ].map((item, index) => (
-                <div key={item.title}>
-                  <p className="m-0 mb-1 font-bold text-sm text-[#4338CA]">
-                    {String(index + 1).padStart(2, '0')}. {item.title}
-                  </p>
-                  <p className="m-0 text-sm leading-relaxed text-[#5B6477]">{item.text}</p>
-                </div>
-              ))}
+            <div className="max-h-[55vh] overflow-y-auto pr-2" tabIndex={0} aria-label="Data privacy notice">
+              <PrivacyNoticeBody headingLevel="h3" />
             </div>
             <button
               type="button"
-              onClick={() => {
-                setAgreed(true);
-                setShowTerms(false);
-              }}
+              onClick={() => setShowTerms(false)}
               className={`w-full h-14 mt-7 rounded-[18px] bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors motion-press ${focusRing}`}
             >
-              <Check className="w-5 h-5" /> I agree
+              Close
             </button>
           </>,
           'max-w-lg'

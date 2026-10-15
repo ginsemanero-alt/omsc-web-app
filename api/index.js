@@ -349,11 +349,25 @@ app.get('/api/health', (req, res) => {
     res.status(200).json({ status: "OK", message: "Backend is running" });
 });
 
+// The version of the Data Privacy Notice (src/lib/privacyNotice.ts,
+// PRIVACY_NOTICE_VERSION) that registration must agree to. Keep the two in
+// step: bumping one without the other blocks registration.
+const CURRENT_CONSENT_VERSION = '2026-10';
+
 app.post('/api/register', registerLimiter, async (req, res) => {
     const {
         studentId, name, email, password, campus,
-        program, yearLevel, status, age, gender, isIp, isPwd
+        program, yearLevel, status, age, gender, isIp, isPwd, consentVersion
     } = req.body;
+
+    // Nothing is collected until the student has agreed to the current
+    // Data Privacy Notice (RA 10173). Checked first, before any lookup or
+    // account creation.
+    if (consentVersion !== CURRENT_CONSENT_VERSION) {
+        return res.status(400).json({
+            message: "Please read and agree to the Data Privacy Notice before registering."
+        });
+    }
 
     const cleanEmail = email?.trim().toLowerCase();
     const cleanStudentId = studentId?.trim();
@@ -423,13 +437,27 @@ app.post('/api/register', registerLimiter, async (req, res) => {
                 password: hashedPassword,
                 role: finalRole,
                 campus,
-                status: status || 'active'
+                status: status || 'active',
+                // The timestamp is the server's, never the client's.
+                consent_given_at: new Date().toISOString(),
+                consent_version: CURRENT_CONSENT_VERSION
             }])
             .select();
 
         if (dbError) {
             await supabase.auth.admin.deleteUser(authUserId);
             throw dbError;
+        }
+
+        // Append-only history of the agreement (consent_log, PHASE 33).
+        const { error: consentLogError } = await supabase
+            .from('consent_log')
+            .insert([{ user_id: data[0].id, consent_version: CURRENT_CONSENT_VERSION }]);
+
+        if (consentLogError) {
+            await supabase.from('users').delete().eq('id', data[0].id);
+            await supabase.auth.admin.deleteUser(authUserId);
+            throw consentLogError;
         }
 
         const { error: profileError } = await supabase
