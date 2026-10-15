@@ -143,7 +143,8 @@ const analyticsInsightLimiter = rateLimit({
 // scripted abuse/scraping, on top of the stricter limiters above.
 const globalApiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 300,
+    // High enough for a whole class behind one campus Wi-Fi IP (NAT).
+    limit: 1000,
     standardHeaders: true,
     legacyHeaders: false,
     handler: rateLimitHandler,
