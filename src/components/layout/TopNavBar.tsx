@@ -20,6 +20,8 @@ import {
   Info,
   Bell,
   User,
+  PanelLeftClose,
+  PanelLeftOpen,
   type LucideIcon,
 } from 'lucide-react';
 import { useState, useEffect } from 'react'; // Idinagdag ang useEffect
@@ -93,6 +95,11 @@ interface TopNavBarProps {
   // dark: styling of its own) is unaffected.
   isDark?: boolean;
   onToggleTheme?: () => void;
+  // Admin desktop sidebar only: collapsed = icon-only rail. The state lives
+  // in AdminDashboard (it also moves the page content over). The mobile
+  // drawer is unaffected.
+  sidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 export default function TopNavBar({
@@ -104,6 +111,8 @@ export default function TopNavBar({
   currentPath,
   isDark,
   onToggleTheme,
+  sidebarCollapsed = false,
+  onToggleSidebar,
 }: TopNavBarProps) {
   const navigate = useNavigate();
 
@@ -374,57 +383,117 @@ export default function TopNavBar({
            Below lg: a slim top bar whose menu button opens the drawer. */
         <>
           <aside
+            id="admin-sidebar"
             aria-label="Admin"
-            className="hidden lg:flex fixed top-4 bottom-4 left-4 w-[264px] z-40 flex-col gap-7 rounded-[2.5rem] bg-[#1E1B4B] text-white px-4 py-6 font-figtree"
+            data-collapsed={sidebarCollapsed ? 'true' : 'false'}
+            className={`hidden lg:flex fixed top-4 bottom-4 left-4 z-40 flex-col gap-7 rounded-[2.5rem] bg-[#1E1B4B] text-white py-6 font-figtree transition-[width,padding] duration-200 motion-reduce:transition-none ${
+              sidebarCollapsed ? 'w-20 px-3' : 'w-[264px] px-4'
+            }`}
           >
-            <Link to="/admin" className={`min-h-[44px] flex items-center gap-3 px-2 rounded-2xl ${studentFocusRing}`}>
+            <Link
+              to="/admin"
+              aria-label={sidebarCollapsed ? 'OMSU Guidance, Admin home' : undefined}
+              className={`min-h-[44px] flex items-center gap-3 rounded-2xl ${sidebarCollapsed ? 'justify-center' : 'px-2'} ${studentFocusRing}`}
+            >
               <img src="/guidance-logo.jpg" alt="" className="w-[42px] h-[42px] rounded-full object-cover bg-white shrink-0" />
-              <span className="flex flex-col min-w-0">
-                <span className="font-bricolage font-extrabold text-[17px] leading-tight">OMSU Guidance</span>
-                <span className="text-xs text-[#C7C9F2]">Admin</span>
-              </span>
+              {!sidebarCollapsed && (
+                <span className="flex flex-col min-w-0">
+                  <span className="font-bricolage font-extrabold text-[17px] leading-tight">OMSU Guidance</span>
+                  <span className="text-xs text-[#C7C9F2]">Admin</span>
+                </span>
+              )}
             </Link>
 
-            <nav aria-label="Admin sections" className="flex flex-col gap-1 overflow-y-auto">
+            <nav
+              aria-label="Admin sections"
+              className={`flex flex-col gap-1 ${sidebarCollapsed ? 'overflow-visible' : 'overflow-y-auto'}`}
+            >
               {navigationItems.map((item: NavigationItem) => {
                 const ItemIcon = item.icon ? NAV_ICONS[item.icon] : null;
                 const active = currentPath === item.path;
                 return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    aria-current={active ? 'page' : undefined}
-                    className={`h-[50px] px-4 rounded-2xl flex items-center gap-3 text-[15px] transition-colors ${studentFocusRing} ${
-                      active ? 'bg-white text-[#1E1B4B] font-bold' : 'text-[#C7C9F2] font-semibold hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    {ItemIcon && <ItemIcon className="w-5 h-5 shrink-0" aria-hidden="true" />}
-                    {item.label}
-                  </Link>
+                  <div key={item.path} className="relative group">
+                    <Link
+                      to={item.path}
+                      aria-current={active ? 'page' : undefined}
+                      aria-label={sidebarCollapsed ? item.label : undefined}
+                      className={`h-[50px] rounded-2xl flex items-center gap-3 text-[15px] transition-colors ${studentFocusRing} ${
+                        sidebarCollapsed ? 'justify-center px-0' : 'px-4'
+                      } ${
+                        active ? 'bg-white text-[#1E1B4B] font-bold' : 'text-[#C7C9F2] font-semibold hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      {ItemIcon && <ItemIcon className="w-5 h-5 shrink-0" aria-hidden="true" />}
+                      {!sidebarCollapsed && item.label}
+                    </Link>
+                    {sidebarCollapsed && (
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 whitespace-nowrap rounded-xl bg-[#1E1B4B] border border-white/20 px-3 py-2 text-sm font-semibold text-white shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 motion-safe:transition-opacity"
+                      >
+                        {item.label}
+                      </span>
+                    )}
+                  </div>
                 );
               })}
             </nav>
 
             <div className="mt-auto flex flex-col gap-2">
+              {onToggleSidebar && (
+                <div className="relative group">
+                  <button
+                    type="button"
+                    onClick={onToggleSidebar}
+                    aria-expanded={!sidebarCollapsed}
+                    aria-controls="admin-sidebar"
+                    aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                    className={`h-11 w-full rounded-2xl flex items-center gap-3 text-sm font-semibold text-[#C7C9F2] hover:bg-white/10 ${studentFocusRing} ${
+                      sidebarCollapsed ? 'justify-center px-0' : 'px-4'
+                    }`}
+                  >
+                    {sidebarCollapsed ? (
+                      <PanelLeftOpen className="w-5 h-5 shrink-0" aria-hidden="true" />
+                    ) : (
+                      <PanelLeftClose className="w-5 h-5 shrink-0" aria-hidden="true" />
+                    )}
+                    {!sidebarCollapsed && 'Collapse menu'}
+                  </button>
+                  {sidebarCollapsed && (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 whitespace-nowrap rounded-xl bg-[#1E1B4B] border border-white/20 px-3 py-2 text-sm font-semibold text-white shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 motion-safe:transition-opacity"
+                    >
+                      Expand menu
+                    </span>
+                  )}
+                </div>
+              )}
+
               {onToggleTheme && (
                 <button
                   type="button"
                   onClick={onToggleTheme}
                   aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-                  className={`h-11 px-4 rounded-2xl flex items-center gap-3 text-sm font-semibold text-[#C7C9F2] hover:bg-white/10 ${studentFocusRing}`}
+                  className={`h-11 rounded-2xl flex items-center gap-3 text-sm font-semibold text-[#C7C9F2] hover:bg-white/10 ${studentFocusRing} ${
+                    sidebarCollapsed ? 'justify-center px-0' : 'px-4'
+                  }`}
                 >
                   {isDark ? <Sun className="w-5 h-5" aria-hidden="true" /> : <Moon className="w-5 h-5" aria-hidden="true" />}
-                  {isDark ? 'Light mode' : 'Dark mode'}
+                  {!sidebarCollapsed && (isDark ? 'Light mode' : 'Dark mode')}
                 </button>
               )}
 
-              {/* Signed-in staff card: opens the account menu. */}
+              {/* Signed-in staff card: opens the account menu. Collapsed, it
+                  is just the avatar. */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
                     aria-label={`Account menu for ${displayName}`}
-                    className={`w-full p-3.5 rounded-[22px] bg-white/[0.08] hover:bg-white/[0.14] flex items-center gap-3 text-left transition-colors ${studentFocusRing}`}
+                    className={`rounded-[22px] bg-white/[0.08] hover:bg-white/[0.14] flex items-center transition-colors ${studentFocusRing} ${
+                      sidebarCollapsed ? 'w-full h-14 justify-center p-0' : 'w-full p-3.5 gap-3 text-left'
+                    }`}
                   >
                     <span
                       className="w-10 h-10 shrink-0 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-sm flex items-center justify-center"
@@ -432,14 +501,22 @@ export default function TopNavBar({
                     >
                       {initials}
                     </span>
-                    <span className="flex flex-col min-w-0 flex-1">
-                      <span className="font-bold text-sm truncate">{displayName}</span>
-                      <span className="text-xs text-[#C7C9F2] truncate">{campus}</span>
-                    </span>
-                    <ChevronDown className="w-4 h-4 text-[#C7C9F2] shrink-0" aria-hidden="true" />
+                    {!sidebarCollapsed && (
+                      <>
+                        <span className="flex flex-col min-w-0 flex-1">
+                          <span className="font-bold text-sm truncate">{displayName}</span>
+                          <span className="text-xs text-[#C7C9F2] truncate">{campus}</span>
+                        </span>
+                        <ChevronDown className="w-4 h-4 text-[#C7C9F2] shrink-0" aria-hidden="true" />
+                      </>
+                    )}
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent side="top" align="start" className="w-60 rounded-3xl p-2 shadow-xl border-[#DDE1EE] font-figtree">
+                <DropdownMenuContent
+                  side={sidebarCollapsed ? 'right' : 'top'}
+                  align={sidebarCollapsed ? 'end' : 'start'}
+                  className="w-60 rounded-3xl p-2 shadow-xl border-[#DDE1EE] font-figtree"
+                >
                   <DropdownMenuLabel className="font-bold text-[15px] text-[#1E1B4B] px-3 py-2 truncate">
                     {displayName}
                   </DropdownMenuLabel>

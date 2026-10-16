@@ -15,6 +15,7 @@ import {
   loadMaterialProgress, isMaterialViewed, materialProgressFor, postTestLockFor, linkedMaterialsFor, recordMaterialView,
   MATERIALS_COMING_SOON, type MaterialProgressData, type MaterialProgress, type LinkedMaterial,
 } from '../../lib/materialProgress';
+import { PRE_TEST_PRIVACY_NOTE, formatComparison, formatPointChange, percentFrom } from '../../lib/assessment';
 import { formatProgramDate } from '../../lib/formatProgramDate';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
 import { logActivity } from '../../lib/activityLog';
@@ -191,10 +192,7 @@ function scoreText(response: ResponseRow | null): string {
   return response.total_scored ? `${response.score}/${response.total_scored}` : String(response.score);
 }
 
-function formatPoints(points: number): string {
-  const sign = points > 0 ? '+' : '';
-  return `${sign}${points} ${Math.abs(points) === 1 ? 'point' : 'points'}`;
-}
+const formatPoints = formatPointChange;
 
 function longDate(value: string): string {
   return new Date(value).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
@@ -412,7 +410,7 @@ export default function ProgramsActivities() {
           .is('archived_at', null),
         dbUserId
           ? // Own responses only, through student_my_responses() (PHASE 30):
-            // a pre-test score stays hidden until the post-test exists.
+            // the pre-test score is included; its answers never are.
             supabase.rpc('student_my_responses')
           : Promise.resolve({ data: [] as ResponseRow[], error: null }),
       ]);
@@ -553,10 +551,11 @@ export default function ProgramsActivities() {
     const entries = program.program_entries || [];
     const photos = collectProgramPhotos(program);
     const poster = program.image_url || FALLBACK_POSTER;
+    // Percentage points from the pre-test to the post-test.
+    const prePct = percentFrom(assessment.pre?.score, assessment.pre?.total_scored);
+    const postPct = percentFrom(assessment.post?.score, assessment.post?.total_scored);
     const improvement =
-      assessment.status === 'completed' && assessment.pre?.score != null && assessment.post?.score != null
-        ? assessment.post.score - assessment.pre.score
-        : null;
+      assessment.status === 'completed' && prePct !== null && postPct !== null ? postPct - prePct : null;
 
     const whenWhere = [
       formatProgramDate(program, programDateText) + (program.duration_label ? `, ${program.duration_label}` : ''),
@@ -710,6 +709,17 @@ export default function ProgramsActivities() {
                     ))}
                   </ol>
 
+                  {assessment.status === 'in_progress' && assessment.pre?.score != null && (
+                    <p className="m-0 text-sm font-semibold text-white">
+                      Pre-test score: {scoreText(assessment.pre)}
+                      {prePct !== null ? ` (${prePct}%)` : ''}
+                    </p>
+                  )}
+
+                  {assessment.status === 'completed' && formatComparison(prePct, postPct) && (
+                    <p className="m-0 text-sm font-semibold text-white">{formatComparison(prePct, postPct)}</p>
+                  )}
+
                   {assessment.status === 'completed' && (
                     <dl className="m-0 grid grid-cols-3 gap-2">
                       {[
@@ -761,7 +771,7 @@ export default function ProgramsActivities() {
                         </button>
                       )}
                       <p className="m-0 text-[13px] leading-normal text-[#A5A8E0]">
-                        Your pre-test score and the answer key are shown after the post-test.
+                        {PRE_TEST_PRIVACY_NOTE}
                       </p>
                     </>
                   )}

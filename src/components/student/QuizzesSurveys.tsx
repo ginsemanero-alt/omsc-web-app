@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { loadMaterialProgress, postTestLockFor, type MaterialProgressData } from '../../lib/materialProgress';
+import { PRE_TEST_PRIVACY_NOTE, formatComparison, isPassingPct, percentFrom } from '../../lib/assessment';
 
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -37,7 +38,6 @@ interface Question {
   type: 'mcq' | 'scale' | 'text' | 'checkbox' | string;
   options?: string[];
   required?: boolean;
-  correct_option?: string;
   related_program_id?: number | null;
   related_material_id?: number | null;
   // checkbox only
@@ -81,12 +81,22 @@ function questionCountForAttempt(survey: Survey): number {
   return (useFormB ? survey.form_b_count : survey.form_a_count) ?? 0;
 }
 
-// The review a student gets after the post-test (get_assessment_review):
-// each attempt's questions with their answer keys, and their answers.
-interface ReviewAttempt {
-  form: 'A' | 'B';
-  questions: Question[];
-  answers: Record<string, any>;
+// The review a student gets after the post-test (get_assessment_review,
+// PHASE 34). The pre-test is score only; the post-test has one item per
+// question with the student's own answer and whether it was right. The
+// server never sends the answer key, the options or any pre-test item.
+interface ReviewItem {
+  id: string | number;
+  text: string;
+  type: string;
+  student_answer: any;
+  // null for an item that isn't scored (scale, text, no correct answer set)
+  is_correct: boolean | null;
+  related_program_id?: number | null;
+  related_material_id?: number | null;
+}
+
+interface ReviewScore {
   score: number | null;
   total_scored: number | null;
   percentage: number | null;
@@ -95,8 +105,9 @@ interface ReviewAttempt {
 interface AssessmentReview {
   survey_id: string;
   title: string;
-  pre: ReviewAttempt | null;
-  post: ReviewAttempt;
+  pre: ReviewScore | null;
+  post: ReviewScore & { form: 'A' | 'B'; items: ReviewItem[] };
+  comparison: { pre_pct: number; post_pct: number; points: number } | null;
 }
 
 // Supabase function errors carry the message raised in the database
@@ -122,43 +133,14 @@ interface SurveyResult {
   attempt_type?: AttemptType | null;
 }
 
-interface MissedQuestion {
-  question: Question;
-  studentAnswer: any;
-}
-
+// What the result screen shows right after a submission. items is empty
+// for a pre-test (score only).
 interface ScoreSummary {
   correct: number;
   total: number;
   percentage: number | null;
-  missed: MissedQuestion[];
-}
-
-function computeScoreSummary(
-  questions: Question[],
-  answers: Record<string, any>
-): ScoreSummary {
-  const scoredQuestions = questions.filter(
-    (question) => question.type === 'mcq' && question.correct_option
-  );
-
-  const missed: MissedQuestion[] = [];
-  let correct = 0;
-
-  for (const question of scoredQuestions) {
-    const studentAnswer = answers[String(question.id)];
-
-    if (studentAnswer === question.correct_option) {
-      correct += 1;
-    } else {
-      missed.push({ question, studentAnswer });
-    }
-  }
-
-  const total = scoredQuestions.length;
-  const percentage = total > 0 ? Math.round((correct / total) * 100) : null;
-
-  return { correct, total, percentage, missed };
+  items: ReviewItem[];
+  comparison: { pre_pct: number; post_pct: number; points: number } | null;
 }
 
 export default function QuizzesSurveys() {
@@ -207,8 +189,9 @@ export default function QuizzesSurveys() {
   const [scoreSummary, setScoreSummary] = useState<ScoreSummary | null>(null);
   // Which attempt the just-submitted response was, captured before the
   // survey list refetches (after which the survey's next_attempt has
-  // already moved on). A pre-test result must not reveal correct answers,
-  // or the post-test would measure memory of the key, not learning.
+  // already moved on). A pre-test result is the score only: its items are
+  // never shown back, or the post-test would measure memory of the first
+  // form, not learning.
   const [submittedAttempt, setSubmittedAttempt] = useState<AttemptType | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
@@ -298,8 +281,8 @@ export default function QuizzesSurveys() {
       setResultsLoading(true);
       setResultsLoadFailed(false);
 
-      // Own responses, newest first. A pre-test score comes back empty
-      // until the post-test exists (student_my_responses, PHASE 30).
+      // Own responses, newest first, with the pre-test score
+      // (student_my_responses).
       const { data: myResponses, error: responsesError } = await supabase.rpc('student_my_responses');
 
       if (responsesError) throw responsesError;
@@ -455,8 +438,7 @@ export default function QuizzesSurveys() {
    * ---------------------------------------------------------
    */
   // Knowledge assessments: survey id -> the student's latest pre-test and
-  // post-test result. A pre-test score stays hidden until the post-test
-  // for the same survey exists. (results is newest first.)
+  // post-test result. (results is newest first.)
   const attemptsBySurveyResult = useMemo(() => {
     const map: Record<string, { pre?: SurveyResult; post?: SurveyResult }> = {};
     for (const result of results) {
@@ -467,14 +449,15 @@ export default function QuizzesSurveys() {
     return map;
   }, [results]);
 
+  // "Pre-test 60% → Post-test 85% (+25 points)", from the student's own
+  // pre-test and post-test percentages.
   const preTestComparison = (surveyId: string | number) => {
     const { pre, post } = attemptsBySurveyResult[String(surveyId)] || {};
-    if (!pre || !post || pre.score == null || post.score == null) return null;
-    const points = post.score - pre.score;
-    const preText = pre.total_scored ? `${pre.score}/${pre.total_scored}` : String(pre.score);
-    const postText = post.total_scored ? `${post.score}/${post.total_scored}` : String(post.score);
-    const change = `${points > 0 ? '+' : ''}${points} ${Math.abs(points) === 1 ? 'point' : 'points'}`;
-    return `Pre-test ${preText}, post-test ${postText}, ${change}`;
+    if (!pre || !post) return null;
+    return formatComparison(
+      pre.percentage ?? percentFrom(pre.score, pre.total_scored),
+      post.percentage ?? percentFrom(post.score, post.total_scored)
+    );
   };
 
   // The questions of the attempt being taken, loaded when it starts from
@@ -765,23 +748,28 @@ export default function QuizzesSurveys() {
 
       const attempt = (submitted?.attempt_type ?? null) as AttemptType | null;
 
-      // After the post-test the review (with the answer key) opens: the
-      // missed items come from it, scored by the server.
+      // After the post-test its review opens: each item with the student's
+      // answer and whether it was right (no answer key), and the pre-vs-post
+      // comparison. After the pre-test only the score is shown.
       let summary: ScoreSummary | null = null;
       if (attempt === 'post') {
         const review = await loadReview(activeSurvey.id);
-        const fromReview = review
-          ? computeScoreSummary(review.post.questions, review.post.answers || {})
-          : null;
         summary = {
-          correct: submitted.score ?? fromReview?.correct ?? 0,
-          total: submitted.total_scored ?? fromReview?.total ?? 0,
-          percentage: submitted.percentage != null ? Number(submitted.percentage) : fromReview?.percentage ?? null,
-          missed: fromReview?.missed ?? [],
+          correct: submitted.score ?? review?.post.score ?? 0,
+          total: submitted.total_scored ?? review?.post.total_scored ?? 0,
+          percentage:
+            submitted.percentage != null ? Number(submitted.percentage) : review?.post.percentage ?? null,
+          items: review?.post.items ?? [],
+          comparison: review?.comparison ?? null,
         };
       } else if (attempt === 'pre') {
-        // The pre-test screen shows no score; this only opens it.
-        summary = { correct: 0, total: 1, percentage: null, missed: [] };
+        summary = {
+          correct: submitted.score ?? 0,
+          total: submitted.total_scored ?? 0,
+          percentage: submitted.percentage != null ? Number(submitted.percentage) : null,
+          items: [],
+          comparison: null,
+        };
       }
 
       await fetchActiveSurveys();
@@ -824,78 +812,92 @@ export default function QuizzesSurveys() {
     }
   };
 
-  // Missed items with the student's answer, the correct answer, and links
-  // to the program or material each one covers. Only ever called with a
-  // post-test review (answer keys come from get_assessment_review).
-  const renderMissedList = (missed: MissedQuestion[]) => (
-    <div className="mt-8 space-y-4">
-      {missed.map(({ question, studentAnswer }) => (
-        <div
-          key={question.id}
-          className="p-4 sm:p-6 rounded-2xl border border-rose-100 bg-rose-50/50"
-        >
-          <div className="flex items-start gap-3">
-            <XCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+  // The post-test, item by item: the student's own answer and whether it
+  // was right. There is no correct answer here: the server never sends
+  // one. A missed item links to the program or material it covers.
+  const answerText = (value: any) => {
+    if (value === null || value === undefined || value === '') return 'No answer';
+    return Array.isArray(value) ? value.join(', ') : String(value);
+  };
 
-            <div className="flex-1 min-w-0">
-              <p className="text-sm sm:text-base font-black text-slate-800 dark:text-slate-100 leading-relaxed">
-                {question.text}
-              </p>
+  const renderReviewItems = (items: ReviewItem[]) => (
+    <ol className="mt-6 space-y-3 list-none p-0 m-0">
+      {items.map((item, index) => {
+        const status = item.is_correct === true ? 'correct' : item.is_correct === false ? 'incorrect' : 'unscored';
+        return (
+          <li
+            key={String(item.id)}
+            className={`p-4 sm:p-5 rounded-2xl border ${
+              status === 'correct'
+                ? 'border-emerald-100 bg-emerald-50/50 dark:border-emerald-500/20 dark:bg-emerald-500/10'
+                : status === 'incorrect'
+                  ? 'border-rose-100 bg-rose-50/50 dark:border-rose-500/20 dark:bg-rose-500/10'
+                  : 'border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/50'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              {status === 'correct' ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" aria-hidden="true" />
+              ) : status === 'incorrect' ? (
+                <XCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" aria-hidden="true" />
+              ) : (
+                <span className="w-5 h-5 shrink-0" aria-hidden="true" />
+              )}
 
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-100">
-                  <p className="text-[9px] font-black uppercase text-rose-500">
-                    Your Answer
-                  </p>
-                  <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
-                    {studentAnswer || 'No answer'}
-                  </p>
-                </div>
+              <div className="flex-1 min-w-0">
+                <p className="m-0 text-sm sm:text-base font-black text-slate-800 dark:text-slate-100 leading-relaxed">
+                  <span className="text-slate-400 mr-1.5">{index + 1}.</span>
+                  {item.text}
+                </p>
 
-                <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-emerald-100">
-                  <p className="text-[9px] font-black uppercase text-emerald-600">
-                    Correct Answer
-                  </p>
-                  <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
-                    {question.correct_option}
-                  </p>
-                </div>
-              </div>
+                <p className="m-0 mt-2 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+                  <span className="font-black uppercase text-[9px] tracking-wider text-slate-400 mr-1.5">Your answer</span>
+                  {answerText(item.student_answer)}
+                </p>
 
-              {(question.related_program_id || question.related_material_id) && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {question.related_program_id &&
-                    programTitles[question.related_program_id] && (
+                {status !== 'unscored' && (
+                  <p
+                    className={`m-0 mt-1 text-xs font-black uppercase tracking-wider ${
+                      status === 'correct' ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'
+                    }`}
+                  >
+                    {status === 'correct' ? 'Correct' : 'Incorrect'}
+                  </p>
+                )}
+
+                {status === 'incorrect' && (item.related_program_id || item.related_material_id) && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {item.related_program_id && programTitles[item.related_program_id] && (
                       <Button
-                        onClick={() => navigate(`/student/programs?program=${question.related_program_id}`)}
+                        onClick={() => navigate(`/student/programs?program=${item.related_program_id}`)}
                         variant="outline"
                         className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
                       >
                         <Calendar className="w-3.5 h-3.5" />
-                        {programTitles[question.related_program_id]}
+                        {programTitles[item.related_program_id]}
                         <ArrowRight className="w-3.5 h-3.5" />
                       </Button>
                     )}
 
-                  {question.related_material_id &&
-                    materialTitles[question.related_material_id] && (
+                    {item.related_material_id && materialTitles[item.related_material_id] && (
                       <Button
                         onClick={() => navigate('/student/materials')}
                         variant="outline"
                         className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
                       >
                         <BookOpen className="w-3.5 h-3.5" />
-                        {materialTitles[question.related_material_id]}
+                        {materialTitles[item.related_material_id]}
                         <ArrowRight className="w-3.5 h-3.5" />
                       </Button>
                     )}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-      ))}
-    </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 
   /*
@@ -1307,20 +1309,15 @@ export default function QuizzesSurveys() {
                   </div>
                 </div>
 
-                {result.attempt_type === 'pre' && !attemptsBySurveyResult[String(result.survey_id)]?.post ? (
-                  // Pre-test without a post-test yet: no score, percentage,
-                  // or correct/incorrect detail.
-                  <div className="text-right shrink-0 max-w-[45%]">
-                    <p className="text-sm font-bold text-indigo-600 dark:text-indigo-300">Pre-test done</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Your score is shown after the post-test.
-                    </p>
-                  </div>
-                ) : result.percentage !== null && result.percentage !== undefined ? (
+                {result.percentage !== null && result.percentage !== undefined ? (
                   <div className="text-center shrink-0">
                     <p
                       className={`text-xl font-black ${
-                        result.percentage >= 70 ? 'text-emerald-600' : 'text-amber-600'
+                        result.attempt_type === 'pre'
+                          ? 'text-indigo-600 dark:text-indigo-300'
+                          : isPassingPct(result.percentage)
+                            ? 'text-emerald-600'
+                            : 'text-amber-600'
                       }`}
                     >
                       {result.percentage}%
@@ -1328,6 +1325,11 @@ export default function QuizzesSurveys() {
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
                       {result.score}/{result.total_scored} Correct
                     </p>
+                    {result.attempt_type === 'pre' && (
+                      <p className="mt-1 max-w-[12rem] text-xs text-slate-500 dark:text-slate-400">
+                        {PRE_TEST_PRIVACY_NOTE}
+                      </p>
+                    )}
                     {result.attempt_type === 'post' && preTestComparison(result.survey_id) && (
                       <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
                         {preTestComparison(result.survey_id)}
@@ -1353,21 +1355,27 @@ export default function QuizzesSurveys() {
                 )}
               </Card>
 
-              {/* Post-test review: Form B answers against Form B's key. */}
+              {/* Post-test review: each item with the student's own answer and
+                  whether it was right. No answer key. */}
               {result.attempt_type === 'post' && openReviewId === String(result.survey_id) && reviews[openReviewId] && (() => {
                 const review = reviews[openReviewId];
-                const summary = computeScoreSummary(review.post.questions, review.post.answers || {});
+                const wrong = review.post.items.filter((item) => item.is_correct === false).length;
+                const comparison = formatComparison(review.comparison?.pre_pct, review.comparison?.post_pct);
                 return (
                   <section
                     aria-label={`Review of ${result.title}`}
                     className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800"
                   >
+                    {comparison && (
+                      <p className="m-0 mb-1 text-sm font-black text-indigo-700 dark:text-indigo-300">{comparison}</p>
+                    )}
                     <p className="m-0 text-sm font-semibold text-slate-600 dark:text-slate-300">
-                      {summary.missed.length === 0
+                      {wrong === 0
                         ? 'You answered every post-test question correctly.'
-                        : `${summary.missed.length} post-test ${summary.missed.length === 1 ? 'question' : 'questions'} to review. Each links to where you can learn more.`}
+                        : `${wrong} post-test ${wrong === 1 ? 'question' : 'questions'} to review. Each links to where you can learn more.`}
                     </p>
-                    {summary.missed.length > 0 && renderMissedList(summary.missed)}
+                    <p className="m-0 mt-1 text-xs text-slate-500 dark:text-slate-400">{PRE_TEST_PRIVACY_NOTE}</p>
+                    {renderReviewItems(review.post.items)}
                   </section>
                 );
               })()}
@@ -1965,69 +1973,57 @@ export default function QuizzesSurveys() {
             ------------------------------------------- */}
             {scoreSummary && (
               <div className="max-w-3xl mx-auto">
-                {submittedAttempt === 'pre' ? (
-                // Pre-test: no score, percentage, or correct/incorrect
-                // detail until the post-test exists.
-                <div className="text-center max-w-xl mx-auto">
-                  <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 rounded-3xl flex items-center justify-center mb-6 bg-indigo-50 dark:bg-indigo-500/10">
-                    <CheckCircle2 className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-600" />
-                  </div>
+                {(() => {
+                  // Pre-test: the score only (neutral colour, it isn't a
+                  // pass/fail). Post-test: green at or above the pass mark.
+                  const isPre = submittedAttempt === 'pre';
+                  const passed = !isPre && isPassingPct(scoreSummary.percentage);
+                  const wrongCount = scoreSummary.items.filter((item) => item.is_correct === false).length;
+                  const comparison = !isPre && scoreSummary.comparison
+                    ? formatComparison(scoreSummary.comparison.pre_pct, scoreSummary.comparison.post_pct)
+                    : null;
+                  return (
+                    <div className="text-center max-w-xl mx-auto">
+                      <div
+                        className={`mx-auto w-16 h-16 sm:w-20 sm:h-20 rounded-3xl flex items-center justify-center mb-6 ${
+                          isPre ? 'bg-indigo-50 dark:bg-indigo-500/10' : passed ? 'bg-emerald-50' : 'bg-amber-50'
+                        }`}
+                      >
+                        {isPre ? (
+                          <CheckCircle2 className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-600" />
+                        ) : (
+                          <Trophy className={`w-8 h-8 sm:w-10 sm:h-10 ${passed ? 'text-emerald-600' : 'text-amber-600'}`} />
+                        )}
+                      </div>
 
-                  <h3 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">
-                    Pre-test done
-                  </h3>
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-2">
+                        {submittedAttempt ? `${ATTEMPT_LABEL[submittedAttempt]} Complete` : 'Assessment Complete'}
+                      </p>
 
-                  <p className="mt-2 text-base font-semibold text-slate-500 dark:text-slate-400">
-                    Submitted {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                  </p>
+                      <h3 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">
+                        {scoreSummary.correct} / {scoreSummary.total} Correct
+                      </h3>
 
-                  <p className="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Your score is shown after the post-test.
-                  </p>
-                </div>
-                ) : (
-                <div className="text-center max-w-xl mx-auto">
-                  <div
-                    className={`mx-auto w-16 h-16 sm:w-20 sm:h-20 rounded-3xl flex items-center justify-center mb-6 ${
-                      (scoreSummary.percentage ?? 0) >= 70
-                        ? 'bg-emerald-50'
-                        : 'bg-amber-50'
-                    }`}
-                  >
-                    <Trophy
-                      className={`w-8 h-8 sm:w-10 sm:h-10 ${
-                        (scoreSummary.percentage ?? 0) >= 70
-                          ? 'text-emerald-600'
-                          : 'text-amber-600'
-                      }`}
-                    />
-                  </div>
+                      <p className="mt-2 text-lg sm:text-xl font-black text-indigo-600">
+                        {scoreSummary.percentage}% Score
+                      </p>
 
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-2">
-                    {submittedAttempt ? `${ATTEMPT_LABEL[submittedAttempt]} Complete` : 'Assessment Complete'}
-                  </p>
+                      {comparison && (
+                        <p className="mt-2 text-sm sm:text-base font-semibold text-slate-600 dark:text-slate-300">
+                          {comparison}
+                        </p>
+                      )}
 
-                  <h3 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">
-                    {scoreSummary.correct} / {scoreSummary.total} Correct
-                  </h3>
-
-                  <p className="mt-2 text-lg sm:text-xl font-black text-indigo-600">
-                    {scoreSummary.percentage}% Score
-                  </p>
-
-                  {submittedAttempt === 'post' && activeSurvey && preTestComparison(activeSurvey.id) && (
-                    <p className="mt-2 text-sm sm:text-base font-semibold text-slate-600 dark:text-slate-300">
-                      {preTestComparison(activeSurvey.id)}
-                    </p>
-                  )}
-
-                  <p className="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
-                    {scoreSummary.missed.length === 0
-                      ? 'Perfect score! You answered every knowledge question correctly.'
-                      : "Here's what to review — each item below links to where you can learn more."}
-                  </p>
-                </div>
-                )}
+                      <p className="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
+                        {isPre
+                          ? PRE_TEST_PRIVACY_NOTE
+                          : wrongCount === 0
+                            ? 'Perfect score! You answered every knowledge question correctly.'
+                            : "Here's what to review — each missed item below links to where you can learn more."}
+                      </p>
+                    </div>
+                  );
+                })()}
 
                 {/* Pre-test: no answer key — point the student to the
                     materials, then back here for the post-test. */}
@@ -2062,7 +2058,7 @@ export default function QuizzesSurveys() {
                   </div>
                 )}
 
-                {submittedAttempt !== 'pre' && scoreSummary.missed.length > 0 && renderMissedList(scoreSummary.missed)}
+                {submittedAttempt !== 'pre' && scoreSummary.items.length > 0 && renderReviewItems(scoreSummary.items)}
 
                 <Button
                   onClick={handleCloseSurvey}

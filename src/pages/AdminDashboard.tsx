@@ -313,9 +313,35 @@ function ContentManagement() {
   );
 }
 
+// The desktop sidebar can collapse to an icon-only rail; the choice is
+// remembered per browser. Storage can be unavailable (private window,
+// blocked site data), so every access is guarded.
+const SIDEBAR_STORAGE_KEY = 'omsu_admin_sidebar_collapsed';
+
+function readSidebarCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const location = useLocation();
   const { toast } = useToast();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed);
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((previous) => {
+      const next = !previous;
+      try {
+        window.localStorage.setItem(SIDEBAR_STORAGE_KEY, next ? '1' : '0');
+      } catch {
+        // Not remembered; it still works for this visit.
+      }
+      return next;
+    });
+  };
 
   const navigationItems = [
     { label: 'Content', path: '/admin', icon: 'FolderOpen' },
@@ -347,11 +373,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         onLogout={handleLogoutWithToast}
         navigationItems={navigationItems}
         currentPath={location.pathname}
+        sidebarCollapsed={sidebarCollapsed}
+        onToggleSidebar={toggleSidebar}
       />
 
-      {/* Beside the fixed sidebar on desktop (264px + 16px inset on each
-          side); under the top bar below lg. */}
-      <main className="lg:pl-[296px] pt-[72px] lg:pt-0 min-w-0">
+      {/* Beside the fixed sidebar on desktop (264px, or the 80px rail when
+          collapsed, plus a 16px inset on each side); under the top bar
+          below lg. */}
+      <main
+        className={`pt-[72px] lg:pt-0 min-w-0 transition-[padding] duration-200 motion-reduce:transition-none ${
+          sidebarCollapsed ? 'lg:pl-[112px]' : 'lg:pl-[296px]'
+        }`}
+      >
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 pt-4 pb-10 lg:pt-9 lg:pb-12 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500">
           <Routes>
             <Route path="/" element={<ContentManagement />} />

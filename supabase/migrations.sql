@@ -2447,3 +2447,471 @@ NOTIFY pgrst, 'reload schema';
 -- ALTER TABLE users DROP COLUMN IF EXISTS consent_version;
 -- ALTER TABLE users DROP COLUMN IF EXISTS consent_given_at;
 -- NOTIFY pgrst, 'reload schema';
+
+
+-- =========================================================
+-- PHASE 34: pre-test score, post-test review without the key, badges
+-- =========================================================
+-- 1. A pre-test's SCORE (score, total, percentage) is now returned by
+--    submit_assessment and shown by student_my_responses straight away.
+--    Per-item detail for the pre-test (Form A) is never returned.
+-- 2. get_assessment_review() is rebuilt from an allowlist. After the
+--    student's post-test it returns the pre-test score only (no Form A
+--    item text, ids, answers or marks), the post-test (Form B) score, a
+--    per-item list (id, text, type, the student's own answer, is_correct,
+--    related links) and the pre-vs-post comparison. It never returns
+--    correct_option, pairs_with or the options.
+-- 3. my_badges() derives participation/completion badges from existing
+--    data. Nothing rewards score gain. PASS_THRESHOLD_PCT lives in
+--    src/lib/assessment.ts and in pass_threshold_pct() below: change both.
+--
+-- Run with the client deploy: an older cached client reads the review in
+-- its previous shape.
+
+-- Percentage a post-test needs to count as passed (and be shown green).
+CREATE OR REPLACE FUNCTION pass_threshold_pct() RETURNS integer
+LANGUAGE sql IMMUTABLE SET search_path = public AS $$ SELECT 75 $$;
+
+-- ---- submit_assessment: the pre-test score is returned too ----
+CREATE OR REPLACE FUNCTION submit_assessment(p_survey_id uuid, p_answers jsonb) RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user bigint := current_student_id();
+  v_survey surveys;
+  v_attempt text;
+  v_form text;
+  v_questions jsonb;
+  v_lock text;
+  v_score integer;
+  v_total integer;
+  v_percentage numeric;
+  v_row survey_responses;
+BEGIN
+  IF v_user IS NULL THEN
+    RAISE EXCEPTION 'Sign in with a student account to submit.' USING ERRCODE = '42501';
+  END IF;
+  IF p_answers IS NULL OR jsonb_typeof(p_answers) <> 'object' THEN
+    RAISE EXCEPTION 'Answers must be an object keyed by question id.' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT * INTO v_survey FROM surveys
+   WHERE id = p_survey_id AND status = 'active' AND archived_at IS NULL;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'This assessment is not open.' USING ERRCODE = 'P0002';
+  END IF;
+
+  v_attempt := next_attempt_for(v_user, v_survey);
+  IF v_attempt IS NULL THEN
+    RAISE EXCEPTION 'You have already submitted this assessment.' USING ERRCODE = '23505';
+  END IF;
+
+  IF v_attempt = 'post' THEN
+    v_lock := post_test_lock_reason(v_user, v_survey.program_id);
+    IF v_lock IS NOT NULL THEN
+      RAISE EXCEPTION 'Post-test locked: %', v_lock USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  IF v_survey.type = 'knowledge' THEN
+    v_form := assessment_form_for(v_survey, v_attempt);
+    v_questions := CASE WHEN v_form = 'B' THEN v_survey.questions_data_post ELSE v_survey.questions_data END;
+
+    SELECT count(*),
+           count(*) FILTER (WHERE p_answers ->> (q ->> 'id') = q ->> 'correct_option')
+      INTO v_total, v_score
+      FROM jsonb_array_elements(
+             CASE WHEN jsonb_typeof(v_questions) = 'array' THEN v_questions ELSE '[]'::jsonb END
+           ) AS t(q)
+     WHERE q ->> 'type' = 'mcq'
+       AND coalesce(q ->> 'correct_option', '') <> '';
+
+    v_percentage := CASE WHEN v_total > 0 THEN round(v_score * 100.0 / v_total) END;
+  END IF;
+
+  INSERT INTO survey_responses (user_id, survey_id, answers, score, total_scored, percentage)
+  VALUES (v_user, v_survey.id, p_answers, v_score, v_total, v_percentage)
+  RETURNING * INTO v_row;
+
+  RETURN jsonb_build_object(
+    'id', v_row.id,
+    'attempt_type', v_row.attempt_type,
+    'form', v_form,
+    'score', v_row.score,
+    'total_scored', v_row.total_scored,
+    'percentage', v_row.percentage
+  );
+END $$;
+
+REVOKE ALL ON FUNCTION submit_assessment(uuid, jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION submit_assessment(uuid, jsonb) TO authenticated;
+
+-- ---- student_my_responses: the pre-test score is no longer hidden ----
+DROP FUNCTION IF EXISTS student_my_responses();
+
+CREATE OR REPLACE FUNCTION student_my_responses() RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT coalesce(jsonb_agg(jsonb_build_object(
+           'id', r.id,
+           'survey_id', r.survey_id,
+           'attempt_type', r.attempt_type,
+           'score', r.score,
+           'total_scored', r.total_scored,
+           'percentage', r.percentage,
+           'created_at', r.created_at
+         ) ORDER BY r.created_at DESC), '[]'::jsonb)
+    FROM survey_responses r
+   WHERE r.user_id = current_student_id()
+$$;
+
+REVOKE ALL ON FUNCTION student_my_responses() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION student_my_responses() TO authenticated;
+
+-- ---- get_assessment_review: allowlist, post-test items only ----
+CREATE OR REPLACE FUNCTION get_assessment_review(p_survey_id uuid) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user bigint := current_student_id();
+  v_survey surveys;
+  v_pre survey_responses;
+  v_post survey_responses;
+  v_post_form text;
+  v_questions jsonb;
+  v_items jsonb;
+  v_pre_pct numeric;
+  v_post_pct numeric;
+BEGIN
+  IF v_user IS NULL THEN
+    RAISE EXCEPTION 'Sign in with a student account.' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO v_survey FROM surveys WHERE id = p_survey_id AND type = 'knowledge';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Assessment not found.' USING ERRCODE = 'P0002';
+  END IF;
+
+  SELECT * INTO v_post FROM survey_responses
+   WHERE user_id = v_user AND survey_id = p_survey_id AND attempt_type = 'post'
+   ORDER BY created_at DESC LIMIT 1;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'The review opens after you submit the post-test.' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO v_pre FROM survey_responses
+   WHERE user_id = v_user AND survey_id = p_survey_id AND attempt_type = 'pre'
+   ORDER BY created_at DESC LIMIT 1;
+
+  v_post_form := assessment_form_for(v_survey, 'post');
+  v_questions := CASE WHEN v_post_form = 'B' THEN v_survey.questions_data_post
+                      WHEN jsonb_typeof(v_survey.questions_data) = 'array' THEN v_survey.questions_data
+                      ELSE '[]'::jsonb END;
+
+  -- Every field is named here: nothing from the stored question (the key,
+  -- the options, pairs_with) can reach the student by being left in.
+  SELECT coalesce(jsonb_agg(jsonb_build_object(
+           'id',                 q -> 'id',
+           'text',               q -> 'text',
+           'type',               q -> 'type',
+           'student_answer',     v_post.answers -> (q ->> 'id'),
+           'is_correct',         CASE WHEN q ->> 'type' = 'mcq' AND coalesce(q ->> 'correct_option', '') <> ''
+                                      THEN coalesce((v_post.answers ->> (q ->> 'id')) = q ->> 'correct_option', false)
+                                 END,
+           'related_program_id', q -> 'related_program_id',
+           'related_material_id', q -> 'related_material_id'
+         ) ORDER BY ord), '[]'::jsonb)
+    INTO v_items
+    FROM jsonb_array_elements(CASE WHEN jsonb_typeof(v_questions) = 'array' THEN v_questions ELSE '[]'::jsonb END)
+         WITH ORDINALITY AS t(q, ord);
+
+  v_post_pct := coalesce(v_post.percentage,
+                         CASE WHEN v_post.total_scored > 0 THEN round(v_post.score * 100.0 / v_post.total_scored) END);
+  v_pre_pct := CASE WHEN v_pre.id IS NOT NULL THEN coalesce(v_pre.percentage,
+                         CASE WHEN v_pre.total_scored > 0 THEN round(v_pre.score * 100.0 / v_pre.total_scored) END) END;
+
+  RETURN jsonb_build_object(
+    'survey_id', v_survey.id,
+    'title', v_survey.title,
+    -- The pre-test (Form A) is score only, always.
+    'pre', CASE WHEN v_pre.id IS NULL THEN NULL ELSE jsonb_build_object(
+             'score', v_pre.score, 'total_scored', v_pre.total_scored,
+             'percentage', v_pre_pct, 'created_at', v_pre.created_at) END,
+    'post', jsonb_build_object(
+      'form', v_post_form,
+      'score', v_post.score, 'total_scored', v_post.total_scored,
+      'percentage', v_post_pct, 'created_at', v_post.created_at,
+      'items', v_items),
+    'comparison', CASE WHEN v_pre.id IS NULL OR v_pre_pct IS NULL OR v_post_pct IS NULL THEN NULL
+                       ELSE jsonb_build_object('pre_pct', v_pre_pct, 'post_pct', v_post_pct,
+                                               'points', v_post_pct - v_pre_pct) END
+  );
+END $$;
+
+REVOKE ALL ON FUNCTION get_assessment_review(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION get_assessment_review(uuid) TO authenticated;
+
+-- ---- my_badges: display-only, derived, participation/completion only ----
+
+-- The post-test dates of the programs a student has completed, oldest
+-- first. Completed = pre and post submitted, and every material linked at
+-- the time of the post-test (at least one; not archived, not a handout)
+-- was viewed. Counted from survey history, so archiving a survey or
+-- program keeps the badge. Internal helper: not callable by students.
+CREATE OR REPLACE FUNCTION completed_program_dates(p_user bigint) RETURNS SETOF timestamptz
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT post.created_at
+    FROM surveys s
+    JOIN LATERAL (SELECT created_at FROM survey_responses
+                   WHERE user_id = p_user AND survey_id = s.id AND attempt_type = 'pre' LIMIT 1) pre ON true
+    JOIN LATERAL (SELECT created_at FROM survey_responses
+                   WHERE user_id = p_user AND survey_id = s.id AND attempt_type = 'post' LIMIT 1) post ON true
+   WHERE s.type = 'knowledge' AND s.program_id IS NOT NULL
+     AND EXISTS (
+           SELECT 1 FROM program_materials pm
+             JOIN materials m ON m.id = pm.material_id AND m.archived_at IS NULL AND m.program_id IS NULL
+            WHERE pm.program_id = s.program_id AND pm.created_at <= post.created_at)
+     AND NOT EXISTS (
+           SELECT 1 FROM program_materials pm
+             JOIN materials m ON m.id = pm.material_id AND m.archived_at IS NULL AND m.program_id IS NULL
+            WHERE pm.program_id = s.program_id AND pm.created_at <= post.created_at
+              AND NOT EXISTS (SELECT 1 FROM material_views mv
+                               WHERE mv.user_id = p_user AND mv.material_id = m.id))
+   ORDER BY post.created_at
+$$;
+
+REVOKE ALL ON FUNCTION completed_program_dates(bigint) FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION my_badges() RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user bigint := current_student_id();
+  v_threshold integer := pass_threshold_pct();
+  v_first_step timestamptz;
+  v_explored integer;
+  v_explorer_at timestamptz;
+  v_dates timestamptz[];
+  v_completed integer;
+  v_passed timestamptz;
+BEGIN
+  IF v_user IS NULL THEN
+    RAISE EXCEPTION 'Sign in with a student account.' USING ERRCODE = '42501';
+  END IF;
+
+  -- First Step: took a pre-test.
+  SELECT min(r.created_at) INTO v_first_step
+    FROM survey_responses r JOIN surveys s ON s.id = r.survey_id
+   WHERE r.user_id = v_user AND r.attempt_type = 'pre' AND s.type = 'knowledge';
+
+  -- Explorer: every linked (non-archived, non-handout) material of some
+  -- program viewed. Earned when that program's last material was opened.
+  SELECT count(*), min(done_at) INTO v_explored, v_explorer_at
+    FROM (
+      SELECT pm.program_id, max(mv.first_viewed_at) AS done_at
+        FROM program_materials pm
+        JOIN programs  pr ON pr.id = pm.program_id AND pr.archived_at IS NULL
+        JOIN materials m  ON m.id = pm.material_id AND m.archived_at IS NULL AND m.program_id IS NULL
+        LEFT JOIN material_views mv ON mv.material_id = m.id AND mv.user_id = v_user
+       GROUP BY pm.program_id
+      HAVING count(*) > 0 AND count(mv.material_id) = count(*)
+    ) explored;
+
+  -- Program Complete / Committed Learner (the third completion's date).
+  SELECT coalesce(array_agg(d ORDER BY d), '{}') INTO v_dates FROM completed_program_dates(v_user) AS d;
+  v_completed := coalesce(array_length(v_dates, 1), 0);
+
+  -- Knowledge Check Passed: a post-test at or above the threshold.
+  SELECT min(r.created_at) INTO v_passed
+    FROM survey_responses r JOIN surveys s ON s.id = r.survey_id
+   WHERE r.user_id = v_user AND r.attempt_type = 'post' AND s.type = 'knowledge'
+     AND r.percentage >= v_threshold;
+
+  RETURN jsonb_build_object(
+    'pass_threshold_pct', v_threshold,
+    'badges', jsonb_build_array(
+      jsonb_build_object('id', 'first_step', 'earned', v_first_step IS NOT NULL, 'earned_at', v_first_step,
+                         'progress', jsonb_build_object('current', (v_first_step IS NOT NULL)::int, 'target', 1)),
+      jsonb_build_object('id', 'explorer', 'earned', v_explored > 0, 'earned_at', v_explorer_at,
+                         'progress', jsonb_build_object('current', least(v_explored, 1), 'target', 1)),
+      jsonb_build_object('id', 'program_complete', 'earned', v_completed > 0, 'earned_at', v_dates[1],
+                         'progress', jsonb_build_object('current', least(v_completed, 1), 'target', 1)),
+      jsonb_build_object('id', 'knowledge_check_passed', 'earned', v_passed IS NOT NULL, 'earned_at', v_passed,
+                         'progress', jsonb_build_object('current', (v_passed IS NOT NULL)::int, 'target', 1)),
+      jsonb_build_object('id', 'committed_learner', 'earned', v_completed >= 3, 'earned_at', v_dates[3],
+                         'progress', jsonb_build_object('current', least(v_completed, 3), 'target', 3))
+    )
+  );
+END $$;
+
+REVOKE ALL ON FUNCTION my_badges() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION my_badges() TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
+-- ---------------------------------------------------------
+-- ROLLBACK of PHASE 34 (run only to undo it): drops the badge functions and
+-- restores the PHASE 30 versions (pre-test score hidden until the post-test;
+-- review with the answer key).
+-- ---------------------------------------------------------
+-- DROP FUNCTION IF EXISTS my_badges();
+-- DROP FUNCTION IF EXISTS completed_program_dates(bigint);
+-- DROP FUNCTION IF EXISTS pass_threshold_pct();
+-- DROP FUNCTION IF EXISTS student_my_responses();
+-- CREATE OR REPLACE FUNCTION submit_assessment(p_survey_id uuid, p_answers jsonb) RETURNS jsonb
+-- LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+-- DECLARE
+--   v_user bigint := current_student_id();
+--   v_survey surveys;
+--   v_attempt text;
+--   v_form text;
+--   v_questions jsonb;
+--   v_lock text;
+--   v_score integer;
+--   v_total integer;
+--   v_percentage numeric;
+--   v_row survey_responses;
+-- BEGIN
+--   IF v_user IS NULL THEN
+--     RAISE EXCEPTION 'Sign in with a student account to submit.' USING ERRCODE = '42501';
+--   END IF;
+--   IF p_answers IS NULL OR jsonb_typeof(p_answers) <> 'object' THEN
+--     RAISE EXCEPTION 'Answers must be an object keyed by question id.' USING ERRCODE = '22023';
+--   END IF;
+--
+--   SELECT * INTO v_survey FROM surveys
+--    WHERE id = p_survey_id AND status = 'active' AND archived_at IS NULL;
+--   IF NOT FOUND THEN
+--     RAISE EXCEPTION 'This assessment is not open.' USING ERRCODE = 'P0002';
+--   END IF;
+--
+--   v_attempt := next_attempt_for(v_user, v_survey);
+--   IF v_attempt IS NULL THEN
+--     RAISE EXCEPTION 'You have already submitted this assessment.' USING ERRCODE = '23505';
+--   END IF;
+--
+--   IF v_attempt = 'post' THEN
+--     v_lock := post_test_lock_reason(v_user, v_survey.program_id);
+--     IF v_lock IS NOT NULL THEN
+--       RAISE EXCEPTION 'Post-test locked: %', v_lock USING ERRCODE = '42501';
+--     END IF;
+--   END IF;
+--
+--   IF v_survey.type = 'knowledge' THEN
+--     v_form := assessment_form_for(v_survey, v_attempt);
+--     v_questions := CASE WHEN v_form = 'B' THEN v_survey.questions_data_post ELSE v_survey.questions_data END;
+--
+--     SELECT count(*),
+--            count(*) FILTER (WHERE p_answers ->> (q ->> 'id') = q ->> 'correct_option')
+--       INTO v_total, v_score
+--       FROM jsonb_array_elements(
+--              CASE WHEN jsonb_typeof(v_questions) = 'array' THEN v_questions ELSE '[]'::jsonb END
+--            ) AS t(q)
+--      WHERE q ->> 'type' = 'mcq'
+--        AND coalesce(q ->> 'correct_option', '') <> '';
+--
+--     v_percentage := CASE WHEN v_total > 0 THEN round(v_score * 100.0 / v_total) END;
+--   END IF;
+--
+--   INSERT INTO survey_responses (user_id, survey_id, answers, score, total_scored, percentage)
+--   VALUES (v_user, v_survey.id, p_answers, v_score, v_total, v_percentage)
+--   RETURNING * INTO v_row;
+--
+--   RETURN jsonb_build_object(
+--     'id', v_row.id,
+--     'attempt_type', v_row.attempt_type,
+--     'form', v_form,
+--     'score', CASE WHEN v_row.attempt_type = 'pre' THEN NULL ELSE v_row.score END,
+--     'total_scored', CASE WHEN v_row.attempt_type = 'pre' THEN NULL ELSE v_row.total_scored END,
+--     'percentage', CASE WHEN v_row.attempt_type = 'pre' THEN NULL ELSE v_row.percentage END
+--   );
+-- END $$;
+--
+-- REVOKE ALL ON FUNCTION submit_assessment(uuid, jsonb) FROM PUBLIC, anon;
+-- GRANT EXECUTE ON FUNCTION submit_assessment(uuid, jsonb) TO authenticated;
+--
+-- DROP FUNCTION IF EXISTS student_my_responses();
+-- CREATE OR REPLACE FUNCTION student_my_responses() RETURNS jsonb
+-- LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+--   SELECT coalesce(jsonb_agg(jsonb_build_object(
+--            'id', r.id,
+--            'survey_id', r.survey_id,
+--            'attempt_type', r.attempt_type,
+--            'score', CASE WHEN r.attempt_type = 'pre' AND NOT hp.has_post THEN NULL ELSE r.score END,
+--            'total_scored', CASE WHEN r.attempt_type = 'pre' AND NOT hp.has_post THEN NULL ELSE r.total_scored END,
+--            'percentage', CASE WHEN r.attempt_type = 'pre' AND NOT hp.has_post THEN NULL ELSE r.percentage END,
+--            'created_at', r.created_at
+--          ) ORDER BY r.created_at DESC), '[]'::jsonb)
+--     FROM survey_responses r
+--     CROSS JOIN LATERAL (
+--       SELECT EXISTS (SELECT 1 FROM survey_responses p
+--                       WHERE p.user_id = r.user_id AND p.survey_id = r.survey_id
+--                         AND p.attempt_type = 'post') AS has_post
+--     ) hp
+--    WHERE r.user_id = current_student_id()
+-- $$;
+--
+-- REVOKE ALL ON FUNCTION student_my_responses() FROM PUBLIC, anon;
+-- GRANT EXECUTE ON FUNCTION student_my_responses() TO authenticated;
+--
+-- CREATE OR REPLACE FUNCTION get_assessment_review(p_survey_id uuid) RETURNS jsonb
+-- LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+-- DECLARE
+--   v_user bigint := current_student_id();
+--   v_survey surveys;
+--   v_pre survey_responses;
+--   v_post survey_responses;
+--   v_post_form text;
+--   v_pre_json jsonb;
+-- BEGIN
+--   IF v_user IS NULL THEN
+--     RAISE EXCEPTION 'Sign in with a student account.' USING ERRCODE = '42501';
+--   END IF;
+--
+--   SELECT * INTO v_survey FROM surveys WHERE id = p_survey_id AND type = 'knowledge';
+--   IF NOT FOUND THEN
+--     RAISE EXCEPTION 'Assessment not found.' USING ERRCODE = 'P0002';
+--   END IF;
+--
+--   SELECT * INTO v_post FROM survey_responses
+--    WHERE user_id = v_user AND survey_id = p_survey_id AND attempt_type = 'post'
+--    ORDER BY created_at DESC LIMIT 1;
+--   IF NOT FOUND THEN
+--     RAISE EXCEPTION 'The review opens after you submit the post-test.' USING ERRCODE = '42501';
+--   END IF;
+--
+--   SELECT * INTO v_pre FROM survey_responses
+--    WHERE user_id = v_user AND survey_id = p_survey_id AND attempt_type = 'pre'
+--    ORDER BY created_at DESC LIMIT 1;
+--   IF FOUND THEN
+--     v_pre_json := jsonb_build_object(
+--       'form', 'A',
+--       'questions', (SELECT coalesce(jsonb_agg(q - 'pairs_with' ORDER BY ord), '[]'::jsonb)
+--                       FROM jsonb_array_elements(
+--                              CASE WHEN jsonb_typeof(v_survey.questions_data) = 'array'
+--                                   THEN v_survey.questions_data ELSE '[]'::jsonb END
+--                            ) WITH ORDINALITY t(q, ord)),
+--       'answers', v_pre.answers,
+--       'score', v_pre.score, 'total_scored', v_pre.total_scored,
+--       'percentage', v_pre.percentage, 'created_at', v_pre.created_at);
+--   END IF;
+--
+--   v_post_form := assessment_form_for(v_survey, 'post');
+--
+--   RETURN jsonb_build_object(
+--     'survey_id', v_survey.id,
+--     'title', v_survey.title,
+--     'pre', v_pre_json,
+--     'post', jsonb_build_object(
+--       'form', v_post_form,
+--       'questions', (SELECT coalesce(jsonb_agg(q - 'pairs_with' ORDER BY ord), '[]'::jsonb)
+--                       FROM jsonb_array_elements(
+--                              CASE WHEN v_post_form = 'B' THEN v_survey.questions_data_post
+--                                   WHEN jsonb_typeof(v_survey.questions_data) = 'array' THEN v_survey.questions_data
+--                                   ELSE '[]'::jsonb END
+--                            ) WITH ORDINALITY t(q, ord)),
+--       'answers', v_post.answers,
+--       'score', v_post.score, 'total_scored', v_post.total_scored,
+--       'percentage', v_post.percentage, 'created_at', v_post.created_at)
+--   );
+-- END $$;
+--
+-- REVOKE ALL ON FUNCTION get_assessment_review(uuid) FROM PUBLIC, anon;
+-- GRANT EXECUTE ON FUNCTION get_assessment_review(uuid) TO authenticated;
+-- NOTIFY pgrst, 'reload schema';

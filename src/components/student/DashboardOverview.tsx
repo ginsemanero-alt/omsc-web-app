@@ -5,6 +5,8 @@ import { supabase } from '../../lib/supabase';
 import { campusVisibilityFilter } from '../../lib/campuses';
 import { YEAR_LEVELS, normalizeYearLevel } from '../../lib/programs';
 import { useAuth } from '../../hooks/useAuth';
+import { formatComparison, formatPointChange as formatPoints, percentFrom } from '../../lib/assessment';
+import MyBadges from './MyBadges';
 import {
   loadMaterialProgress, materialProgressFor, type MaterialProgress, type MaterialProgressData,
 } from '../../lib/materialProgress';
@@ -92,15 +94,12 @@ function scoreText(response: ResponseRow | null): string {
   return response.total_scored ? `${response.score}/${response.total_scored}` : String(response.score);
 }
 
+// Percentage points from the pre-test to the post-test.
 function improvementPoints(item: ProgramProgress): number | null {
   if (item.status !== 'completed' || !item.pre || !item.post) return null;
-  if (item.pre.score === null || item.post.score === null) return null;
-  return item.post.score - item.pre.score;
-}
-
-function formatPoints(points: number): string {
-  const sign = points > 0 ? '+' : '';
-  return `${sign}${points} ${Math.abs(points) === 1 ? 'point' : 'points'}`;
+  const pre = percentFrom(item.pre.score, item.pre.total_scored);
+  const post = percentFrom(item.post.score, item.post.total_scored);
+  return pre === null || post === null ? null : post - pre;
 }
 
 function shortDate(value: string): string {
@@ -183,14 +182,19 @@ function detailText(item: ProgramProgress): string {
       return 'Take the pre-test before you read the materials.';
     case 'in_progress': {
       const materials = getMaterialProgress(item);
-      if (!materials) return 'Pre-test done. Read the materials, then take the post-test.';
-      if (materials.total === 0) return 'Pre-test done. Materials are coming soon.';
-      if (materialsDone(item)) return `Pre-test done. ${materials.total} of ${materials.total} materials viewed. Post-test open.`;
-      return `Pre-test done. ${materials.viewed} of ${materials.total} materials viewed.`;
+      const preDone = item.pre && item.pre.score != null ? `Pre-test done (${scoreText(item.pre)}).` : 'Pre-test done.';
+      if (!materials) return `${preDone} Read the materials, then take the post-test.`;
+      if (materials.total === 0) return `${preDone} Materials are coming soon.`;
+      if (materialsDone(item)) return `${preDone} ${materials.total} of ${materials.total} materials viewed. Post-test open.`;
+      return `${preDone} ${materials.viewed} of ${materials.total} materials viewed.`;
     }
     case 'completed':
-      // Scores only ever appear here, once the post-test exists.
-      return `Pre-test ${scoreText(item.pre)}, post-test ${scoreText(item.post)}`;
+      return (
+        formatComparison(
+          percentFrom(item.pre?.score, item.pre?.total_scored),
+          percentFrom(item.post?.score, item.post?.total_scored)
+        ) ?? `Pre-test ${scoreText(item.pre)}, post-test ${scoreText(item.post)}`
+      );
   }
 }
 
@@ -370,7 +374,7 @@ export default function DashboardOverview() {
           .is('archived_at', null),
         dbUserId
           ? // Own responses only, through student_my_responses() (PHASE 30):
-            // a pre-test score stays hidden until the post-test exists.
+            // the pre-test score is included; its answers never are.
             supabase.rpc('student_my_responses')
           : Promise.resolve({ data: [] as ResponseRow[], error: null }),
         dbUserId
@@ -767,6 +771,8 @@ export default function DashboardOverview() {
           </aside>
         </div>
       </div>
+
+      <MyBadges />
     </div>
   );
 }
