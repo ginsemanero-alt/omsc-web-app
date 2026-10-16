@@ -2935,7 +2935,11 @@ ALTER TABLE surveys ADD CONSTRAINT surveys_post_form_required
   CHECK (
     status IS DISTINCT FROM 'active'
     OR type IS DISTINCT FROM 'knowledge'
-    OR (jsonb_typeof(questions_data_post) = 'array' AND jsonb_array_length(questions_data_post) > 0)
+    -- CASE, not AND: a NULL expression would PASS a CHECK, and a missing
+    -- Form B is NULL here.
+    OR CASE WHEN jsonb_typeof(questions_data_post) = 'array'
+            THEN jsonb_array_length(questions_data_post) > 0
+            ELSE false END
   );
 
 CREATE OR REPLACE FUNCTION get_assessment_review(p_survey_id uuid) RETURNS jsonb
