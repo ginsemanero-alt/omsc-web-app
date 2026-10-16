@@ -54,7 +54,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     id: 'knowledge_check_passed',
-    title: 'Knowledge Check Passed',
+    title: 'Awareness Check Passed',
     description: `You scored ${PASS_THRESHOLD_PCT}% or higher on a post-test.`,
     howToEarn: `Score ${PASS_THRESHOLD_PCT}% or higher on a post-test.`,
     kind: 'completion',

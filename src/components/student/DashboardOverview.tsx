@@ -490,6 +490,12 @@ export default function DashboardOverview() {
   const preTestsTaken = progress.filter((p) => p.pre).length;
   const improvements = progress.map(improvementPoints).filter((n): n is number => n !== null);
   const bestImprovement = improvements.length > 0 ? Math.max(...improvements) : null;
+  // Steps done on the program that is furthest along (pre-test, all materials
+  // viewed, post-test), for the "Program Complete" badge's progress line.
+  const programSteps =
+    progress.length === 0
+      ? null
+      : Math.max(...progress.map((p) => (p.pre ? 1 : 0) + (materialsDone(p) ? 1 : 0) + (p.post ? 1 : 0)));
 
   let continueSteps: Step[] = [];
   let continueNote = '';
@@ -772,7 +778,7 @@ export default function DashboardOverview() {
         </div>
       </div>
 
-      <MyBadges />
+      <MyBadges programSteps={programSteps} />
     </div>
   );
 }
