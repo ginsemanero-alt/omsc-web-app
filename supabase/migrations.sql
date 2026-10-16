@@ -2915,3 +2915,120 @@ NOTIFY pgrst, 'reload schema';
 -- REVOKE ALL ON FUNCTION get_assessment_review(uuid) FROM PUBLIC, anon;
 -- GRANT EXECUTE ON FUNCTION get_assessment_review(uuid) TO authenticated;
 -- NOTIFY pgrst, 'reload schema';
+
+
+-- =========================================================
+-- PHASE 34 addendum: no activation without Form B; no Form A items shown
+-- =========================================================
+-- 1. A knowledge assessment can't be active without a Form B (the
+--    post-test form). Without one the post-test would reuse Form A and show
+--    the pre-test items again. Drafts and closed assessments can still be
+--    mid-edit. Same message as the builder: "Add the post-test form (Form B)
+--    before activating."
+-- 2. get_assessment_review() returns NO items when the post-test used
+--    Form A (an assessment that has no Form B, e.g. one activated before
+--    this rule): score only, like the pre-test, with items_withheld = true.
+--    Form B assessments are unchanged.
+
+ALTER TABLE surveys DROP CONSTRAINT IF EXISTS surveys_post_form_required;
+ALTER TABLE surveys ADD CONSTRAINT surveys_post_form_required
+  CHECK (
+    status IS DISTINCT FROM 'active'
+    OR type IS DISTINCT FROM 'knowledge'
+    OR (jsonb_typeof(questions_data_post) = 'array' AND jsonb_array_length(questions_data_post) > 0)
+  );
+
+CREATE OR REPLACE FUNCTION get_assessment_review(p_survey_id uuid) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user bigint := current_student_id();
+  v_survey surveys;
+  v_pre survey_responses;
+  v_post survey_responses;
+  v_post_form text;
+  v_questions jsonb;
+  v_items jsonb := '[]'::jsonb;
+  v_pre_pct numeric;
+  v_post_pct numeric;
+BEGIN
+  IF v_user IS NULL THEN
+    RAISE EXCEPTION 'Sign in with a student account.' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO v_survey FROM surveys WHERE id = p_survey_id AND type = 'knowledge';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Assessment not found.' USING ERRCODE = 'P0002';
+  END IF;
+
+  SELECT * INTO v_post FROM survey_responses
+   WHERE user_id = v_user AND survey_id = p_survey_id AND attempt_type = 'post'
+   ORDER BY created_at DESC LIMIT 1;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'The review opens after you submit the post-test.' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO v_pre FROM survey_responses
+   WHERE user_id = v_user AND survey_id = p_survey_id AND attempt_type = 'pre'
+   ORDER BY created_at DESC LIMIT 1;
+
+  v_post_form := assessment_form_for(v_survey, 'post');
+
+  -- Items only for a real post-test form (Form B). When the post-test
+  -- used Form A these would be the pre-test items: score only instead.
+  IF v_post_form = 'B' THEN
+    v_questions := v_survey.questions_data_post;
+
+    -- Every field is named here: nothing from the stored question (the
+    -- key, the options, pairs_with) can reach the student by being left in.
+    SELECT coalesce(jsonb_agg(jsonb_build_object(
+             'id',                 q -> 'id',
+             'text',               q -> 'text',
+             'type',               q -> 'type',
+             'student_answer',     v_post.answers -> (q ->> 'id'),
+             'is_correct',         CASE WHEN q ->> 'type' = 'mcq' AND coalesce(q ->> 'correct_option', '') <> ''
+                                        THEN coalesce((v_post.answers ->> (q ->> 'id')) = q ->> 'correct_option', false)
+                                   END,
+             'related_program_id', q -> 'related_program_id',
+             'related_material_id', q -> 'related_material_id'
+           ) ORDER BY ord), '[]'::jsonb)
+      INTO v_items
+      FROM jsonb_array_elements(CASE WHEN jsonb_typeof(v_questions) = 'array' THEN v_questions ELSE '[]'::jsonb END)
+           WITH ORDINALITY AS t(q, ord);
+  END IF;
+
+  v_post_pct := coalesce(v_post.percentage,
+                         CASE WHEN v_post.total_scored > 0 THEN round(v_post.score * 100.0 / v_post.total_scored) END);
+  v_pre_pct := CASE WHEN v_pre.id IS NOT NULL THEN coalesce(v_pre.percentage,
+                         CASE WHEN v_pre.total_scored > 0 THEN round(v_pre.score * 100.0 / v_pre.total_scored) END) END;
+
+  RETURN jsonb_build_object(
+    'survey_id', v_survey.id,
+    'title', v_survey.title,
+    -- The pre-test (Form A) is score only, always.
+    'pre', CASE WHEN v_pre.id IS NULL THEN NULL ELSE jsonb_build_object(
+             'score', v_pre.score, 'total_scored', v_pre.total_scored,
+             'percentage', v_pre_pct, 'created_at', v_pre.created_at) END,
+    'post', jsonb_build_object(
+      'form', v_post_form,
+      'score', v_post.score, 'total_scored', v_post.total_scored,
+      'percentage', v_post_pct, 'created_at', v_post.created_at,
+      'items', v_items,
+      'items_withheld', v_post_form <> 'B'),
+    'comparison', CASE WHEN v_pre.id IS NULL OR v_pre_pct IS NULL OR v_post_pct IS NULL THEN NULL
+                       ELSE jsonb_build_object('pre_pct', v_pre_pct, 'post_pct', v_post_pct,
+                                               'points', v_post_pct - v_pre_pct) END
+  );
+END $$;
+
+REVOKE ALL ON FUNCTION get_assessment_review(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION get_assessment_review(uuid) TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
+
+-- ---------------------------------------------------------
+-- ROLLBACK of the PHASE 34 addendum (run only to undo it): drops the
+-- Form B rule and restores the earlier PHASE 34 review function (re-run the
+-- CREATE OR REPLACE FUNCTION get_assessment_review block above, the one
+-- that starts "get_assessment_review: allowlist, post-test items only").
+-- ---------------------------------------------------------
+-- ALTER TABLE surveys DROP CONSTRAINT IF EXISTS surveys_post_form_required;

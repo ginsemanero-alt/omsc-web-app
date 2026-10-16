@@ -106,7 +106,9 @@ interface AssessmentReview {
   survey_id: string;
   title: string;
   pre: ReviewScore | null;
-  post: ReviewScore & { form: 'A' | 'B'; items: ReviewItem[] };
+  // items is empty (and items_withheld true) when the post-test used the
+  // pre-test form: no item is shown then, the same as the pre-test.
+  post: ReviewScore & { form: 'A' | 'B'; items: ReviewItem[]; items_withheld?: boolean };
   comparison: { pre_pct: number; post_pct: number; points: number } | null;
 }
 
@@ -140,6 +142,8 @@ interface ScoreSummary {
   total: number;
   percentage: number | null;
   items: ReviewItem[];
+  // The server withheld the items (see AssessmentReview.post).
+  itemsWithheld?: boolean;
   comparison: { pre_pct: number; post_pct: number; points: number } | null;
 }
 
@@ -760,6 +764,7 @@ export default function QuizzesSurveys() {
           percentage:
             submitted.percentage != null ? Number(submitted.percentage) : review?.post.percentage ?? null,
           items: review?.post.items ?? [],
+          itemsWithheld: review?.post.items_withheld ?? false,
           comparison: review?.comparison ?? null,
         };
       } else if (attempt === 'pre') {
@@ -1370,7 +1375,9 @@ export default function QuizzesSurveys() {
                       <p className="m-0 mb-1 text-sm font-black text-indigo-700 dark:text-indigo-300">{comparison}</p>
                     )}
                     <p className="m-0 text-sm font-semibold text-slate-600 dark:text-slate-300">
-                      {wrong === 0
+                      {review.post.items_withheld || review.post.items.length === 0
+                        ? "Question-by-question results aren't shown for this assessment."
+                        : wrong === 0
                         ? 'You answered every post-test question correctly.'
                         : `${wrong} post-test ${wrong === 1 ? 'question' : 'questions'} to review. Each links to where you can learn more.`}
                     </p>
@@ -2017,9 +2024,11 @@ export default function QuizzesSurveys() {
                       <p className="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
                         {isPre
                           ? PRE_TEST_PRIVACY_NOTE
-                          : wrongCount === 0
-                            ? 'Perfect score! You answered every knowledge question correctly.'
-                            : "Here's what to review — each missed item below links to where you can learn more."}
+                          : scoreSummary.itemsWithheld || scoreSummary.items.length === 0
+                            ? "Question-by-question results aren't shown for this assessment."
+                            : wrongCount === 0
+                              ? 'Perfect score! You answered every knowledge question correctly.'
+                              : "Here's what to review — each missed item below links to where you can learn more."}
                       </p>
                     </div>
                   );

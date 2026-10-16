@@ -82,7 +82,8 @@ type Survey = {
   status: "draft" | "active" | "closed";
   questions_data: Question[];
   // Knowledge assessments only: Form B, the parallel post-test form
-  // (PHASE 27). Empty/null means the post-test reuses Form A.
+  // (PHASE 27). A knowledge assessment can't be published without it
+  // (surveys_post_form_required, PHASE 34 addendum).
   questions_data_post?: Question[] | null;
   created_at?: string;
   updated_at?: string;
@@ -129,6 +130,19 @@ function createQuestion(): Question {
 }
 
 type FormKey = "A" | "B";
+
+// A knowledge assessment can't be activated without a Form B: with no
+// parallel form the post-test would reuse Form A and show the pre-test
+// items again. Same rule as the surveys_post_form_required constraint
+// (PHASE 34 addendum).
+const FORM_B_REQUIRED_MESSAGE = "Add the post-test form (Form B) before activating.";
+
+function formBMissing(formB: Question[] | null | undefined): boolean {
+  return !Array.isArray(formB) || formB.filter((q) => q.text.trim().length > 0).length === 0;
+}
+
+const isFormBRequiredError = (error: { code?: string; message?: string }) =>
+  error.code === "23514" && String(error.message || "").includes("surveys_post_form_required");
 
 // Same rule as the surveys_post_form_paired constraint (PHASE 27): a
 // knowledge assessment with a Form B can only be published when both
@@ -459,7 +473,8 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
         .from("surveys")
         .update({
           questions_data: cleanQuestions,
-          // Empty Form B is stored as null: the post-test reuses Form A.
+          // Empty Form B is stored as null (a draft can be mid-edit; an
+          // active knowledge assessment can't have it, see below).
           questions_data_post: cleanPost.length > 0 ? cleanPost : null,
         })
         .eq("id", editingSurvey.id);
@@ -467,6 +482,9 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
       if (error) {
         // 23514 = check violation: an active assessment whose forms no
         // longer pair up (surveys_post_form_paired).
+        if (isFormBRequiredError(error)) {
+          throw new Error("A published knowledge assessment needs its post-test form (Form B). Unpublish it first to remove Form B.");
+        }
         if (error.code === "23514") {
           throw new Error(
             formPairingProblem(cleanQuestions, cleanPost) ||
@@ -558,6 +576,11 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
       // A knowledge assessment with a Form B publishes only when the two
       // forms pair up one to one (the database enforces the same rule).
       if (newStatus === "active" && survey.type === "knowledge") {
+        if (formBMissing(survey.questions_data_post)) {
+          toast({ title: "Can't Publish Yet", description: FORM_B_REQUIRED_MESSAGE, variant: "destructive" });
+          return;
+        }
+
         const problem = formPairingProblem(survey.questions_data, survey.questions_data_post);
         if (problem) {
           toast({ title: "Can't Publish Yet", description: problem, variant: "destructive" });
@@ -595,6 +618,9 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
         .eq("id", survey.id);
 
       if (error) {
+        if (isFormBRequiredError(error)) {
+          throw new Error(FORM_B_REQUIRED_MESSAGE);
+        }
         if (error.code === "23514") {
           throw new Error("Form A and Form B must pair up one to one before this assessment can be published.");
         }
@@ -1007,14 +1033,19 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                 : "Link them in Programs (Edit program, Linked IEC materials). Publishing is blocked until then.",
           },
           {
-            ok: filledB.length === 0 || filledA.length === filledB.length,
+            ok: filledB.length > 0,
+            label: filledB.length > 0 ? "The post-test form (Form B) is added" : "No post-test form (Form B) yet",
+            detail: filledB.length > 0 ? null : FORM_B_REQUIRED_MESSAGE,
+          },
+          {
+            ok: filledB.length > 0 && filledA.length === filledB.length,
             label:
               filledB.length === 0
-                ? "No Form B yet: the post-test reuses Form A"
+                ? "Same number of items in both forms (add Form B first)"
                 : `Same number of items (Form A ${filledA.length}, Form B ${filledB.length})`,
           },
           {
-            ok: filledB.length === 0 || !pairingProblem,
+            ok: filledB.length > 0 && !pairingProblem,
             label: "Every Form B item pairs with exactly one Form A item",
             detail: filledB.length > 0 ? pairingProblem : null,
           },
@@ -1527,7 +1558,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                           </div>
                           <p className="m-0 text-sm text-[#5B6477]">
                             Item {selectedIndex + 1} has no Form B item yet.
-                            {questionsPost.length === 0 && " Without a Form B, the post-test reuses Form A."}
+                            {questionsPost.length === 0 && " The assessment can't be activated without a Form B."}
                           </p>
                           <div className="flex flex-wrap gap-2">
                             <button
@@ -1589,7 +1620,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
                     </div>
                     <p className={`m-0 text-sm font-semibold ${questionsPost.length === 0 ? "text-[#5B6477]" : pairingProblem ? "text-[#92400E]" : "text-[#065F46]"}`}>
                       {questionsPost.length === 0
-                        ? "No Form B yet: the post-test will reuse Form A."
+                        ? "No Form B yet. Add the post-test form (Form B) before activating."
                         : pairingProblem
                           ? `Not ready to publish: ${pairingProblem}`
                           : `Forms are paired: ${filledA.length} items each.`}
