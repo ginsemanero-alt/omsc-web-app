@@ -32,6 +32,7 @@ import { motionDelay, prefersReducedMotion, replayAnimation } from '../lib/motio
 import { PRIVACY_NOTICE_VERSION, UNDER_18_NOTE } from '../lib/privacyNotice';
 import PrivacyNoticeBody from '../components/shared/PrivacyNoticeBody';
 import ConsentCheckbox from '../components/shared/ConsentCheckbox';
+import Ra10173Link from '../components/shared/Ra10173Link';
 
 // How long the sign in <-> register switch plays before the view changes.
 const VIEW_SWITCH_MS = 200;
@@ -1312,7 +1313,7 @@ export default function LoginPage({
         <>
           <strong className="text-[#1E1B4B]">Why we ask.</strong> These details appear only in combined
           statistics and are never shown next to your name. They are handled under the Data Privacy Act of
-          2012 (RA 10173).
+          2012 (<Ra10173Link />).
         </>
       )}
     </>

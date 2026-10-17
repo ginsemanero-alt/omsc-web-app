@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { PRIVACY_NOTICE_VERSION } from "../lib/privacyNotice";
 import PrivacyNoticeBody from "../components/shared/PrivacyNoticeBody";
+import Ra10173Link from "../components/shared/Ra10173Link";
 
 // Public /privacy page — the full Data Privacy Notice (RA 10173). Rendered
 // inside the public Layout like the other public pages.
@@ -23,7 +24,7 @@ export default function PrivacyPage() {
           </h1>
           <p className="m-0 text-[15px] leading-[1.55] text-[#5B6477]">
             How the Guidance and Testing Center of Occidental Mindoro State University collects and uses your
-            personal information, under the Data Privacy Act of 2012 (RA 10173).
+            personal information, under the Data Privacy Act of 2012 (<Ra10173Link />).
           </p>
           <p className="m-0 text-[13px] text-[#5B6477]">Notice version {PRIVACY_NOTICE_VERSION}</p>
         </div>
