@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from './components/ui/toaster';
 import { Loader2 } from 'lucide-react';
 
@@ -34,6 +34,8 @@ import ProgramsPage from './pages/ProgramsPage';
 import MaterialsPage from './pages/MaterialsPage';
 import AboutPage from './pages/AboutPage';
 import PrivacyPage from './pages/PrivacyPage';
+import PublicProgramPage from './pages/PublicProgramPage';
+import { readRememberedReturnTo, safeReturnPath } from './lib/returnTo';
 
 function RouteLoadingFallback() {
   return (
@@ -45,20 +47,42 @@ function RouteLoadingFallback() {
 
 function AppContent() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, role, loading, signOut } = useAuth();
+
+  // Where /login sends someone who is already signed in: a student goes back
+  // to the exact material or program they came from (validated in-app path),
+  // everyone else to their own area.
+  const signedInDestination = (signedInRole: string) => {
+    if (signedInRole !== 'student') return `/${signedInRole}`;
+    return (
+      safeReturnPath(new URLSearchParams(location.search).get('redirect')) ?? readRememberedReturnTo() ?? '/student'
+    );
+  };
 
   const handleLogin = (role: string, name: string) => {
     // Auth state itself now comes from the Supabase session (via useAuth).
     // localStorage keeps only display values.
     localStorage.setItem('userName', name);
 
-    // /login?redirect=/student/... (e.g. "View program" on the public
-    // Programs page) returns a student to where they were headed. Only
-    // in-app student paths are honored, so the parameter can't be used to
-    // send someone to another site.
-    const redirect = new URLSearchParams(window.location.search).get('redirect');
-    if (role === 'student' && redirect && redirect.startsWith('/student/') && !redirect.startsWith('//')) {
-      navigate(redirect);
+    // After registering, the emailed code signs the student in before this
+    // runs, and /login has already sent them on to where they were headed
+    // (see signedInDestination). Only navigate if they are still on /login.
+    if (window.location.pathname !== '/login') return;
+
+    // Back to where the student was headed: the exact material or program
+    // they came from (/login?redirect=/student/materials?material=12), kept
+    // in the URL and in sessionStorage so it survives registration, email
+    // verification and a reload. Only validated in-app student paths are
+    // used (see src/lib/returnTo.ts), so the parameter can't send anyone to
+    // another site. Admins always go to the admin area.
+    const requested = safeReturnPath(new URLSearchParams(window.location.search).get('redirect'));
+    const target = requested ?? readRememberedReturnTo();
+    // The remembered target is cleared once the student has arrived (see
+    // ProtectedRoute), not here: right after sign-in the protected route can
+    // still see "no user yet" and bounce through /login, which then reads it.
+    if (role === 'student' && target) {
+      navigate(target);
       return;
     }
 
@@ -80,6 +104,7 @@ function AppContent() {
           {/* ─── 1. PUBLIC ROUTES ─── */}
           <Route path="/" element={<Layout><HomePage onNavigate={(page) => navigate(`/${page}`)} /></Layout>} />
           <Route path="/programs" element={<Layout><ProgramsPage /></Layout>} />
+          <Route path="/programs/:id" element={<Layout><PublicProgramPage /></Layout>} />
           <Route path="/materials" element={<Layout><MaterialsPage /></Layout>} />
           <Route path="/about" element={<Layout><AboutPage /></Layout>} />
           <Route path="/privacy" element={<Layout><PrivacyPage /></Layout>} />
@@ -93,7 +118,7 @@ function AppContent() {
             path="/login"
             element={
               !loading && user && role
-                ? <Navigate to={`/${role}`} replace />
+                ? <Navigate to={signedInDestination(role)} replace />
                 : <LoginPage onLogin={handleLogin} onBackToHome={() => navigate('/')} />
             }
           />

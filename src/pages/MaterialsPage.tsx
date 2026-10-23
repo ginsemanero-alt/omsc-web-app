@@ -1,21 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  FileText,
-  Image as ImageIcon,
-  Link as LinkIcon,
-  Loader2,
-  LogIn,
-  Music,
-  PlayCircle,
-  Search,
-} from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
+import { Loader2, Search } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { usePagination } from "../hooks/usePagination";
 import { useAuth } from "../hooks/useAuth";
 import { IEC_CATEGORIES } from "../lib/iecCategories";
 import SitePagination from "../components/shared/SitePagination";
+import MaterialPreviewCard from "../components/shared/MaterialPreviewCard";
+import SignInPrompt from "../components/shared/SignInPrompt";
+import type { MaterialPreview } from "../lib/materialPreview";
 
 const MATERIALS_PAGE_SIZE = 9;
 
@@ -27,49 +20,12 @@ const focusRing =
   "focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]";
 
 // This is a public, logged-out-reachable page. Opening a material must
-// require signing in so every view is recorded, so:
-// - file_url is never selected, so it can't reach this page's state or
-//   markup no matter how the page is inspected;
-// - an infographic (Image type) never shows its image here: its cover
-//   and its content are the same upload (see MaterialLibrary.tsx).
-interface Material {
-  id: number;
-  title: string;
-  type: string;
-  description: string;
-  category?: string | null;
-  image_url?: string | null;
-}
-
-interface TypeStyle {
-  label: string;
-  icon: React.ElementType;
-  tile: string; // tile background
-  ink: string; // icon + badge text
-}
-
-// Type -> badge label, tint, and icon.
-function typeStyle(type: string): TypeStyle {
-  switch ((type || "").toLowerCase()) {
-    case "image":
-      return { label: "Infographic", icon: ImageIcon, tile: "bg-[#E0E7FF]", ink: "text-[#4338CA]" };
-    case "video":
-      return { label: "Video", icon: PlayCircle, tile: "bg-[#FEF3C7]", ink: "text-[#B45309]" };
-    case "audio":
-      return { label: "Audio", icon: Music, tile: "bg-[#EDE9FE]", ink: "text-[#6D28D9]" };
-    case "link":
-      return { label: "Link", icon: LinkIcon, tile: "bg-[#E0F2FE]", ink: "text-[#0369A1]" };
-    default:
-      return { label: "Document", icon: FileText, tile: "bg-[#D1FAE5]", ink: "text-[#047857]" };
-  }
-}
-
-// A cover image is shown only when it is a separate cover, never the
-// content itself — so never for infographics.
-function coverImage(material: Material): string | null {
-  if ((material.type || "").toLowerCase() === "image") return null;
-  return material.image_url || null;
-}
+// require signing in so every view is recorded, so a visitor only ever gets
+// a preview: title, short description, type and a thumbnail. file_url is
+// never selected here, and the database no longer returns it to a visitor
+// (PHASE 35). An infographic shows its small public preview, never the
+// full image (see thumbnailFor).
+type Material = MaterialPreview;
 
 const MaterialsPage = () => {
   const navigate = useNavigate();
@@ -79,7 +35,7 @@ const MaterialsPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [signInPromptTitle, setSignInPromptTitle] = useState<string | null>(null);
+  const [prompt, setPrompt] = useState<Material | null>(null);
 
   useEffect(() => {
     const fetchMaterials = async () => {
@@ -134,11 +90,12 @@ const MaterialsPage = () => {
 
   // Signed-in students open the IEC Library directly; everyone else gets
   // the sign-in prompt (nothing of the file is shown here).
+  const signedIn = !!user && role === "student";
   const openMaterial = (material: Material) => {
-    if (user && role === "student") {
-      navigate(STUDENT_MATERIALS_PATH);
+    if (signedIn) {
+      navigate(`${STUDENT_MATERIALS_PATH}?material=${material.id}`);
     } else {
-      setSignInPromptTitle(material.title);
+      setPrompt(material);
     }
   };
 
@@ -263,49 +220,9 @@ const MaterialsPage = () => {
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-5">
-                {pagedMaterials.map((material) => {
-                  const style = typeStyle(material.type);
-                  const TypeIcon = style.icon;
-                  const cover = coverImage(material);
-
-                  return (
-                    <button
-                      key={material.id}
-                      type="button"
-                      onClick={() => openMaterial(material)}
-                      aria-label={`Open ${style.label.toLowerCase()}: ${material.title}`}
-                      className={`group text-left rounded-[28px] lg:rounded-[32px] bg-white overflow-hidden flex flex-col hover:shadow-[0_20px_40px_-20px_rgba(30,27,75,0.35)] hover:-translate-y-1 transition-all ${focusRing}`}
-                    >
-                      <div className={`relative h-[180px] w-full flex items-center justify-center ${style.tile}`}>
-                        {cover ? (
-                          <img
-                            src={cover}
-                            alt=""
-                            className="absolute inset-0 w-full h-full object-cover"
-                            loading="lazy"
-                            decoding="async"
-                          />
-                        ) : (
-                          <TypeIcon className={`w-14 h-14 ${style.ink}`} strokeWidth={1.6} aria-hidden="true" />
-                        )}
-                        <span
-                          className={`absolute top-3.5 left-3.5 px-3 py-1.5 rounded-full bg-white font-extrabold text-xs ${style.ink}`}
-                        >
-                          {style.label}
-                        </span>
-                      </div>
-
-                      <div className="px-5 pt-5 pb-6 lg:px-6 flex flex-col gap-2">
-                        {material.category && (
-                          <span className="text-[13px] font-semibold text-[#4338CA]">{material.category}</span>
-                        )}
-                        <h2 className="m-0 font-bold text-lg leading-[1.3] text-[#1E1B4B] line-clamp-2 group-hover:text-[#4338CA] transition-colors">
-                          {material.title}
-                        </h2>
-                      </div>
-                    </button>
-                  );
-                })}
+                {pagedMaterials.map((material) => (
+                  <MaterialPreviewCard key={material.id} material={material} signedIn={signedIn} onOpen={openMaterial} />
+                ))}
               </div>
 
               <SitePagination page={materialsPage} totalPages={materialsTotalPages} onPageChange={setMaterialsPage} />
@@ -315,38 +232,13 @@ const MaterialsPage = () => {
       </div>
 
       {/* ================= SIGN-IN PROMPT =================
-          Never renders file content or a file URL — just a nudge to sign
-          in, after which the student lands in the IEC Library. */}
-      <Dialog open={!!signInPromptTitle} onOpenChange={(open) => !open && setSignInPromptTitle(null)}>
-        <DialogContent className="max-w-sm rounded-[2.5rem] p-7 sm:p-9 border-none shadow-2xl font-figtree text-center">
-          <div className="mx-auto w-14 h-14 rounded-2xl bg-[#EEF0FA] text-[#4338CA] flex items-center justify-center">
-            <LogIn className="w-6 h-6" aria-hidden="true" />
-          </div>
-          <DialogTitle className="mt-2 font-bricolage font-extrabold text-2xl tracking-[-0.5px] text-[#1E1B4B] text-center">
-            Sign in to open this material
-          </DialogTitle>
-          <DialogDescription className="text-[15px] leading-[1.55] text-[#5B6477] text-center">
-            <strong className="text-[#1E293B]">{signInPromptTitle}</strong> is available to OMSU students. Sign in
-            with your institutional email to open it in the IEC Library.
-          </DialogDescription>
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setSignInPromptTitle(null)}
-              className={`h-12 rounded-2xl bg-[#F1F2F9] text-[#1E1B4B] font-bold text-[15px] ${focusRing}`}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate(`/login?redirect=${encodeURIComponent(STUDENT_MATERIALS_PATH)}`)}
-              className={`h-12 rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] transition-colors ${focusRing}`}
-            >
-              Sign in
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          Never renders file content or a file URL: just a way to sign in,
+          after which the student lands on this exact material. */}
+      <SignInPrompt
+        title={prompt?.title ?? null}
+        returnPath={prompt ? `${STUDENT_MATERIALS_PATH}?material=${prompt.id}` : STUDENT_MATERIALS_PATH}
+        onClose={() => setPrompt(null)}
+      />
     </div>
   );
 };

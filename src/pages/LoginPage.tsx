@@ -30,6 +30,7 @@ import { logActivity } from '../lib/activityLog';
 import { PROGRAMS_BY_CAMPUS } from '../lib/programs';
 import { motionDelay, prefersReducedMotion, replayAnimation } from '../lib/motion';
 import { PRIVACY_NOTICE_VERSION, UNDER_18_NOTE } from '../lib/privacyNotice';
+import { rememberReturnTo } from '../lib/returnTo';
 import PrivacyNoticeBody from '../components/shared/PrivacyNoticeBody';
 import ConsentCheckbox from '../components/shared/ConsentCheckbox';
 import Ra10173Link from '../components/shared/Ra10173Link';
@@ -111,6 +112,11 @@ export default function LoginPage({
   // of landing on Login and making the student find "Register Here"
   // themselves.
   const [searchParams] = useSearchParams();
+  // Where to send the student after sign-in (a validated in-app path),
+  // kept so it survives registration and email verification.
+  useEffect(() => {
+    rememberReturnTo(searchParams.get('redirect'));
+  }, [searchParams]);
   const [isRegister, setIsRegister] = useState(() => searchParams.get('mode') === 'register');
   const [registerStep, setRegisterStep] = useState<RegisterStep>(0);
   const [showTerms, setShowTerms] = useState(false);

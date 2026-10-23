@@ -3036,3 +3036,138 @@ NOTIFY pgrst, 'reload schema';
 -- that starts "get_assessment_review: allowlist, post-test items only").
 -- ---------------------------------------------------------
 -- ALTER TABLE surveys DROP CONSTRAINT IF EXISTS surveys_post_form_required;
+
+
+-- =========================================================
+-- PHASE 35 (part A): private path column for full material files
+-- =========================================================
+-- Additive and harmless. Run it BEFORE the client that reads file_path is
+-- deployed. materials.file_path is the object path of a material's full
+-- file in the private bucket (material-files); a row that has one has
+-- file_url NULL. External links and YouTube URLs keep using file_url.
+
+ALTER TABLE materials ADD COLUMN IF NOT EXISTS file_path text;
+
+NOTIFY pgrst, 'reload schema';
+
+-- ---------------------------------------------------------
+-- ROLLBACK of part A (run only to undo it): drops the column. Run the
+-- part B rollback first, and move the files back with
+-- scripts/migrate-material-files.cjs --rollback.
+-- ---------------------------------------------------------
+-- ALTER TABLE materials DROP COLUMN IF EXISTS file_path;
+-- NOTIFY pgrst, 'reload schema';
+
+
+-- =========================================================
+-- PHASE 35 (part B): visitors get previews only; full files are private
+-- =========================================================
+-- Run it together with scripts/migrate-material-files.cjs (which moves the
+-- files first). Until now a visitor with just the public key could read
+-- every materials.file_url straight from the API, the files were in public
+-- buckets, and the bucket listings were public.
+--
+-- After this:
+--   * materials (anon): only non-archived, non-handout rows, and only the
+--     preview columns. file_url, video_url, file_path, downloads, size and
+--     program_component are NOT readable by anon. Signed-in users (students,
+--     admins) are unchanged.
+--   * programs (anon): only non-archived programs. program_entries and
+--     program_materials (anon): only those of a non-archived program.
+--   * material-files is a PRIVATE bucket: no public links, no public
+--     listing, and only signed-in users can read (create signed links for)
+--     its files. material-covers stays public (covers and the small
+--     infographic previews only).
+-- A column added to materials later is NOT readable by anon until it is
+-- granted below.
+
+-- ---- materials ----
+DROP POLICY IF EXISTS materials_select_public ON materials;
+DROP POLICY IF EXISTS materials_select_anon ON materials;
+DROP POLICY IF EXISTS materials_select_authenticated ON materials;
+
+CREATE POLICY materials_select_anon ON materials
+  FOR SELECT TO anon
+  USING (archived_at IS NULL AND program_id IS NULL);
+
+CREATE POLICY materials_select_authenticated ON materials
+  FOR SELECT TO authenticated
+  USING (true);
+
+REVOKE SELECT ON materials FROM anon;
+GRANT SELECT (id, title, type, material_type, description, category, image_url,
+              campus, created_at, program_id, archived_at, tags)
+  ON materials TO anon;
+
+-- ---- programs and what hangs off them ----
+DROP POLICY IF EXISTS programs_select_public ON programs;
+DROP POLICY IF EXISTS programs_select_anon ON programs;
+DROP POLICY IF EXISTS programs_select_authenticated ON programs;
+
+CREATE POLICY programs_select_anon ON programs
+  FOR SELECT TO anon
+  USING (archived_at IS NULL);
+
+CREATE POLICY programs_select_authenticated ON programs
+  FOR SELECT TO authenticated
+  USING (true);
+
+DROP POLICY IF EXISTS program_entries_select_public ON program_entries;
+DROP POLICY IF EXISTS program_entries_select_anon ON program_entries;
+DROP POLICY IF EXISTS program_entries_select_authenticated ON program_entries;
+
+CREATE POLICY program_entries_select_anon ON program_entries
+  FOR SELECT TO anon
+  USING (EXISTS (SELECT 1 FROM programs p WHERE p.id = program_id AND p.archived_at IS NULL));
+
+CREATE POLICY program_entries_select_authenticated ON program_entries
+  FOR SELECT TO authenticated
+  USING (true);
+
+DROP POLICY IF EXISTS program_materials_select_public ON program_materials;
+DROP POLICY IF EXISTS program_materials_select_anon ON program_materials;
+DROP POLICY IF EXISTS program_materials_select_authenticated ON program_materials;
+
+CREATE POLICY program_materials_select_anon ON program_materials
+  FOR SELECT TO anon
+  USING (EXISTS (SELECT 1 FROM programs p WHERE p.id = program_id AND p.archived_at IS NULL));
+
+CREATE POLICY program_materials_select_authenticated ON program_materials
+  FOR SELECT TO authenticated
+  USING (true);
+
+-- ---- storage: the full files are private ----
+UPDATE storage.buckets SET public = false WHERE id = 'material-files';
+
+DROP POLICY IF EXISTS material_files_select_public ON storage.objects;
+DROP POLICY IF EXISTS material_files_select_authenticated ON storage.objects;
+CREATE POLICY material_files_select_authenticated ON storage.objects
+  FOR SELECT TO authenticated
+  USING (bucket_id = 'material-files');
+
+NOTIFY pgrst, 'reload schema';
+
+-- ---------------------------------------------------------
+-- ROLLBACK of part B (run only to undo it). Also put the files back with
+-- node scripts/migrate-material-files.cjs --rollback --backup-dir=<folder>
+-- ---------------------------------------------------------
+-- UPDATE storage.buckets SET public = true WHERE id = 'material-files';
+-- DROP POLICY IF EXISTS material_files_select_authenticated ON storage.objects;
+-- CREATE POLICY material_files_select_public ON storage.objects
+--   FOR SELECT USING (bucket_id = 'material-files');
+--
+-- DROP POLICY IF EXISTS program_materials_select_anon ON program_materials;
+-- DROP POLICY IF EXISTS program_materials_select_authenticated ON program_materials;
+-- CREATE POLICY program_materials_select_public ON program_materials FOR SELECT USING (true);
+-- DROP POLICY IF EXISTS program_entries_select_anon ON program_entries;
+-- DROP POLICY IF EXISTS program_entries_select_authenticated ON program_entries;
+-- CREATE POLICY program_entries_select_public ON program_entries FOR SELECT USING (true);
+-- DROP POLICY IF EXISTS programs_select_anon ON programs;
+-- DROP POLICY IF EXISTS programs_select_authenticated ON programs;
+-- CREATE POLICY programs_select_public ON programs FOR SELECT USING (true);
+--
+-- DROP POLICY IF EXISTS materials_select_anon ON materials;
+-- DROP POLICY IF EXISTS materials_select_authenticated ON materials;
+-- GRANT SELECT ON materials TO anon;
+-- CREATE POLICY materials_select_public ON materials FOR SELECT USING (true);
+-- NOTIFY pgrst, 'reload schema';

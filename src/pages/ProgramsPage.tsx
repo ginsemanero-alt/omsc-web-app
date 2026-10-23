@@ -26,8 +26,8 @@ const PROGRAM_COMPONENTS = [
   "System Support",
 ];
 
-// The student area has no per-program page, so "View program" opens the
-// student Programs page (after signing in, for visitors).
+// A signed-in student's "View program" opens that program in the student
+// area; a visitor sees the public program page (previews only) first.
 const STUDENT_PROGRAMS_PATH = "/student/programs";
 
 // Visible keyboard focus everywhere (3px #A5B4FC ring, as on Home/Login).
@@ -166,13 +166,14 @@ const ProgramsPage = () => {
     };
   }, [visibleIdsKey]);
 
-  // Signed-in students go straight to their Programs page; everyone else
-  // signs in first and is sent there afterwards (?redirect, see App.tsx).
-  const openProgram = () => {
+  // Signed-in students go straight to that program in their portal; a
+  // visitor sees the public program page, which asks them to sign in only
+  // to open its materials.
+  const openProgram = (programId: number) => {
     if (user && role === "student") {
-      navigate(STUDENT_PROGRAMS_PATH);
+      navigate(`${STUDENT_PROGRAMS_PATH}?program=${programId}`);
     } else {
-      navigate(`/login?redirect=${encodeURIComponent(STUDENT_PROGRAMS_PATH)}`);
+      navigate(`/programs/${programId}`);
     }
   };
 
@@ -333,7 +334,7 @@ const ProgramsPage = () => {
                     <button
                       key={program.id}
                       type="button"
-                      onClick={openProgram}
+                      onClick={() => openProgram(program.id)}
                       aria-label={`View program: ${program.title}`}
                       className={`group text-left rounded-[28px] lg:rounded-[32px] bg-white overflow-hidden flex flex-col hover:shadow-[0_20px_40px_-20px_rgba(30,27,75,0.35)] hover:-translate-y-1 transition-all ${focusRing}`}
                     >

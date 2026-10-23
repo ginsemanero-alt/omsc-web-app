@@ -62,3 +62,35 @@ export async function compressImageFile(
     return file;
   }
 }
+
+
+/**
+ * A small public preview of an image (PHASE 35): used as the thumbnail
+ * visitors who are not signed in see for an infographic. The full image is
+ * kept in the private bucket, so the preview is deliberately small (and can
+ * be blurred) so the text in it cannot be read.
+ */
+export async function makePreviewThumbnail(
+  file: File,
+  { maxWidth = 480, blurPx = 0, quality = 0.6 }: { maxWidth?: number; blurPx?: number; quality?: number } = {}
+): Promise<File> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, maxWidth / bitmap.width);
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('This browser cannot create the preview image.');
+
+  if (blurPx > 0) ctx.filter = `blur(${blurPx}px)`;
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close?.();
+
+  const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+  if (!blob) throw new Error('Could not create the preview image.');
+
+  return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+}

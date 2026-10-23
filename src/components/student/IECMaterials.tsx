@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, Suspense, lazy } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { SIGN_REFRESH_MS, signMaterialRows, urlPathOnly } from '../../lib/materialAccess';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -92,7 +94,8 @@ export default function IECMaterials() {
       const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
-      setMaterials(data || []);
+      // Files in the private bucket open through signed links (PHASE 35).
+      setMaterials(await signMaterialRows(data || []));
     } catch (error) {
       console.error('Error fetching materials:', error);
       setLoadFailed(true);
@@ -148,6 +151,43 @@ export default function IECMaterials() {
     setIsPreviewOpen(true);
     markOpened(item);
   };
+
+  // A link such as /student/materials?material=12 (from the public library
+  // or a program page, after signing in) opens that material straight away.
+  // The parameter is removed once handled so Back and refresh don't reopen it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const wanted = searchParams.get('material');
+    if (!wanted || loading) return;
+    const item = materials.find((m) => String(m.id) === wanted);
+    if (item) {
+      setActiveTab(
+        item.type === 'Video' ? 'videos' : item.type === 'Audio' ? 'audio' : item.type === 'Image' ? 'infographics' : activeTab
+      );
+      handlePreview(item);
+    }
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('material');
+        return next;
+      },
+      { replace: true }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, loading, materials]);
+
+  // Signed links expire, so the list is signed again before they do. A page
+  // left open for hours keeps working.
+  useEffect(() => {
+    if (!materials.some((m) => m.file_path)) return;
+    const timer = window.setInterval(async () => {
+      const refreshed = await signMaterialRows(materials);
+      setMaterials(refreshed);
+      setPreviewItem((current: any) => (current ? refreshed.find((m: any) => m.id === current.id) || current : current));
+    }, SIGN_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [materials]);
 
   const downloadFile = async (url: string, filename: string) => {
     try {
@@ -499,7 +539,7 @@ export default function IECMaterials() {
                 playsInline
                 className="w-full max-h-full max-w-4xl rounded-2xl shadow-2xl"
               />
-            ) : previewItem?.file_url?.toLowerCase().endsWith('.pdf') ? (
+            ) : urlPathOnly(previewItem?.file_url).endsWith('.pdf') ? (
               <Suspense
                 fallback={
                   <div className="flex flex-col items-center justify-center gap-3">
@@ -512,7 +552,7 @@ export default function IECMaterials() {
               >
                 <PdfPreview url={previewItem.file_url} />
               </Suspense>
-            ) : /\.(jpg|jpeg|png|webp|gif)$/i.test(previewItem?.file_url || '') ? (
+            ) : /\.(jpg|jpeg|png|webp|gif)$/i.test(urlPathOnly(previewItem?.file_url)) ? (
               <ZoomableImage src={previewItem.file_url} alt={previewItem.title} className="p-4" />
             ) : previewItem?.type === 'Audio' ? (
               <div className="p-8 w-full max-w-xl flex flex-col items-center gap-6">

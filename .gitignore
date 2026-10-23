@@ -37,3 +37,6 @@ scripts/seed-data/omsu-credentials.csv
 # not part of the app).
 supabase/.temp/
 design-reference/
+
+# One-time material migration backups (full originals): never commit
+scripts/_material-backup*/

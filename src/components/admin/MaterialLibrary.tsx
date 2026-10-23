@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, Suspense, lazy } from 'react';
 import { supabase } from '../../lib/supabase';
-import { compressImageFile } from '../../lib/imageCompress';
+import { compressImageFile, makePreviewThumbnail } from '../../lib/imageCompress';
+import { PRIVATE_MATERIAL_BUCKET, PREVIEW_BLUR_PX, PREVIEW_MAX_WIDTH, signMaterialRows } from '../../lib/materialAccess';
 import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
 import { usePagination } from '../../hooks/usePagination';
@@ -69,6 +70,9 @@ interface Material {
   description?: string | null;
   image_url?: string | null;
   file_url?: string | null;
+  // Path of the full file in the private bucket (PHASE 35). file_url is then
+  // only a signed link made when the list loads: it is never saved back.
+  file_path?: string | null;
   campus?: string | null;
   created_at?: string;
 }
@@ -195,7 +199,8 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
         throw error;
       }
 
-      setMaterials((data || []) as Material[]);
+      // Files in the private bucket open through signed links.
+      setMaterials(await signMaterialRows((data || []) as Material[]));
       onChanged?.();
     } catch (error: any) {
       toast({
@@ -455,6 +460,22 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
     return data.publicUrl;
   };
 
+  // Full files go to the PRIVATE bucket: only the path is stored, and a
+  // signed-in student opens it through a short-lived signed link.
+  const uploadPrivateFile = async (folder: string, file: File, skipCompression = false): Promise<string> => {
+    const prepared = skipCompression ? file : await compressImageFile(file);
+    const safeFileName = prepared.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${folder}/${Date.now()}_${safeFileName}`;
+
+    const { error } = await supabase.storage.from(PRIVATE_MATERIAL_BUCKET).upload(path, prepared, {
+      cacheControl: '31536000',
+      upsert: false,
+    });
+    if (error) throw error;
+
+    return path;
+  };
+
   // =========================================================
   // SAVE
   // =========================================================
@@ -539,7 +560,10 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
         : null;
 
       let finalImageUrl = existingMaterial?.image_url || '';
-      let finalFileUrl = existingMaterial?.file_url || '';
+      // For a private file the stored file_url is null; the one in memory is
+      // only a signed link, so it must never be carried into the payload.
+      let finalFilePath = existingMaterial?.file_path || '';
+      let finalFileUrl = existingMaterial?.file_path ? '' : existingMaterial?.file_url || '';
 
       // -------------------------------------------------------
       // IMAGE UPLOAD
@@ -549,16 +573,20 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
         // For Image type, this upload IS the material a student downloads
         // to read — skip the compression that's fine for a purely
         // decorative cover thumbnail elsewhere.
-        finalImageUrl = await uploadFile(
-          'material-covers',
-          'covers',
-          selectedImage,
-          formData.type === 'Image'
-        );
-
-        // For Image type, the image itself is the main file
         if (formData.type === 'Image') {
-          finalFileUrl = finalImageUrl;
+          // The infographic itself is the material: the original goes to
+          // the private bucket, and the public cover is a small preview
+          // made from it (visitors who are not signed in only ever see
+          // this preview, never the full image).
+          finalFilePath = await uploadPrivateFile('iec', selectedImage, true);
+          finalFileUrl = '';
+          const preview = await makePreviewThumbnail(selectedImage, {
+            maxWidth: PREVIEW_MAX_WIDTH,
+            blurPx: PREVIEW_BLUR_PX,
+          });
+          finalImageUrl = await uploadFile('material-covers', 'previews', preview, true);
+        } else {
+          finalImageUrl = await uploadFile('material-covers', 'covers', selectedImage);
         }
       }
 
@@ -567,11 +595,8 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
       // -------------------------------------------------------
 
       if (formData.type === 'PDF' && attachedDocument) {
-        finalFileUrl = await uploadFile(
-          'material-files',
-          'documents',
-          attachedDocument
-        );
+        finalFilePath = await uploadPrivateFile('documents', attachedDocument);
+        finalFileUrl = '';
       }
 
       // -------------------------------------------------------
@@ -579,11 +604,8 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
       // -------------------------------------------------------
 
       if (formData.type === 'Audio' && attachedAudio) {
-        finalFileUrl = await uploadFile(
-          'material-files',
-          'audio',
-          attachedAudio
-        );
+        finalFilePath = await uploadPrivateFile('audio', attachedAudio);
+        finalFileUrl = '';
       }
 
       // -------------------------------------------------------
@@ -591,13 +613,11 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
       // -------------------------------------------------------
 
       if (formData.type === 'Video' && videoSourceMode === 'upload' && attachedVideo) {
-        finalFileUrl = await uploadFile(
-          'material-files',
-          'video',
-          attachedVideo
-        );
+        finalFilePath = await uploadPrivateFile('video', attachedVideo);
+        finalFileUrl = '';
       } else if (formData.type === 'Video' && videoSourceMode === 'link') {
         finalFileUrl = formData.file_url.trim();
+        finalFilePath = '';
       }
 
       // -------------------------------------------------------
@@ -606,6 +626,7 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
 
       if (formData.type === 'Link') {
         finalFileUrl = formData.file_url.trim();
+        finalFilePath = '';
       }
 
       // -------------------------------------------------------
@@ -626,7 +647,8 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
         tags: normalizedTags,
         description: formData.description.trim(),
         image_url: finalImageUrl || null,
-        file_url: finalFileUrl || null,
+        file_url: finalFilePath ? null : finalFileUrl || null,
+        file_path: finalFilePath || null,
         campus: formData.campus || null,
         // AnalyticsDashboard.tsx counts "IEC Materials" by checking this
         // field, to tell a general Materials Library item (created here)
@@ -667,6 +689,13 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
           if (!parsed) continue;
           const { error: storageError } = await supabase.storage.from(parsed.bucket).remove([parsed.path]);
           if (storageError) console.warn('Storage cleanup failed for', url, storageError.message);
+        }
+        // A replaced file in the private bucket.
+        if (existingMaterial?.file_path && existingMaterial.file_path !== finalFilePath) {
+          const { error: storageError } = await supabase.storage
+            .from(PRIVATE_MATERIAL_BUCKET)
+            .remove([existingMaterial.file_path]);
+          if (storageError) console.warn('Storage cleanup failed for', existingMaterial.file_path, storageError.message);
         }
 
         toast({

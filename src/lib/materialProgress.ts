@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { signMaterialRows } from './materialAccess';
 
 // Material progress for the pre-test -> materials -> post-test flow
 // (PHASE 29, supabase/migrations.sql).
@@ -19,7 +20,11 @@ export interface LinkedMaterial {
   title: string;
   type: string | null;
   category: string | null;
+  // The original file. For a file in the private bucket this is a signed
+  // link made when the list loads (see signMaterialRows); file_path is the
+  // stored path.
   file_url: string | null;
+  file_path?: string | null;
   image_url: string | null;
   description: string | null;
 }
@@ -54,7 +59,7 @@ export async function loadMaterialProgress(
 ): Promise<MaterialProgressData> {
   let linkQuery = supabase
     .from('program_materials')
-    .select('program_id, material_id, sort_order, materials(id, title, type, category, file_url, image_url, description, archived_at, program_id)')
+    .select('program_id, material_id, sort_order, materials(id, title, type, category, file_url, file_path, image_url, description, archived_at, program_id)')
     .order('sort_order', { ascending: true });
   if (programIds) {
     if (programIds.length === 0) return { linksByProgram: {}, viewedIds: new Set() };
@@ -80,10 +85,18 @@ export async function loadMaterialProgress(
       type: material.type,
       category: material.category,
       file_url: material.file_url,
+      file_path: material.file_path,
       image_url: material.image_url,
       description: material.description,
     });
   }
+
+  // Files in the private bucket open through short-lived signed links.
+  const everyLink = Object.values(linksByProgram).flat();
+  const signed = await signMaterialRows(everyLink);
+  signed.forEach((row, index) => {
+    everyLink[index].file_url = row.file_url;
+  });
 
   return {
     linksByProgram,
