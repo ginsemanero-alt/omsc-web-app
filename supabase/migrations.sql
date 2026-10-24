@@ -3171,3 +3171,26 @@ NOTIFY pgrst, 'reload schema';
 -- GRANT SELECT ON materials TO anon;
 -- CREATE POLICY materials_select_public ON materials FOR SELECT USING (true);
 -- NOTIFY pgrst, 'reload schema';
+
+
+-- =========================================================
+-- PHASE 35 (part C): remove two leftover "read everything" policies on programs
+-- =========================================================
+-- Found by reading pg_policies after part B: programs also carried
+-- "Enable read for all on programs" and "Enable read for programs" (both
+-- SELECT USING (true) for every role), created outside these migrations.
+-- Permissive policies are OR'ed, so they overrode programs_select_anon and a
+-- visitor could still read an ARCHIVED program. programs_select_anon (not
+-- archived) and programs_select_authenticated (everything) remain.
+
+DROP POLICY IF EXISTS "Enable read for all on programs" ON programs;
+DROP POLICY IF EXISTS "Enable read for programs" ON programs;
+
+NOTIFY pgrst, 'reload schema';
+
+-- ---------------------------------------------------------
+-- ROLLBACK of part C (run only to undo it): puts the two policies back.
+-- ---------------------------------------------------------
+-- CREATE POLICY "Enable read for all on programs" ON programs FOR SELECT USING (true);
+-- CREATE POLICY "Enable read for programs" ON programs FOR SELECT USING (true);
+-- NOTIFY pgrst, 'reload schema';
