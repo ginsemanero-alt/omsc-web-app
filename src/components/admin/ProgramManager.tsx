@@ -300,10 +300,32 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
     setLinkedMaterialIds(next);
   };
 
+  // A time as <input type="time"> wants it ("08:00", "14:30") from whatever is
+  // stored: either that same 24-hour form, or the 12-hour text the program
+  // list shows ("8:00 AM", "2:30 PM"). Anything after the FIRST AM/PM is
+  // ignored, so a value that earlier edits had padded ("8:00 AM AM AM") still
+  // opens as 8:00 AM. Returns null when there is no time in it.
+  //
+  // This used to be missing: the stored "8:00 AM" went straight into the time
+  // field, and saving then read the hour as 8 and appended another AM/PM
+  // ("8:00 AM AM"), so every edit-and-save added one more (and a PM time
+  // became "2:00 PM AM").
+  const parseTo24h = (text: string): string | null => {
+    const twelve = /(\d{1,2}):(\d{2})\s*(AM|PM)/i.exec(text || '');
+    if (twelve) {
+      let hour = parseInt(twelve[1], 10) % 12;
+      if (twelve[3].toUpperCase() === 'PM') hour += 12;
+      return `${String(hour).padStart(2, '0')}:${twelve[2]}`;
+    }
+    const twentyFour = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(text || '');
+    return twentyFour ? `${twentyFour[1].padStart(2, '0')}:${twentyFour[2]}` : null;
+  };
+
   const formatTo12h = (time24: string) => {
-    if (!time24) return "";
-    const [hour, minute] = time24.split(':');
-    const h = parseInt(hour);
+    const normalized = parseTo24h(time24);
+    if (!normalized) return "";
+    const [hour, minute] = normalized.split(':');
+    const h = parseInt(hour, 10);
     const ampm = h >= 12 ? 'PM' : 'AM';
     const hour12 = h % 12 || 12;
     return `${hour12}:${minute} ${ampm}`;
@@ -344,8 +366,8 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
 
       if (program.time_range && program.time_range.includes(' - ')) {
         const parts = program.time_range.split(' - ');
-        setStartTime(parts[0] || '08:00');
-        setEndTime(parts[1] || '17:00');
+        setStartTime(parseTo24h(parts[0]) || '08:00');
+        setEndTime(parseTo24h(parts[1]) || '17:00');
       }
     } else {
       setEditingId(null);

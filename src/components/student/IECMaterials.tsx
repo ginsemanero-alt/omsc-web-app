@@ -369,7 +369,8 @@ export default function IECMaterials() {
                         ratio than this box. Cropping to fill was cutting off
                         real content (a header, a whole panel of text) rather
                         than trimming empty margin the way it does on a photo. */}
-                    <img src={item.file_url} alt={item.title} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-700" />
+                    {/* The card shows the small sharp thumbnail; the full original loads only when the material is opened. */}
+                    <img src={item.thumb_url || item.file_url} alt={item.title} loading="lazy" decoding="async" className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-700" />
                     {/* Darkened backdrop + centered zoom icon is a nice-to-
                         have hover effect on desktop only — purely
                         decorative, so it's fine to skip on touch devices

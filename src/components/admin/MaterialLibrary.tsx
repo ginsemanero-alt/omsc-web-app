@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState, Suspense, lazy } from 'react';
 import { supabase } from '../../lib/supabase';
 import { compressImageFile, makePreviewThumbnail } from '../../lib/imageCompress';
-import { PRIVATE_MATERIAL_BUCKET, PREVIEW_BLUR_PX, PREVIEW_MAX_WIDTH, signMaterialRows } from '../../lib/materialAccess';
+import {
+  CARD_THUMB_MAX_WIDTH,
+  CARD_THUMB_QUALITY,
+  PRIVATE_MATERIAL_BUCKET,
+  PREVIEW_BLUR_PX,
+  PREVIEW_MAX_WIDTH,
+  signMaterialRows,
+} from '../../lib/materialAccess';
 import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
 import { usePagination } from '../../hooks/usePagination';
@@ -73,6 +80,8 @@ interface Material {
   // Path of the full file in the private bucket (PHASE 35). file_url is then
   // only a signed link made when the list loads: it is never saved back.
   file_path?: string | null;
+  // The sharp card thumbnail of an infographic, also in the private bucket.
+  thumb_path?: string | null;
   campus?: string | null;
   created_at?: string;
 }
@@ -563,6 +572,7 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
       // For a private file the stored file_url is null; the one in memory is
       // only a signed link, so it must never be carried into the payload.
       let finalFilePath = existingMaterial?.file_path || '';
+      let finalThumbPath = existingMaterial?.thumb_path || '';
       let finalFileUrl = existingMaterial?.file_path ? '' : existingMaterial?.file_url || '';
 
       // -------------------------------------------------------
@@ -585,10 +595,22 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
             blurPx: PREVIEW_BLUR_PX,
           });
           finalImageUrl = await uploadFile('material-covers', 'previews', preview, true);
+
+          // And a sharp card thumbnail for signed-in students (private, no
+          // blur), so their library never has to load the full original just
+          // to draw a card.
+          const cardThumb = await makePreviewThumbnail(selectedImage, {
+            maxWidth: CARD_THUMB_MAX_WIDTH,
+            blurPx: 0,
+            quality: CARD_THUMB_QUALITY,
+          });
+          finalThumbPath = await uploadPrivateFile('thumbs', cardThumb, true);
         } else {
           finalImageUrl = await uploadFile('material-covers', 'covers', selectedImage);
         }
       }
+
+      if (formData.type !== 'Image') finalThumbPath = '';
 
       // -------------------------------------------------------
       // PDF UPLOAD
@@ -649,6 +671,7 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
         image_url: finalImageUrl || null,
         file_url: finalFilePath ? null : finalFileUrl || null,
         file_path: finalFilePath || null,
+        thumb_path: finalThumbPath || null,
         campus: formData.campus || null,
         // AnalyticsDashboard.tsx counts "IEC Materials" by checking this
         // field, to tell a general Materials Library item (created here)
@@ -690,12 +713,14 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
           const { error: storageError } = await supabase.storage.from(parsed.bucket).remove([parsed.path]);
           if (storageError) console.warn('Storage cleanup failed for', url, storageError.message);
         }
-        // A replaced file in the private bucket.
-        if (existingMaterial?.file_path && existingMaterial.file_path !== finalFilePath) {
-          const { error: storageError } = await supabase.storage
-            .from(PRIVATE_MATERIAL_BUCKET)
-            .remove([existingMaterial.file_path]);
-          if (storageError) console.warn('Storage cleanup failed for', existingMaterial.file_path, storageError.message);
+        // A replaced file (and its card thumbnail) in the private bucket.
+        const stalePrivate = [
+          existingMaterial?.file_path && existingMaterial.file_path !== finalFilePath ? existingMaterial.file_path : null,
+          existingMaterial?.thumb_path && existingMaterial.thumb_path !== finalThumbPath ? existingMaterial.thumb_path : null,
+        ].filter((path): path is string => !!path);
+        if (stalePrivate.length > 0) {
+          const { error: storageError } = await supabase.storage.from(PRIVATE_MATERIAL_BUCKET).remove(stalePrivate);
+          if (storageError) console.warn('Storage cleanup failed for', stalePrivate.join(', '), storageError.message);
         }
 
         toast({
@@ -1079,6 +1104,7 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
                 pagedInfographics.map((item) => {
 
                   const imageUrl =
+                    (item as any).thumb_url ||
                     item.file_url ||
                     item.image_url ||
                     '';

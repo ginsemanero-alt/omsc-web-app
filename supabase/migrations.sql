@@ -3194,3 +3194,64 @@ NOTIFY pgrst, 'reload schema';
 -- CREATE POLICY "Enable read for all on programs" ON programs FOR SELECT USING (true);
 -- CREATE POLICY "Enable read for programs" ON programs FOR SELECT USING (true);
 -- NOTIFY pgrst, 'reload schema';
+
+
+-- =========================================================
+-- PHASE 35 (part D): card thumbnail path for infographics
+-- =========================================================
+-- materials.thumb_path is the object path of an infographic's sharp ~480px
+-- card thumbnail in the PRIVATE bucket (material-files/thumbs/...). Signed-in
+-- students' library cards use it instead of the 1-2 MB original; visitors who
+-- are not signed in keep the blurred public preview (image_url). Not
+-- readable by anon (it is not in the anon column grant of part B).
+-- Additive and harmless: run it BEFORE the client that writes thumb_path is
+-- deployed, and before scripts/backfill-card-thumbnails.cjs.
+
+ALTER TABLE materials ADD COLUMN IF NOT EXISTS thumb_path text;
+
+NOTIFY pgrst, 'reload schema';
+
+-- ---------------------------------------------------------
+-- ROLLBACK of part D (run only to undo it): drops the column. The
+-- thumbnail files stay in storage (material-files/thumbs/); delete them
+-- there if you want them gone.
+-- ---------------------------------------------------------
+-- ALTER TABLE materials DROP COLUMN IF EXISTS thumb_path;
+-- NOTIFY pgrst, 'reload schema';
+
+
+-- =========================================================
+-- PHASE 36: one-time cleanup of programs.time_range
+-- =========================================================
+-- Opening a program in the admin form and saving it used to append another
+-- AM/PM to each time ("8:00 AM" -> "8:00 AM AM" -> ...), and turned a PM time
+-- into "2:00 PM AM". The form is fixed (ProgramManager.tsx, parseTo24h); this
+-- repairs the rows it already damaged by keeping the FIRST AM/PM after each
+-- time, which is the original and correct one. Rows that are already clean
+-- are not touched, so it is safe to run twice.
+
+-- 1) BEFORE
+SELECT id, time_range FROM programs ORDER BY id;
+
+-- 2) repair
+UPDATE programs
+   SET time_range = regexp_replace(
+         time_range,
+         '(\d{1,2}:\d{2}\s*(?:AM|PM))(?:\s+(?:AM|PM))+',
+         '\1',
+         'gi')
+ WHERE time_range ~* '(AM|PM)\s+(AM|PM)';
+
+-- 3) AFTER (every row should now read like "8:00 AM - 12:00 PM")
+SELECT id, time_range FROM programs ORDER BY id;
+
+-- ---------------------------------------------------------
+-- ROLLBACK of PHASE 36 (run only to undo it): the original, damaged values
+-- as they were on 2026-10-24. There is no reason to want them back; they are
+-- recorded only so the cleanup can be reversed exactly.
+-- ---------------------------------------------------------
+-- UPDATE programs SET time_range = '2:00 PM AM AM - 4:30 PM AM AM' WHERE id = 76;
+-- UPDATE programs SET time_range = '5:30 PM AM AM - 7:30 PM AM AM' WHERE id = 77;
+-- UPDATE programs SET time_range = '8:00 AM AM AM AM - 12:00 PM PM PM PM' WHERE id = 78;
+-- UPDATE programs SET time_range = '8:00 AM AM AM - 5:00 PM AM AM' WHERE id = 79;
+-- UPDATE programs SET time_range = '7:30 AM AM AM AM AM AM AM AM AM AM - 5:30 PM AM AM AM AM AM AM AM AM AM' WHERE id = 80;

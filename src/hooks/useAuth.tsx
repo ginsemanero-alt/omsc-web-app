@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { clearSignedUrlCache } from '../lib/materialAccess';
 
 type Role = 'student' | 'admin' | null;
 
@@ -134,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    clearSignedUrlCache();
     setConsentVersion(null);
     setConsentLoaded(false);
     setUser(null);

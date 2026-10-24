@@ -30,6 +30,7 @@ interface ArchivedRow {
   file_url?: string | null;
   // A material's full file in the private bucket (PHASE 35).
   file_path?: string | null;
+  thumb_path?: string | null;
   image_url?: string | null;
 }
 
@@ -60,7 +61,7 @@ export default function ArchiveScreen() {
     try {
       const [programsRes, materialsRes, surveysRes, usersRes] = await Promise.all([
         supabase.from('programs').select('id, title, archived_at').not('archived_at', 'is', null),
-        supabase.from('materials').select('id, title, archived_at, file_url, file_path, image_url').not('archived_at', 'is', null),
+        supabase.from('materials').select('id, title, archived_at, file_url, file_path, thumb_path, image_url').not('archived_at', 'is', null),
         supabase.from('surveys').select('id, title, archived_at').not('archived_at', 'is', null),
         supabase.from('users').select('id, name, email, archived_at').not('archived_at', 'is', null),
       ]);
@@ -78,7 +79,7 @@ export default function ArchiveScreen() {
           .map((p: any) => ({ id: p.id, label: p.title, archived_at: p.archived_at }))
           .sort(sortByArchivedDesc),
         material: (materialsRes.data || [])
-          .map((m: any) => ({ id: m.id, label: m.title, archived_at: m.archived_at, file_url: m.file_url, file_path: m.file_path, image_url: m.image_url }))
+          .map((m: any) => ({ id: m.id, label: m.title, archived_at: m.archived_at, file_url: m.file_url, file_path: m.file_path, thumb_path: m.thumb_path, image_url: m.image_url }))
           .sort(sortByArchivedDesc),
         survey: (surveysRes.data || [])
           .map((s: any) => ({ id: s.id, label: s.title, archived_at: s.archived_at }))
@@ -197,9 +198,11 @@ export default function ArchiveScreen() {
         if (type === 'program') await removeStorageFiles(programFiles);
         if (type === 'material') {
           await removeStorageFiles([row.file_url, row.image_url]);
-          if (row.file_path) {
-            const { error: privateError } = await supabase.storage.from(PRIVATE_MATERIAL_BUCKET).remove([row.file_path]);
-            if (privateError) console.warn('Storage cleanup failed for', row.file_path, privateError.message);
+          // The full file and its card thumbnail, both in the private bucket.
+          const privateFiles = [row.file_path, row.thumb_path].filter((path): path is string => !!path);
+          if (privateFiles.length > 0) {
+            const { error: privateError } = await supabase.storage.from(PRIVATE_MATERIAL_BUCKET).remove(privateFiles);
+            if (privateError) console.warn('Storage cleanup failed for', privateFiles.join(', '), privateError.message);
           }
         }
 
