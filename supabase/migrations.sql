@@ -3080,6 +3080,12 @@ NOTIFY pgrst, 'reload schema';
 --     infographic previews only).
 -- A column added to materials later is NOT readable by anon until it is
 -- granted below.
+-- KNOWN LIMITATION (accepted 2026-10-24): the CDN keeps public files for a year
+-- (cache-control max-age=31536000) and does not purge them when a file is
+-- deleted or its bucket is made private. A CDN-cached copy of one public IEC
+-- video (material 44) may therefore stay reachable at its OLD public URL until
+-- it is evicted. The private file itself is protected and the system only
+-- serves signed links.
 
 -- ---- materials ----
 DROP POLICY IF EXISTS materials_select_public ON materials;
