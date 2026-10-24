@@ -25,6 +25,10 @@ export interface LinkedMaterial {
   // stored path.
   file_url: string | null;
   file_path?: string | null;
+  // The sharp card thumbnail of an infographic (private bucket), and the
+  // signed link made for it when the list loads. See materialAccess.ts.
+  thumb_path?: string | null;
+  thumb_url?: string | null;
   image_url: string | null;
   description: string | null;
 }
@@ -59,7 +63,7 @@ export async function loadMaterialProgress(
 ): Promise<MaterialProgressData> {
   let linkQuery = supabase
     .from('program_materials')
-    .select('program_id, material_id, sort_order, materials(id, title, type, category, file_url, file_path, image_url, description, archived_at, program_id)')
+    .select('program_id, material_id, sort_order, materials(id, title, type, category, file_url, file_path, thumb_path, image_url, description, archived_at, program_id)')
     .order('sort_order', { ascending: true });
   if (programIds) {
     if (programIds.length === 0) return { linksByProgram: {}, viewedIds: new Set() };
@@ -86,6 +90,7 @@ export async function loadMaterialProgress(
       category: material.category,
       file_url: material.file_url,
       file_path: material.file_path,
+      thumb_path: material.thumb_path,
       image_url: material.image_url,
       description: material.description,
     });
@@ -96,6 +101,7 @@ export async function loadMaterialProgress(
   const signed = await signMaterialRows(everyLink);
   signed.forEach((row, index) => {
     everyLink[index].file_url = row.file_url;
+    everyLink[index].thumb_url = row.thumb_url;
   });
 
   return {

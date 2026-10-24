@@ -840,13 +840,29 @@ export default function ProgramsActivities() {
                     const viewed = getMaterialViewed(materialData, material.id);
                     return (
                       <li key={material.id} className="rounded-[20px] bg-[#F5F6FB] dark:bg-slate-800 p-3 flex gap-3 items-center">
-                        <span className="w-[46px] h-[46px] shrink-0 rounded-[14px] bg-[#E0E7FF] dark:bg-indigo-500/20 text-[#4338CA] dark:text-indigo-200 flex items-center justify-center" aria-hidden="true">
-                          <KindIcon className="w-5 h-5" />
-                        </span>
+                        {/* An infographic shows its sharp private thumbnail (signed); a video shows
+                            its own cover. Everything else keeps the type icon. Visitors never get
+                            here: they see the blurred public preview on /programs/:id. */}
+                        {material.thumb_url || (material.type === 'Video' && material.image_url) ? (
+                          <img
+                            src={(material.thumb_url || material.image_url) as string}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                            className="w-[52px] h-[68px] shrink-0 rounded-[12px] object-cover object-top bg-[#E0E7FF] dark:bg-indigo-500/20"
+                          />
+                        ) : (
+                          <span className="w-[46px] h-[46px] shrink-0 rounded-[14px] bg-[#E0E7FF] dark:bg-indigo-500/20 text-[#4338CA] dark:text-indigo-200 flex items-center justify-center" aria-hidden="true">
+                            <KindIcon className="w-5 h-5" />
+                          </span>
+                        )}
                         <span className="grow flex flex-col gap-0.5 min-w-0">
                           <span className="font-bold text-sm text-[#1E1B4B] dark:text-white break-words">{material.title}</span>
                           <span className="text-xs text-[#5B6477] dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-1">
-                            {kind.label}
+                            <span className="inline-flex items-center gap-1.5">
+                              {(material.thumb_url || (material.type === 'Video' && material.image_url)) && <KindIcon className="w-3.5 h-3.5" aria-hidden="true" />}
+                              {kind.label}
+                            </span>
                             {viewed === true && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#D1FAE5] text-[#065F46] dark:bg-emerald-500/20 dark:text-emerald-200 font-bold">
                                 <Check className="w-3 h-3" strokeWidth={3} aria-hidden="true" /> Viewed
