@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState, Suspense, lazy } from 'react';
 import { supabase } from '../../lib/supabase';
+import HostedVideoPlayer from '../shared/HostedVideoPlayer';
 import { compressImageFile, makePreviewThumbnail } from '../../lib/imageCompress';
+import {
+  VIDEO_UPLOAD_NOTE,
+  checkVideoFile,
+  uploadHostedVideo,
+  deleteHostedVideoById,
+  rotateHostedVideo,
+  fetchVideoUsage,
+  type VideoUsage,
+} from '../../lib/videoHosting';
 import {
   CARD_THUMB_MAX_WIDTH,
   CARD_THUMB_QUALITY,
@@ -82,6 +92,11 @@ interface Material {
   file_path?: string | null;
   // The sharp card thumbnail of an infographic, also in the private bucket.
   thumb_path?: string | null;
+  // A video hosted on Cloudinary (PHASE 37): file_url and file_path stay empty.
+  video_public_id?: string | null;
+  video_resource_type?: string | null;
+  video_bytes?: number | null;
+  video_duration?: number | null;
   campus?: string | null;
   created_at?: string;
 }
@@ -158,12 +173,45 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
   // this just tracks which one is currently showing. Defaults to 'link'
   // since every existing Video material is a YouTube URL.
   const [videoSourceMode, setVideoSourceMode] = useState<'link' | 'upload'>('link');
+  // Progress text while a video goes to Cloudinary, and the monthly credit meter.
+  const [videoStatus, setVideoStatus] = useState('');
+  const [videoUsage, setVideoUsage] = useState<VideoUsage | null>(null);
+  const [isRotating, setIsRotating] = useState(false);
+  // Length of the chosen video, read in the browser; only used for a warning.
+  const [attachedVideoSeconds, setAttachedVideoSeconds] = useState<number | null>(null);
+  useEffect(() => {
+    setAttachedVideoSeconds(null);
+    if (!attachedVideo) return;
+    const url = URL.createObjectURL(attachedVideo);
+    const probe = document.createElement('video');
+    probe.preload = 'metadata';
+    probe.onloadedmetadata = () => {
+      if (Number.isFinite(probe.duration)) setAttachedVideoSeconds(probe.duration);
+    };
+    probe.src = url;
+    return () => {
+      probe.removeAttribute('src');
+      URL.revokeObjectURL(url);
+    };
+  }, [attachedVideo]);
 
   const [formData, setFormData] = useState<FormData>(DEFAULT_FORM);
 
   useEffect(() => {
     fetchMaterials();
   }, []);
+
+  // The credit meter is only fetched when the admin is about to upload a video.
+  useEffect(() => {
+    if (!isDialogOpen || formData.type !== 'Video' || videoSourceMode !== 'upload') return;
+    let cancelled = false;
+    fetchVideoUsage()
+      .then((usage) => !cancelled && setVideoUsage(usage))
+      .catch(() => !cancelled && setVideoUsage(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [isDialogOpen, formData.type, videoSourceMode]);
 
   // Warms up pdfjs's worker in the background as soon as this list has a
   // PDF to show, well before anyone opens a preview. Profiled against a
@@ -258,7 +306,7 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
     setAttachedAudio(null);
     setAttachedVideo(null);
     setVideoSourceMode(
-      material?.file_url && !material.file_url.includes('youtube') && !material.file_url.includes('youtu.be') && material.type === 'Video'
+      material?.type === 'Video' && (material.video_public_id || (material.file_url && !material.file_url.includes('youtube') && !material.file_url.includes('youtu.be')))
         ? 'upload'
         : 'link'
     );
@@ -333,11 +381,13 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
   };
 
   const validateVideo = (file: File) => {
-    if (!file.type.startsWith('video/')) {
+    // Type and the 100 MB limit are checked here, before anything is uploaded.
+    const problem = checkVideoFile(file);
+    if (problem) {
       toast({
         variant: 'destructive',
-        title: 'Invalid Video File',
-        description: 'Please select a valid video file.',
+        title: file.type.startsWith('video/') ? 'Video Too Large' : 'Invalid Video File',
+        description: problem,
       });
 
       return false;
@@ -560,6 +610,9 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
       return;
     }
 
+    // A video uploaded in this save: removed again if the save fails.
+    let newlyUploadedVideoId = '';
+
     try {
       setLoading(true);
       setIsUploading(true);
@@ -573,6 +626,12 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
       // only a signed link, so it must never be carried into the payload.
       let finalFilePath = existingMaterial?.file_path || '';
       let finalThumbPath = existingMaterial?.thumb_path || '';
+      let finalVideo = {
+        publicId: existingMaterial?.video_public_id || '',
+        resourceType: existingMaterial?.video_resource_type || '',
+        bytes: existingMaterial?.video_bytes ?? null,
+        duration: existingMaterial?.video_duration ?? null,
+      };
       let finalFileUrl = existingMaterial?.file_path ? '' : existingMaterial?.file_url || '';
 
       // -------------------------------------------------------
@@ -610,7 +669,7 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
         }
       }
 
-      if (formData.type !== 'Image') finalThumbPath = '';
+      if (formData.type !== 'Image' && formData.type !== 'Video') finalThumbPath = '';
 
       // -------------------------------------------------------
       // PDF UPLOAD
@@ -635,12 +694,35 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
       // -------------------------------------------------------
 
       if (formData.type === 'Video' && videoSourceMode === 'upload' && attachedVideo) {
-        finalFilePath = await uploadPrivateFile('video', attachedVideo);
+        // New uploads go to Cloudinary (the browser sends the file straight
+        // there with a signature from our server). Nothing is kept in the
+        // Supabase bucket for them.
+        const hosted = await uploadHostedVideo(attachedVideo, setVideoStatus);
+        newlyUploadedVideoId = hosted.publicId;
+        finalVideo = { publicId: hosted.publicId, resourceType: hosted.resourceType, bytes: hosted.bytes, duration: hosted.duration };
+        finalFilePath = '';
         finalFileUrl = '';
+
+        // The poster frame becomes the card images, exactly like an
+        // infographic: a blurred public preview for visitors and a sharp
+        // private thumbnail for signed-in students. An admin-chosen cover wins.
+        if (hosted.poster && !selectedImage) {
+          setVideoStatus('Creating the cover image…');
+          const posterFile = new File([hosted.poster], 'poster.jpg', { type: 'image/jpeg' });
+          const preview = await makePreviewThumbnail(posterFile, { maxWidth: PREVIEW_MAX_WIDTH, blurPx: PREVIEW_BLUR_PX });
+          finalImageUrl = await uploadFile('material-covers', 'previews', preview, true);
+          const cardThumb = await makePreviewThumbnail(posterFile, { maxWidth: CARD_THUMB_MAX_WIDTH, blurPx: 0, quality: CARD_THUMB_QUALITY });
+          finalThumbPath = await uploadPrivateFile('thumbs', cardThumb, true);
+        }
       } else if (formData.type === 'Video' && videoSourceMode === 'link') {
         finalFileUrl = formData.file_url.trim();
         finalFilePath = '';
+        finalVideo = { publicId: '', resourceType: '', bytes: null, duration: null };
+        if (!selectedImage) finalThumbPath = '';
+      } else if (formData.type !== 'Video') {
+        finalVideo = { publicId: '', resourceType: '', bytes: null, duration: null };
       }
+      setVideoStatus('');
 
       // -------------------------------------------------------
       // LINK URL
@@ -672,6 +754,10 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
         file_url: finalFilePath ? null : finalFileUrl || null,
         file_path: finalFilePath || null,
         thumb_path: finalThumbPath || null,
+        video_public_id: finalVideo.publicId || null,
+        video_resource_type: finalVideo.publicId ? finalVideo.resourceType || 'video' : null,
+        video_bytes: finalVideo.publicId ? finalVideo.bytes : null,
+        video_duration: finalVideo.publicId ? finalVideo.duration : null,
         campus: formData.campus || null,
         // AnalyticsDashboard.tsx counts "IEC Materials" by checking this
         // field, to tell a general Materials Library item (created here)
@@ -723,6 +809,12 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
           if (storageError) console.warn('Storage cleanup failed for', stalePrivate.join(', '), storageError.message);
         }
 
+        // A replaced (or switched-away-from) hosted video is deleted from
+        // Cloudinary too, now that nothing references it.
+        if (existingMaterial?.video_public_id && existingMaterial.video_public_id !== finalVideo.publicId) {
+          deleteHostedVideoById(existingMaterial.video_public_id).catch((err) => console.warn('Old video cleanup failed:', err.message));
+        }
+
         toast({
           title: 'Material Updated',
           description: 'The material has been updated successfully.',
@@ -760,6 +852,7 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
 
       await fetchMaterials();
     } catch (error: any) {
+      if (newlyUploadedVideoId) deleteHostedVideoById(newlyUploadedVideoId).catch(() => {});
       toast({
         variant: 'destructive',
         title: 'Save Error',
@@ -769,6 +862,7 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
     } finally {
       setLoading(false);
       setIsUploading(false);
+      setVideoStatus('');
     }
   };
 
@@ -1644,10 +1738,52 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
                           onChange={handleVideoSelect}
                         />
                       </div>
-                      <p className="text-[13px] text-slate-400 px-1">
-                        Self-hosted — no YouTube branding or ads, but uses
-                        this app's own storage instead of YouTube's.
+                      <p className="text-[13px] text-slate-500 px-1">
+                        {VIDEO_UPLOAD_NOTE}
                       </p>
+
+                      {attachedVideoSeconds !== null && attachedVideoSeconds > 180 && (
+                        <p className="text-[13px] px-1 font-semibold text-amber-600" role="alert">
+                          Videos over 3 minutes use more of our monthly limit. Consider a YouTube link for long videos.
+                        </p>
+                      )}
+
+                      {/* Monthly Cloudinary credits (Free plan: 25). Warns at 70%. */}
+                      {videoUsage && (
+                        <p
+                          className={`text-[13px] px-1 font-semibold ${
+                            videoUsage.percent >= 90 ? 'text-red-600' : videoUsage.warn ? 'text-amber-600' : 'text-slate-500'
+                          }`}
+                          role={videoUsage.warn ? 'alert' : undefined}
+                        >
+                          Video hosting credits this month: {videoUsage.creditsUsed.toFixed(2)} of {videoUsage.creditsLimit} ({videoUsage.percent}%)
+                          {videoUsage.warn ? ' — running low. Prefer YouTube links until next month.' : ''}
+                        </p>
+                      )}
+
+                      {/* A link leaked? A new id makes every link already handed out stop working. */}
+                      {editingId && materials.find((m) => m.id === editingId)?.video_public_id && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={isRotating}
+                          onClick={async () => {
+                            if (!editingId) return;
+                            try {
+                              setIsRotating(true);
+                              await rotateHostedVideo(editingId);
+                              toast({ title: 'Video link renewed', description: 'Links given out before now no longer work. Students get a new one automatically.' });
+                            } catch (err: any) {
+                              toast({ variant: 'destructive', title: 'Could not renew the link', description: err.message });
+                            } finally {
+                              setIsRotating(false);
+                            }
+                          }}
+                          className="h-10 rounded-xl text-[13px] font-semibold"
+                        >
+                          {isRotating ? 'Renewing…' : 'Renew video link (if it leaked)'}
+                        </Button>
+                      )}
                     </div>
                   )}
 
@@ -1782,7 +1918,7 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
                 {isUploading ? (
                   <span className="flex items-center gap-2">
                     <Loader2 className="animate-spin h-4 w-4" />
-                    Uploading...
+                    {videoStatus || 'Uploading...'}
                   </span>
                 ) : editingId ? (
                   'Save & Sync Resource'
@@ -1833,7 +1969,9 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
 
             {/* VIDEO */}
 
-            {previewItem &&
+            {previewItem && previewItem.type === 'Video' && previewItem.video_public_id ? (
+              <HostedVideoPlayer key={previewItem.id} materialId={previewItem.id} />
+            ) : previewItem &&
             previewItem.type === 'Video' &&
             (previewItem.file_url?.includes('youtube') || previewItem.file_url?.includes('youtu.be')) ? (
               <iframe

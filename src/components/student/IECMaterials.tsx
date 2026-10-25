@@ -18,6 +18,7 @@ import { fetchViewerCampus, campusVisibilityFilter } from '../../lib/campuses';
 // this chunk unless someone actually opens a PDF preview.
 const PdfPreview = lazy(() => import('../shared/PdfPreview'));
 import ZoomableImage from '../shared/ZoomableImage';
+import HostedVideoPlayer from '../shared/HostedVideoPlayer';
 
 const MATERIALS_PAGE_SIZE = 12;
 import {
@@ -180,7 +181,7 @@ export default function IECMaterials() {
   // Signed links expire, so the list is signed again before they do. A page
   // left open for hours keeps working.
   useEffect(() => {
-    if (!materials.some((m) => m.file_path)) return;
+    if (!materials.some((m) => m.file_path || m.thumb_path)) return;
     const timer = window.setInterval(async () => {
       const refreshed = await signMaterialRows(materials);
       setMaterials(refreshed);
@@ -272,6 +273,8 @@ export default function IECMaterials() {
   // YouTube link, since YouTube always has one — a self-hosted upload
   // with no cover has no fallback and shows the plain icon instead.
   const getVideoThumbnail = (item: any) => {
+    // A hosted video's sharp poster (private, signed) comes first for students.
+    if (item.thumb_url) return item.thumb_url as string;
     if (item.image_url) return item.image_url as string;
     const url = item.file_url || '';
     if (url.includes('youtube.com') || url.includes('youtu.be')) {
@@ -520,7 +523,15 @@ export default function IECMaterials() {
           </DialogHeader>
           
           <div className="flex-1 w-full bg-slate-900/50 flex items-center justify-center overflow-hidden relative">
-            {previewItem?.file_url?.includes('youtube') || previewItem?.file_url?.includes('youtu.be') ? (
+            {previewItem?.video_public_id ? (
+              // Hosted on Cloudinary: the signed link is fetched when this
+              // opens. The view was already recorded by handlePreview.
+              <HostedVideoPlayer
+                key={previewItem.id}
+                materialId={previewItem.id}
+                poster={previewItem.thumb_url || previewItem.image_url}
+              />
+            ) : previewItem?.file_url?.includes('youtube') || previewItem?.file_url?.includes('youtu.be') ? (
                <iframe
                 src={getYouTubeEmbedUrl(previewItem.file_url)}
                 className="w-full aspect-video max-w-4xl rounded-2xl shadow-2xl border-none"
@@ -594,6 +605,7 @@ export default function IECMaterials() {
                 embed and a plain external Link have nothing to actually
                 download, but a self-hosted Video upload does. */}
             {previewItem?.type !== 'Link' &&
+              !previewItem?.video_public_id &&
               !previewItem?.file_url?.includes('youtube') &&
               !previewItem?.file_url?.includes('youtu.be') && (
               <Button onClick={() => { downloadFile(previewItem.file_url, previewItem.title); incrementDownloadCount(previewItem.id); logMaterialView(previewItem); }} className="bg-indigo-600 rounded-xl font-black uppercase text-[10px] px-6 text-white">

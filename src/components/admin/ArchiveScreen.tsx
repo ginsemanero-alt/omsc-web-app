@@ -4,6 +4,7 @@ import { PRIVATE_MATERIAL_BUCKET } from '../../lib/materialAccess';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/use-toast';
 import { logActivity } from '../../lib/activityLog';
+import { deleteHostedVideoForMaterial } from '../../lib/videoHosting';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
@@ -31,6 +32,8 @@ interface ArchivedRow {
   // A material's full file in the private bucket (PHASE 35).
   file_path?: string | null;
   thumb_path?: string | null;
+  // A video hosted on Cloudinary (PHASE 37); deleted there before the row goes.
+  video_public_id?: string | null;
   image_url?: string | null;
 }
 
@@ -61,7 +64,7 @@ export default function ArchiveScreen() {
     try {
       const [programsRes, materialsRes, surveysRes, usersRes] = await Promise.all([
         supabase.from('programs').select('id, title, archived_at').not('archived_at', 'is', null),
-        supabase.from('materials').select('id, title, archived_at, file_url, file_path, thumb_path, image_url').not('archived_at', 'is', null),
+        supabase.from('materials').select('id, title, archived_at, file_url, file_path, thumb_path, video_public_id, image_url').not('archived_at', 'is', null),
         supabase.from('surveys').select('id, title, archived_at').not('archived_at', 'is', null),
         supabase.from('users').select('id, name, email, archived_at').not('archived_at', 'is', null),
       ]);
@@ -79,7 +82,7 @@ export default function ArchiveScreen() {
           .map((p: any) => ({ id: p.id, label: p.title, archived_at: p.archived_at }))
           .sort(sortByArchivedDesc),
         material: (materialsRes.data || [])
-          .map((m: any) => ({ id: m.id, label: m.title, archived_at: m.archived_at, file_url: m.file_url, file_path: m.file_path, thumb_path: m.thumb_path, image_url: m.image_url }))
+          .map((m: any) => ({ id: m.id, label: m.title, archived_at: m.archived_at, file_url: m.file_url, file_path: m.file_path, thumb_path: m.thumb_path, video_public_id: m.video_public_id, image_url: m.image_url }))
           .sort(sortByArchivedDesc),
         survey: (surveysRes.data || [])
           .map((s: any) => ({ id: s.id, label: s.title, archived_at: s.archived_at }))
@@ -190,6 +193,12 @@ export default function ArchiveScreen() {
         if (type === 'program') {
           const { error: handoutError } = await supabase.from('materials').delete().eq('program_id', row.id);
           if (handoutError) throw handoutError;
+        }
+
+        // A hosted video is removed from Cloudinary FIRST. If that fails the
+        // row is kept (so nothing is orphaned) and the admin sees the error.
+        if (type === 'material' && row.video_public_id) {
+          await deleteHostedVideoForMaterial(row.id);
         }
 
         const { error } = await supabase.from(tableName(type)).delete().eq('id', row.id);

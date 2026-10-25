@@ -3261,3 +3261,57 @@ SELECT id, time_range FROM programs ORDER BY id;
 -- UPDATE programs SET time_range = '8:00 AM AM AM AM - 12:00 PM PM PM PM' WHERE id = 78;
 -- UPDATE programs SET time_range = '8:00 AM AM AM - 5:00 PM AM AM' WHERE id = 79;
 -- UPDATE programs SET time_range = '7:30 AM AM AM AM AM AM AM AM AM AM - 5:30 PM AM AM AM AM AM AM AM AM AM' WHERE id = 80;
+
+
+-- =========================================================
+-- PHASE 37: uploaded videos are hosted on Cloudinary
+-- =========================================================
+-- Images, PDFs and audio stay in the private Supabase bucket. An uploaded
+-- video lives in Cloudinary as an AUTHENTICATED asset (only reachable through
+-- a link the server signs for a signed-in user, see /api/video-url).
+-- The Cloudinary public_id is stored here; a signed link is NEVER stored.
+-- A video material has file_url = NULL and file_path = NULL. Videos that are
+-- still in the Supabase bucket (file_path) or on YouTube (file_url) have
+-- video_public_id = NULL and keep working exactly as before.
+--
+-- Anonymous visitors cannot read these columns: PHASE 35 gives anon an
+-- explicit column list on materials, and a column added later is not on it.
+-- Safe to run twice.
+
+ALTER TABLE materials ADD COLUMN IF NOT EXISTS video_public_id text;
+ALTER TABLE materials ADD COLUMN IF NOT EXISTS video_resource_type text;
+-- size of the 480p copy students download (not of the original upload)
+ALTER TABLE materials ADD COLUMN IF NOT EXISTS video_bytes bigint;
+ALTER TABLE materials ADD COLUMN IF NOT EXISTS video_duration numeric;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'materials_video_one_source') THEN
+    ALTER TABLE materials ADD CONSTRAINT materials_video_one_source
+      CHECK (video_public_id IS NULL OR (file_url IS NULL AND file_path IS NULL));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'materials_video_public_id_prefix') THEN
+    ALTER TABLE materials ADD CONSTRAINT materials_video_public_id_prefix
+      CHECK (video_public_id IS NULL OR video_public_id ~ '^omsu-iec/[A-Za-z0-9_-]{8,64}$');
+  END IF;
+END $$;
+
+NOTIFY pgrst, 'reload schema';
+
+-- CHECK (all four should read false for anon, i.e. no column privilege):
+SELECT c AS column_name,
+       has_column_privilege('anon', 'public.materials', c, 'SELECT') AS anon_can_read
+  FROM unnest(ARRAY['video_public_id','video_resource_type','video_bytes','video_duration']) AS c;
+
+-- ---------------------------------------------------------
+-- ROLLBACK of PHASE 37 (run only to undo it).
+-- First delete the hosted videos (Archive > Delete permanently, or the
+-- Cloudinary console, folder omsu-iec/) or they are left behind as orphans.
+-- ---------------------------------------------------------
+-- ALTER TABLE materials DROP CONSTRAINT IF EXISTS materials_video_public_id_prefix;
+-- ALTER TABLE materials DROP CONSTRAINT IF EXISTS materials_video_one_source;
+-- ALTER TABLE materials DROP COLUMN IF EXISTS video_duration;
+-- ALTER TABLE materials DROP COLUMN IF EXISTS video_bytes;
+-- ALTER TABLE materials DROP COLUMN IF EXISTS video_resource_type;
+-- ALTER TABLE materials DROP COLUMN IF EXISTS video_public_id;
+-- NOTIFY pgrst, 'reload schema';

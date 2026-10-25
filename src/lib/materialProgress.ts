@@ -29,6 +29,9 @@ export interface LinkedMaterial {
   // signed link made for it when the list loads. See materialAccess.ts.
   thumb_path?: string | null;
   thumb_url?: string | null;
+  // Set for a video hosted on Cloudinary (PHASE 37): file_url and file_path
+  // are empty and the player asks the server for a signed link.
+  video_public_id?: string | null;
   image_url: string | null;
   description: string | null;
 }
@@ -63,7 +66,7 @@ export async function loadMaterialProgress(
 ): Promise<MaterialProgressData> {
   let linkQuery = supabase
     .from('program_materials')
-    .select('program_id, material_id, sort_order, materials(id, title, type, category, file_url, file_path, thumb_path, image_url, description, archived_at, program_id)')
+    .select('program_id, material_id, sort_order, materials(id, title, type, category, file_url, file_path, thumb_path, video_public_id, image_url, description, archived_at, program_id)')
     .order('sort_order', { ascending: true });
   if (programIds) {
     if (programIds.length === 0) return { linksByProgram: {}, viewedIds: new Set() };
@@ -91,6 +94,7 @@ export async function loadMaterialProgress(
       file_url: material.file_url,
       file_path: material.file_path,
       thumb_path: material.thumb_path,
+      video_public_id: material.video_public_id,
       image_url: material.image_url,
       description: material.description,
     });

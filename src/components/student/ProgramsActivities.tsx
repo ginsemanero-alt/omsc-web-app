@@ -26,6 +26,7 @@ import { PaginationControls } from '../../components/ui/pagination-controls';
 import ProgramEntryTimeline from '../shared/ProgramEntryTimeline';
 import PhotoViewer, { collectProgramPhotos, viewerAt, type PhotoViewerState } from '../shared/PhotoViewer';
 import ZoomableImage from '../shared/ZoomableImage';
+import HostedVideoPlayer from '../shared/HostedVideoPlayer';
 
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a handout PDF preview.
@@ -181,6 +182,9 @@ interface PreviewFile {
   materialId?: number;
   type?: string | null;
   poster?: string | null;
+  // A video hosted on Cloudinary: url is empty and the player asks the server
+  // for a signed link using materialId.
+  hosted?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -459,7 +463,8 @@ export default function ProgramsActivities() {
         title: material.title,
         materialId: material.id,
         type: material.type,
-        poster: material.image_url,
+        poster: material.thumb_url || material.image_url,
+        hosted: !!material.video_public_id,
       });
     }
     markMaterialViewed(material);
@@ -989,7 +994,14 @@ export default function ProgramsActivities() {
           </DialogHeader>
 
           <div className="flex-1 w-full bg-slate-900/50 flex items-center justify-center overflow-hidden relative">
-            {previewHandout && isYouTube(previewHandout.url) ? (
+            {previewHandout?.hosted && previewHandout.materialId ? (
+              <HostedVideoPlayer
+                key={previewHandout.materialId}
+                materialId={previewHandout.materialId}
+                poster={previewHandout.poster}
+                className="w-full max-h-full max-w-4xl rounded-2xl"
+              />
+            ) : previewHandout && isYouTube(previewHandout.url) ? (
               <iframe
                 src={youTubeEmbedUrl(previewHandout.url)}
                 className="w-full aspect-video max-w-4xl rounded-2xl border-none"
@@ -1038,7 +1050,7 @@ export default function ProgramsActivities() {
             {/* Downloading from an open preview is part of the same open:
                 the view was recorded when it opened. A YouTube video has
                 nothing to download. */}
-            {previewHandout && !isYouTube(previewHandout.url) && (
+            {previewHandout && !previewHandout.hosted && !isYouTube(previewHandout.url) && (
               <Button
                 onClick={() => {
                   downloadHandout(previewHandout.url, previewHandout.title);

@@ -1104,6 +1104,378 @@ app.post('/api/analytics-insight', analyticsInsightLimiter, async (req, res) => 
     }
 });
 
+// =====================================================================
+// PHASE 37 — VIDEOS ON CLOUDINARY
+// Images, PDFs and audio stay in the private Supabase bucket. An uploaded
+// video lives in Cloudinary as an AUTHENTICATED asset: neither the original
+// nor the playback copy can be fetched without a signature that only this
+// server can make, and it makes one only for a signed-in user.
+//
+//  * Credentials come from the environment only. They are never logged,
+//    returned, or put in an error message.
+//  * Everything here is confined to the omsu-iec/ prefix. Nothing outside it
+//    is ever created, read or deleted.
+//  * On the Free plan a signed link has NO expiry (expiring links are an
+//    Advanced-plan feature). The mitigations are: links are only issued to
+//    signed-in users, the endpoint is rate limited per user, and an admin
+//    can rotate a video's public_id, which kills every link already given out.
+// =====================================================================
+const CLD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
+const CLD_KEY = process.env.CLOUDINARY_API_KEY;
+const CLD_SECRET = process.env.CLOUDINARY_API_SECRET;
+const CLD_PREFIX = 'omsu-iec/';
+const CLD_MAX_BYTES = 100 * 1024 * 1024; // the Free plan's own video limit too
+const CLD_FREE_CREDITS_WARN_PCT = 70;
+// ONE delivery profile: 480p-class H.264/AAC mp4 capped at ~500 kbps, so a
+// 2-minute video is about 8 MB. It is made once, at upload (eager), because
+// authenticated assets cannot be transformed on the fly. Changing this string
+// changes the delivery URL, so existing videos would need re-processing.
+const CLD_VIDEO_TX = 'c_limit,w_854,h_854,br_500k,vc_h264,ac_aac,f_mp4';
+// One frame, used once to build the card thumbnails; never shown to students.
+const CLD_POSTER_TX = 'so_1,c_limit,w_960,h_960,f_jpg';
+const CLD_PUBLIC_ID_RE = /^omsu-iec\/[A-Za-z0-9_-]{8,64}$/;
+
+const cldConfigured = () => Boolean(CLD_NAME && CLD_KEY && CLD_SECRET);
+
+// Signed Upload-API parameters: sha1 of the sorted "k=v&k=v" string + secret.
+const cldSignParams = (params) =>
+    crypto
+        .createHash('sha1')
+        .update(
+            Object.keys(params)
+                .filter((k) => params[k] !== undefined && params[k] !== null && params[k] !== '')
+                .sort()
+                .map((k) => `${k}=${params[k]}`)
+                .join('&') + CLD_SECRET
+        )
+        .digest('hex');
+
+// Signed delivery URL for an authenticated asset. The signature covers
+// "<transformation>/<public_id>.<ext>" and the same string must be requested.
+const cldDeliveryUrl = (publicId, transformation, ext) => {
+    const sig = crypto
+        .createHash('sha1')
+        .update(`${transformation}/${publicId}.${ext}` + CLD_SECRET)
+        .digest('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .slice(0, 8);
+    return `https://res.cloudinary.com/${CLD_NAME}/video/authenticated/s--${sig}--/${transformation}/${publicId}.${ext}`;
+};
+
+const cldBasic = () => 'Basic ' + Buffer.from(`${CLD_KEY}:${CLD_SECRET}`).toString('base64');
+
+// Admin API (Basic auth). Returns { status, body }.
+async function cldAdmin(path, init = {}) {
+    const response = await fetch(`https://api.cloudinary.com/v1_1/${CLD_NAME}${path}`, {
+        ...init,
+        headers: { Authorization: cldBasic(), ...(init.headers || {}) },
+    });
+    const body = await response.json().catch(() => ({}));
+    return { status: response.status, body };
+}
+
+// Upload API call signed in the body (rename / explicit).
+async function cldSignedUpload(path, params) {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signed = { ...params, timestamp };
+    const form = new URLSearchParams();
+    for (const [k, v] of Object.entries(signed)) form.append(k, String(v));
+    form.append('api_key', CLD_KEY);
+    form.append('signature', cldSignParams(signed));
+    const response = await fetch(`https://api.cloudinary.com/v1_1/${CLD_NAME}${path}`, { method: 'POST', body: form });
+    const body = await response.json().catch(() => ({}));
+    return { status: response.status, body };
+}
+
+// Deletes an asset and every derived copy, and purges the CDN. Refuses
+// anything outside omsu-iec/. A missing asset counts as already deleted.
+async function cldDestroy(publicId) {
+    if (!CLD_PUBLIC_ID_RE.test(publicId || '')) throw new Error('Refusing to delete outside the video folder.');
+    const { status, body } = await cldAdmin(
+        `/resources/video/authenticated?public_ids[]=${encodeURIComponent(publicId)}&invalidate=true`,
+        { method: 'DELETE' }
+    );
+    if (status !== 200) throw new Error(`Video storage refused the delete (HTTP ${status}).`);
+    const result = body?.deleted?.[publicId];
+    if (result && result !== 'deleted' && result !== 'not_found') throw new Error('Video storage could not delete the file.');
+}
+
+// Bearer token -> { authUser, record } or sends the error response itself.
+async function requireSignedIn(req, res, { admin = false } = {}) {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) {
+        res.status(401).json({ message: 'Missing authorization token' });
+        return null;
+    }
+    const { data: { user: authUser }, error } = await supabase.auth.getUser(token);
+    if (error || !authUser?.email) {
+        res.status(401).json({ message: 'Invalid or expired session' });
+        return null;
+    }
+    const { data: record } = await supabase
+        .from('users')
+        .select('role, archived_at')
+        .eq('email', authUser.email.toLowerCase())
+        .maybeSingle();
+    if (!record || record.archived_at) {
+        res.status(403).json({ message: 'This account cannot use this feature.' });
+        return null;
+    }
+    if (admin && record.role !== 'admin') {
+        res.status(403).json({ message: 'Only admins can do this.' });
+        return null;
+    }
+    return { authUser, record, token };
+}
+
+const videoAdminLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
+});
+
+// Every play costs bandwidth credits, so signed links are limited PER USER
+// (not per IP: a whole class shares one campus IP). The player keeps the link
+// it was given for the life of the page, so a normal student asks a handful
+// of times an hour at most. In-memory per instance, like the other limiters.
+const VIDEO_URL_LIMIT = 60;
+const VIDEO_URL_WINDOW_MS = 60 * 60 * 1000;
+const videoUrlHits = new Map();
+const videoUrlAllowed = (userId) => {
+    const now = Date.now();
+    const recent = (videoUrlHits.get(userId) || []).filter((t) => now - t < VIDEO_URL_WINDOW_MS);
+    if (recent.length >= VIDEO_URL_LIMIT) {
+        videoUrlHits.set(userId, recent);
+        return false;
+    }
+    recent.push(now);
+    videoUrlHits.set(userId, recent);
+    if (videoUrlHits.size > 5000) {
+        for (const [key, times] of videoUrlHits) if (!times.some((t) => now - t < VIDEO_URL_WINDOW_MS)) videoUrlHits.delete(key);
+    }
+    return true;
+};
+
+const cldGuard = (res) => {
+    if (cldConfigured()) return true;
+    res.status(503).json({ message: 'Video hosting is not configured on this server yet.' });
+    return false;
+};
+
+// 1) Admin asks for permission to upload one video. The browser then sends
+//    the file straight to Cloudinary with the signature returned here.
+app.post('/api/admin/video-upload-signature', videoAdminLimiter, async (req, res) => {
+    try {
+        if (!cldGuard(res)) return;
+        if (!(await requireSignedIn(req, res, { admin: true }))) return;
+
+        const size = Number(req.body?.size);
+        const type = String(req.body?.type || '');
+        if (!type.startsWith('video/')) return res.status(400).json({ message: 'Please choose a video file.' });
+        if (!Number.isFinite(size) || size <= 0) return res.status(400).json({ message: 'Missing video size.' });
+        if (size > CLD_MAX_BYTES) return res.status(400).json({ message: 'Video must be 100 MB or less. Please compress it first.' });
+
+        const publicId = CLD_PREFIX + crypto.randomBytes(12).toString('hex');
+        const params = {
+            public_id: publicId,
+            type: 'authenticated',
+            eager: `${CLD_VIDEO_TX}|${CLD_POSTER_TX}`,
+            eager_async: 'true',
+            timestamp: Math.floor(Date.now() / 1000),
+        };
+        res.status(200).json({
+            uploadUrl: `https://api.cloudinary.com/v1_1/${CLD_NAME}/video/upload`,
+            publicId,
+            fields: { ...params, api_key: CLD_KEY, signature: cldSignParams(params) },
+        });
+    } catch (error) {
+        console.error('video-upload-signature error:', error.message);
+        res.status(500).json({ message: 'Could not prepare the upload.' });
+    }
+});
+
+// 2) After the browser finished uploading: confirm the file really is there,
+//    within the size limit, and that the playback copy is ready. Returns the
+//    facts to store, plus a one-time link to the poster frame (admin only).
+app.post('/api/admin/video-finalize', videoAdminLimiter, async (req, res) => {
+    try {
+        if (!cldGuard(res)) return;
+        if (!(await requireSignedIn(req, res, { admin: true }))) return;
+
+        const publicId = String(req.body?.publicId || '');
+        if (!CLD_PUBLIC_ID_RE.test(publicId)) return res.status(400).json({ message: 'Invalid video id.' });
+
+        const { status, body } = await cldAdmin(`/resources/video/authenticated/${publicId}`);
+        if (status === 404) return res.status(404).json({ message: 'The upload was not found.' });
+        if (status !== 200) return res.status(502).json({ message: 'Video storage did not answer. Please try again.' });
+
+        if (body.bytes > CLD_MAX_BYTES) {
+            await cldDestroy(publicId).catch(() => {});
+            return res.status(400).json({ message: 'Video must be 100 MB or less. Please compress it first.' });
+        }
+
+        const derived = Array.isArray(body.derived) ? body.derived : [];
+        const playback = derived.find((d) => d.format === 'mp4' && d.bytes > 0);
+        const poster = derived.find((d) => d.format === 'jpg' && d.bytes > 0);
+        if (!playback || !poster) return res.status(200).json({ status: 'processing' });
+
+        res.status(200).json({
+            status: 'ready',
+            publicId,
+            resourceType: 'video',
+            // bytes of the 480p copy students actually download
+            bytes: playback.bytes,
+            originalBytes: body.bytes,
+            duration: typeof body.duration === 'number' ? Math.round(body.duration * 10) / 10 : null,
+            posterUrl: cldDeliveryUrl(publicId, CLD_POSTER_TX, 'jpg'),
+        });
+    } catch (error) {
+        console.error('video-finalize error:', error.message);
+        res.status(500).json({ message: 'Could not check the upload.' });
+    }
+});
+
+// 3) A signed-in user asks to play a video. The signed link is made here on
+//    every request and is never stored anywhere.
+app.get('/api/video-url', async (req, res) => {
+    try {
+        if (!cldGuard(res)) return;
+        const session = await requireSignedIn(req, res);
+        if (!session) return;
+
+        const materialId = Number(req.query.material);
+        if (!Number.isInteger(materialId) || materialId <= 0) return res.status(400).json({ message: 'Invalid material.' });
+
+        if (!videoUrlAllowed(session.authUser.id)) {
+            return res.status(429).json({ message: 'Too many video requests. Please try again later.' });
+        }
+
+        // Read with the caller's OWN token so row-level security decides
+        // whether this person may see the material at all.
+        const asUser = createClient(supabaseUrl, supabaseAnonKey, {
+            global: { headers: { Authorization: `Bearer ${session.token}` } },
+            auth: { persistSession: false, autoRefreshToken: false },
+        });
+        const { data: material } = await asUser
+            .from('materials')
+            .select('id, video_public_id, archived_at')
+            .eq('id', materialId)
+            .maybeSingle();
+
+        const isAdmin = session.record.role === 'admin';
+        if (!material?.video_public_id || (material.archived_at && !isAdmin) || !CLD_PUBLIC_ID_RE.test(material.video_public_id)) {
+            return res.status(404).json({ message: 'Video not found.' });
+        }
+
+        res.set('Cache-Control', 'no-store');
+        res.status(200).json({ url: cldDeliveryUrl(material.video_public_id, CLD_VIDEO_TX, 'mp4') });
+    } catch (error) {
+        console.error('video-url error:', error.message);
+        res.status(500).json({ message: 'Could not load the video.' });
+    }
+});
+
+// 4) Permanent removal. Either a material that is archived (Archive screen),
+//    or an upload nothing references (cancelled form, replaced video).
+app.post('/api/admin/delete-video', videoAdminLimiter, async (req, res) => {
+    try {
+        if (!cldGuard(res)) return;
+        if (!(await requireSignedIn(req, res, { admin: true }))) return;
+
+        let publicId = '';
+        if (req.body?.materialId !== undefined) {
+            const { data: material } = await supabase
+                .from('materials')
+                .select('id, video_public_id, archived_at')
+                .eq('id', Number(req.body.materialId))
+                .maybeSingle();
+            if (!material) return res.status(404).json({ message: 'Material not found.' });
+            if (!material.archived_at) return res.status(409).json({ message: 'Archive the material first.' });
+            if (!material.video_public_id) return res.status(200).json({ deleted: false });
+            publicId = material.video_public_id;
+        } else {
+            publicId = String(req.body?.publicId || '');
+            if (!CLD_PUBLIC_ID_RE.test(publicId)) return res.status(400).json({ message: 'Invalid video id.' });
+            const { count } = await supabase
+                .from('materials')
+                .select('id', { count: 'exact', head: true })
+                .eq('video_public_id', publicId);
+            if (count) return res.status(409).json({ message: 'That video is still in use.' });
+        }
+
+        await cldDestroy(publicId);
+        res.status(200).json({ deleted: true });
+    } catch (error) {
+        console.error('delete-video error:', error.message);
+        res.status(502).json({ message: 'Could not delete the video file. Nothing was removed from the library.' });
+    }
+});
+
+// 5) A link leaked: give the video a new public_id. Every link already handed
+//    out stops working; students simply get a new one the next time they play.
+app.post('/api/admin/video-rotate', videoAdminLimiter, async (req, res) => {
+    try {
+        if (!cldGuard(res)) return;
+        if (!(await requireSignedIn(req, res, { admin: true }))) return;
+
+        const { data: material } = await supabase
+            .from('materials')
+            .select('id, video_public_id')
+            .eq('id', Number(req.body?.materialId))
+            .maybeSingle();
+        if (!material?.video_public_id || !CLD_PUBLIC_ID_RE.test(material.video_public_id)) {
+            return res.status(404).json({ message: 'This material has no hosted video.' });
+        }
+
+        const oldId = material.video_public_id;
+        const newId = CLD_PREFIX + crypto.randomBytes(12).toString('hex');
+        const renamed = await cldSignedUpload('/video/rename', { from_public_id: oldId, to_public_id: newId, type: 'authenticated', to_type: 'authenticated' });
+        if (renamed.status !== 200) return res.status(502).json({ message: 'Video storage could not rename the video.' });
+
+        const { error: updateError } = await supabase.from('materials').update({ video_public_id: newId }).eq('id', material.id);
+        if (updateError) {
+            await cldSignedUpload('/video/rename', { from_public_id: newId, to_public_id: oldId, type: 'authenticated', to_type: 'authenticated' });
+            return res.status(500).json({ message: 'Could not save the new link. Nothing changed.' });
+        }
+
+        // The playback copy belongs to the old name; make it again under the new one.
+        await cldSignedUpload('/video/explicit', { public_id: newId, type: 'authenticated', eager: CLD_VIDEO_TX, eager_async: 'true' });
+        res.status(200).json({ rotated: true });
+    } catch (error) {
+        console.error('video-rotate error:', error.message);
+        res.status(500).json({ message: 'Could not rotate the video link.' });
+    }
+});
+
+// 6) Credit meter for the admin upload screen.
+app.get('/api/admin/video-usage', videoAdminLimiter, async (req, res) => {
+    try {
+        if (!cldGuard(res)) return;
+        if (!(await requireSignedIn(req, res, { admin: true }))) return;
+        const { status, body } = await cldAdmin('/usage');
+        if (status !== 200) return res.status(502).json({ message: 'Usage is not available right now.' });
+        const used = Number(body?.credits?.usage ?? 0);
+        const limit = Number(body?.credits?.limit ?? 25);
+        const percent = limit > 0 ? Math.round((used / limit) * 1000) / 10 : 0;
+        res.status(200).json({
+            creditsUsed: used,
+            creditsLimit: limit,
+            percent,
+            warn: percent >= CLD_FREE_CREDITS_WARN_PCT,
+            storageBytes: Number(body?.storage?.usage ?? 0),
+            bandwidthBytes: Number(body?.bandwidth?.usage ?? 0),
+            updated: body?.last_updated || null,
+        });
+    } catch (error) {
+        console.error('video-usage error:', error.message);
+        res.status(500).json({ message: 'Usage is not available right now.' });
+    }
+});
+
 export default app;
 
 const PORT = process.env.PORT || 3001;
