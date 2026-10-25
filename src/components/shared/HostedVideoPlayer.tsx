@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { fetchPlaybackUrl } from '../../lib/videoHosting';
+import { fetchPlaybackUrl, VIDEO_PLAY_FAILED_MESSAGE } from '../../lib/videoHosting';
 
 interface HostedVideoPlayerProps {
   materialId: number;
@@ -24,7 +24,7 @@ export default function HostedVideoPlayer({ materialId, poster, className }: Hos
     setError(null);
     fetchPlaybackUrl(materialId)
       .then((link) => !cancelled && setUrl(link))
-      .catch((err: Error) => !cancelled && setError(err.message || 'This video could not be loaded.'));
+      .catch(() => !cancelled && setError(VIDEO_PLAY_FAILED_MESSAGE));
     return () => {
       cancelled = true;
     };
@@ -33,13 +33,15 @@ export default function HostedVideoPlayer({ materialId, poster, className }: Hos
   // A link that stopped working (the admin rotated it) is asked for once more.
   const handleVideoError = () => {
     if (retried.current) {
-      setError('This video could not be played. Please try again later.');
+      setError(VIDEO_PLAY_FAILED_MESSAGE);
       return;
     }
     retried.current = true;
+    // The link for an unchanged video is identical, and an identical src would
+    // not reload: only a different link (after a rotate) is worth another try.
     fetchPlaybackUrl(materialId, true)
-      .then(setUrl)
-      .catch((err: Error) => setError(err.message || 'This video could not be played.'));
+      .then((fresh) => (fresh === url ? setError(VIDEO_PLAY_FAILED_MESSAGE) : setUrl(fresh)))
+      .catch(() => setError(VIDEO_PLAY_FAILED_MESSAGE));
   };
 
   if (error) {

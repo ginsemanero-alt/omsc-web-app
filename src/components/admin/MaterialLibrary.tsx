@@ -4,6 +4,13 @@ import HostedVideoPlayer from '../shared/HostedVideoPlayer';
 import { compressImageFile, makePreviewThumbnail } from '../../lib/imageCompress';
 import {
   VIDEO_UPLOAD_NOTE,
+  VIDEO_SIZE_TIP,
+  VIDEO_INCOMPATIBLE_WARNING,
+  FREE_PLAN_CREDITS,
+  creditsPer100Views,
+  formatDuration,
+  formatFileSize,
+  isVideoCompatible,
   checkVideoFile,
   uploadHostedVideo,
   deleteHostedVideoById,
@@ -97,6 +104,9 @@ interface Material {
   video_resource_type?: string | null;
   video_bytes?: number | null;
   video_duration?: number | null;
+  // Container and video codec of the original upload (PHASE 37 part 2).
+  video_format?: string | null;
+  video_codec?: string | null;
   campus?: string | null;
   created_at?: string;
 }
@@ -631,6 +641,8 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
         resourceType: existingMaterial?.video_resource_type || '',
         bytes: existingMaterial?.video_bytes ?? null,
         duration: existingMaterial?.video_duration ?? null,
+        format: existingMaterial?.video_format ?? null,
+        codec: existingMaterial?.video_codec ?? null,
       };
       let finalFileUrl = existingMaterial?.file_path ? '' : existingMaterial?.file_url || '';
 
@@ -699,7 +711,7 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
         // Supabase bucket for them.
         const hosted = await uploadHostedVideo(attachedVideo, setVideoStatus);
         newlyUploadedVideoId = hosted.publicId;
-        finalVideo = { publicId: hosted.publicId, resourceType: hosted.resourceType, bytes: hosted.bytes, duration: hosted.duration };
+        finalVideo = { publicId: hosted.publicId, resourceType: hosted.resourceType, bytes: hosted.bytes, duration: hosted.duration, format: hosted.format, codec: hosted.codec };
         finalFilePath = '';
         finalFileUrl = '';
 
@@ -717,10 +729,10 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
       } else if (formData.type === 'Video' && videoSourceMode === 'link') {
         finalFileUrl = formData.file_url.trim();
         finalFilePath = '';
-        finalVideo = { publicId: '', resourceType: '', bytes: null, duration: null };
+        finalVideo = { publicId: '', resourceType: '', bytes: null, duration: null, format: null, codec: null };
         if (!selectedImage) finalThumbPath = '';
       } else if (formData.type !== 'Video') {
-        finalVideo = { publicId: '', resourceType: '', bytes: null, duration: null };
+        finalVideo = { publicId: '', resourceType: '', bytes: null, duration: null, format: null, codec: null };
       }
       setVideoStatus('');
 
@@ -758,6 +770,8 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
         video_resource_type: finalVideo.publicId ? finalVideo.resourceType || 'video' : null,
         video_bytes: finalVideo.publicId ? finalVideo.bytes : null,
         video_duration: finalVideo.publicId ? finalVideo.duration : null,
+        video_format: finalVideo.publicId ? finalVideo.format : null,
+        video_codec: finalVideo.publicId ? finalVideo.codec : null,
         campus: formData.campus || null,
         // AnalyticsDashboard.tsx counts "IEC Materials" by checking this
         // field, to tell a general Materials Library item (created here)
@@ -815,10 +829,19 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
           deleteHostedVideoById(existingMaterial.video_public_id).catch((err) => console.warn('Old video cleanup failed:', err.message));
         }
 
-        toast({
-          title: 'Material Updated',
-          description: 'The material has been updated successfully.',
-        });
+        if (newlyUploadedVideoId && !isVideoCompatible(finalVideo.format, finalVideo.codec)) {
+          toast({
+            variant: 'destructive',
+            duration: Infinity,
+            title: 'Material updated, but check this video',
+            description: VIDEO_INCOMPATIBLE_WARNING,
+          });
+        } else {
+          toast({
+            title: 'Material Updated',
+            description: 'The material has been updated successfully.',
+          });
+        }
       }
 
       // -------------------------------------------------------
@@ -836,10 +859,19 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
         }
         logActivity({ actorEmail: user?.email, actorName: userName, action: 'create', entityType: 'material', entityId: data?.[0]?.id, entityLabel: payload.title });
 
-        toast({
-          title: 'Material Published',
-          description: 'The new material has been added successfully.',
-        });
+        if (newlyUploadedVideoId && !isVideoCompatible(finalVideo.format, finalVideo.codec)) {
+          toast({
+            variant: 'destructive',
+            duration: Infinity,
+            title: 'Material published, but check this video',
+            description: VIDEO_INCOMPATIBLE_WARNING,
+          });
+        } else {
+          toast({
+            title: 'Material Published',
+            description: 'The new material has been added successfully.',
+          });
+        }
       }
 
       setIsDialogOpen(false);
@@ -1349,6 +1381,15 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
                           {item.title}
                         </h3>
 
+                        {item.video_public_id && !isVideoCompatible(item.video_format, item.video_codec) && (
+                          <p
+                            className="-mt-2 mb-3 inline-block rounded-full bg-amber-100 px-3 py-1 text-[12px] font-semibold text-amber-800"
+                            title={VIDEO_INCOMPATIBLE_WARNING}
+                          >
+                            May not play on some devices
+                          </p>
+                        )}
+
                         <Button
                           onClick={() =>
                             handlePreview(item)
@@ -1741,6 +1782,19 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
                       <p className="text-[13px] text-slate-500 px-1">
                         {VIDEO_UPLOAD_NOTE}
                       </p>
+
+                      {attachedVideo && (
+                        <div className="px-1 space-y-0.5 text-[13px] text-slate-600">
+                          <p className="font-semibold">
+                            {formatFileSize(attachedVideo.size)}
+                            {attachedVideoSeconds !== null ? ` · ${formatDuration(attachedVideoSeconds)}` : ''}
+                          </p>
+                          <p>
+                            Each 100 full views use about {creditsPer100Views(attachedVideo.size)} of our {FREE_PLAN_CREDITS} monthly credits.
+                          </p>
+                        </div>
+                      )}
+                      <p className="text-[13px] text-slate-500 px-1">{VIDEO_SIZE_TIP}</p>
 
                       {attachedVideoSeconds !== null && attachedVideoSeconds > 180 && (
                         <p className="text-[13px] px-1 font-semibold text-amber-600" role="alert">

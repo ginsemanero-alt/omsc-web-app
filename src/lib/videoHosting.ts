@@ -7,7 +7,39 @@ import { supabase } from './supabase';
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 export const VIDEO_TOO_BIG_MESSAGE = 'Video must be 100 MB or less. Please compress it first.';
 export const VIDEO_UPLOAD_NOTE =
-  'Max 100 MB. Videos are compressed to 480p for students. For long videos, use a YouTube link instead.';
+  'Max 100 MB. Students watch the file exactly as you upload it, so compress it first. For long videos, use a YouTube link instead.';
+export const VIDEO_SIZE_TIP = 'Aim for 15 MB or less per video.';
+export const VIDEO_INCOMPATIBLE_WARNING =
+  'This video may not play on some phones or browsers. Please export it as MP4 (H.264) and upload again.';
+export const VIDEO_PLAY_FAILED_MESSAGE =
+  "This video can't play on your device right now. Please try another browser or let the Guidance Office know.";
+
+const FREE_PLAN_CREDITS = 25;
+const MB = 1024 * 1024;
+
+export function formatFileSize(bytes: number): string {
+  return bytes >= MB ? `${(bytes / MB).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+export function formatDuration(seconds: number): string {
+  const total = Math.round(seconds);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+// Cloudinary charges 1 credit per GB delivered, and students download the
+// original: 100 full views of a file of X MB use X / 10 credits.
+export function creditsPer100Views(bytes: number): string {
+  return (bytes / MB / 10).toFixed(1);
+}
+export { FREE_PLAN_CREDITS };
+
+// Plays everywhere: an MP4 container with H.264 video. Anything else (HEVC,
+// .mov, webm...) is kept as uploaded but flagged to the admin. A file whose
+// codec is unknown (null) is not flagged.
+export function isVideoCompatible(format: string | null | undefined, codec: string | null | undefined): boolean {
+  if (!format || !codec) return true;
+  return ['mp4', 'm4v'].includes(format.toLowerCase()) && codec.toLowerCase() === 'h264';
+}
 
 // null when the file is fine, otherwise the message to show.
 export function checkVideoFile(file: File): string | null {
@@ -37,13 +69,16 @@ export interface HostedVideo {
   resourceType: 'video';
   bytes: number;
   duration: number | null;
+  // Read from Cloudinary's upload response (the original file's container and codec).
+  format: string | null;
+  codec: string | null;
   // The poster frame, fetched while the admin is still in the upload dialog.
   poster: Blob | null;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// signature -> direct upload (with progress) -> wait until the 480p copy is
+// signature -> direct upload (with progress) -> wait until the poster frame is
 // ready. Throws with a message fit to show.
 export async function uploadHostedVideo(file: File, onProgress: (text: string) => void): Promise<HostedVideo> {
   const problem = checkVideoFile(file);
@@ -57,6 +92,8 @@ export async function uploadHostedVideo(file: File, onProgress: (text: string) =
   // Cloudinary's reply to the upload carries the duration (the later status
   // check does not), so it is read from there.
   let uploadedDuration: number | null = null;
+  let uploadedFormat: string | null = null;
+  let uploadedCodec: string | null = null;
   await new Promise<void>((resolve, reject) => {
     const form = new FormData();
     Object.entries(sign.fields).forEach(([key, value]) => form.append(key, value));
@@ -71,6 +108,8 @@ export async function uploadHostedVideo(file: File, onProgress: (text: string) =
       try {
         const reply = JSON.parse(xhr.responseText);
         if (typeof reply.duration === 'number') uploadedDuration = Math.round(reply.duration * 10) / 10;
+        if (typeof reply.format === 'string') uploadedFormat = reply.format.toLowerCase();
+        if (typeof reply.video?.codec === 'string') uploadedCodec = reply.video.codec.toLowerCase();
       } catch {
         uploadedDuration = null;
       }
@@ -80,8 +119,8 @@ export async function uploadHostedVideo(file: File, onProgress: (text: string) =
     xhr.send(form);
   });
 
-  // The 480p copy is made after the upload; wait for it (up to ~6 minutes).
-  onProgress('Preparing the 480p copy…');
+  // The poster frame is made right after the upload; wait for it (up to ~6 minutes).
+  onProgress('Checking the video…');
   for (let attempt = 0; attempt < 120; attempt++) {
     const result = await apiJson<{ status: string; bytes?: number; duration?: number | null; posterUrl?: string }>(
       '/api/admin/video-finalize',
@@ -98,12 +137,12 @@ export async function uploadHostedVideo(file: File, onProgress: (text: string) =
       } catch {
         poster = null;
       }
-      return { publicId: sign.publicId, resourceType: 'video', bytes: result.bytes || 0, duration: result.duration ?? uploadedDuration, poster };
+      return { publicId: sign.publicId, resourceType: 'video', bytes: result.bytes || file.size, duration: result.duration ?? uploadedDuration, format: uploadedFormat || (file.name.split('.').pop() || '').toLowerCase() || null, codec: uploadedCodec, poster };
     }
     await sleep(3000);
   }
   await deleteHostedVideoById(sign.publicId).catch(() => {});
-  throw new Error('The video took too long to prepare. Please try again with a shorter or smaller file.');
+  throw new Error('The video took too long to check. Please try again with a smaller file.');
 }
 
 // An upload nothing references (cancelled form, replaced video).

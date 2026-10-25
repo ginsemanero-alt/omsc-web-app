@@ -1107,9 +1107,9 @@ app.post('/api/analytics-insight', analyticsInsightLimiter, async (req, res) => 
 // =====================================================================
 // PHASE 37 — VIDEOS ON CLOUDINARY
 // Images, PDFs and audio stay in the private Supabase bucket. An uploaded
-// video lives in Cloudinary as an AUTHENTICATED asset: neither the original
-// nor the playback copy can be fetched without a signature that only this
-// server can make, and it makes one only for a signed-in user.
+// video lives in Cloudinary as an AUTHENTICATED asset: the file cannot be
+// fetched without a signature that only this server can make, and it makes
+// one only for a signed-in user.
 //
 //  * Credentials come from the environment only. They are never logged,
 //    returned, or put in an error message.
@@ -1126,14 +1126,16 @@ const CLD_SECRET = process.env.CLOUDINARY_API_SECRET;
 const CLD_PREFIX = 'omsu-iec/';
 const CLD_MAX_BYTES = 100 * 1024 * 1024; // the Free plan's own video limit too
 const CLD_FREE_CREDITS_WARN_PCT = 70;
-// ONE delivery profile: 480p-class H.264/AAC mp4 capped at ~500 kbps, so a
-// 2-minute video is about 8 MB. It is made once, at upload (eager), because
-// authenticated assets cannot be transformed on the fly. Changing this string
-// changes the delivery URL, so existing videos would need re-processing.
-const CLD_VIDEO_TX = 'c_limit,w_854,h_854,br_500k,vc_h264,ac_aac,f_mp4';
-// One frame, used once to build the card thumbnails; never shown to students.
+// Students are given the ORIGINAL uploaded file (the admin compresses videos
+// before uploading): no playback transcode, so no processing cost and the
+// bandwidth per full view is simply the file size. The signed link therefore
+// has no transformation, and its extension must be the original's container
+// (a different extension would make Cloudinary convert the file).
+// The only derived copy is one still frame, made once at upload (eager), used
+// to build the card thumbnails; it is never shown to students as-is.
 const CLD_POSTER_TX = 'so_1,c_limit,w_960,h_960,f_jpg';
 const CLD_PUBLIC_ID_RE = /^omsu-iec\/[A-Za-z0-9_-]{8,64}$/;
+const CLD_VIDEO_FORMAT_RE = /^(mp4|m4v|mov|webm|mkv|avi|3gp|ogv|flv|wmv|mpg|mpeg)$/;
 
 const cldConfigured = () => Boolean(CLD_NAME && CLD_KEY && CLD_SECRET);
 
@@ -1151,16 +1153,18 @@ const cldSignParams = (params) =>
         .digest('hex');
 
 // Signed delivery URL for an authenticated asset. The signature covers
-// "<transformation>/<public_id>.<ext>" and the same string must be requested.
+// "[<transformation>/]<public_id>.<ext>" and the same string must be requested.
+// An empty transformation means the original file.
 const cldDeliveryUrl = (publicId, transformation, ext) => {
+    const path = `${transformation ? `${transformation}/` : ''}${publicId}.${ext}`;
     const sig = crypto
         .createHash('sha1')
-        .update(`${transformation}/${publicId}.${ext}` + CLD_SECRET)
+        .update(path + CLD_SECRET)
         .digest('base64')
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .slice(0, 8);
-    return `https://res.cloudinary.com/${CLD_NAME}/video/authenticated/s--${sig}--/${transformation}/${publicId}.${ext}`;
+    return `https://res.cloudinary.com/${CLD_NAME}/video/authenticated/s--${sig}--/${path}`;
 };
 
 const cldBasic = () => 'Basic ' + Buffer.from(`${CLD_KEY}:${CLD_SECRET}`).toString('base64');
@@ -1283,7 +1287,7 @@ app.post('/api/admin/video-upload-signature', videoAdminLimiter, async (req, res
         const params = {
             public_id: publicId,
             type: 'authenticated',
-            eager: `${CLD_VIDEO_TX}|${CLD_POSTER_TX}`,
+            eager: CLD_POSTER_TX,
             eager_async: 'true',
             timestamp: Math.floor(Date.now() / 1000),
         };
@@ -1299,7 +1303,7 @@ app.post('/api/admin/video-upload-signature', videoAdminLimiter, async (req, res
 });
 
 // 2) After the browser finished uploading: confirm the file really is there,
-//    within the size limit, and that the playback copy is ready. Returns the
+//    within the size limit, and that the poster frame is ready. Returns the
 //    facts to store, plus a one-time link to the poster frame (admin only).
 app.post('/api/admin/video-finalize', videoAdminLimiter, async (req, res) => {
     try {
@@ -1319,17 +1323,15 @@ app.post('/api/admin/video-finalize', videoAdminLimiter, async (req, res) => {
         }
 
         const derived = Array.isArray(body.derived) ? body.derived : [];
-        const playback = derived.find((d) => d.format === 'mp4' && d.bytes > 0);
         const poster = derived.find((d) => d.format === 'jpg' && d.bytes > 0);
-        if (!playback || !poster) return res.status(200).json({ status: 'processing' });
+        if (!poster) return res.status(200).json({ status: 'processing' });
 
         res.status(200).json({
             status: 'ready',
             publicId,
             resourceType: 'video',
-            // bytes of the 480p copy students actually download
-            bytes: playback.bytes,
-            originalBytes: body.bytes,
+            // the original file, which is exactly what students download
+            bytes: body.bytes,
             duration: typeof body.duration === 'number' ? Math.round(body.duration * 10) / 10 : null,
             posterUrl: cldDeliveryUrl(publicId, CLD_POSTER_TX, 'jpg'),
         });
@@ -1362,17 +1364,22 @@ app.get('/api/video-url', async (req, res) => {
         });
         const { data: material } = await asUser
             .from('materials')
-            .select('id, video_public_id, archived_at')
+            .select('id, video_public_id, video_format, archived_at')
             .eq('id', materialId)
             .maybeSingle();
 
         const isAdmin = session.record.role === 'admin';
-        if (!material?.video_public_id || (material.archived_at && !isAdmin) || !CLD_PUBLIC_ID_RE.test(material.video_public_id)) {
+        if (
+            !material?.video_public_id ||
+            (material.archived_at && !isAdmin) ||
+            !CLD_PUBLIC_ID_RE.test(material.video_public_id) ||
+            !CLD_VIDEO_FORMAT_RE.test(material.video_format || '')
+        ) {
             return res.status(404).json({ message: 'Video not found.' });
         }
 
         res.set('Cache-Control', 'no-store');
-        res.status(200).json({ url: cldDeliveryUrl(material.video_public_id, CLD_VIDEO_TX, 'mp4') });
+        res.status(200).json({ url: cldDeliveryUrl(material.video_public_id, '', material.video_format) });
     } catch (error) {
         console.error('video-url error:', error.message);
         res.status(500).json({ message: 'Could not load the video.' });
@@ -1442,8 +1449,7 @@ app.post('/api/admin/video-rotate', videoAdminLimiter, async (req, res) => {
             return res.status(500).json({ message: 'Could not save the new link. Nothing changed.' });
         }
 
-        // The playback copy belongs to the old name; make it again under the new one.
-        await cldSignedUpload('/video/explicit', { public_id: newId, type: 'authenticated', eager: CLD_VIDEO_TX, eager_async: 'true' });
+        // Students play the original, which the rename moved as it is: nothing to rebuild.
         res.status(200).json({ rotated: true });
     } catch (error) {
         console.error('video-rotate error:', error.message);

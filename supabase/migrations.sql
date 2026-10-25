@@ -3280,7 +3280,7 @@ SELECT id, time_range FROM programs ORDER BY id;
 
 ALTER TABLE materials ADD COLUMN IF NOT EXISTS video_public_id text;
 ALTER TABLE materials ADD COLUMN IF NOT EXISTS video_resource_type text;
--- size of the 480p copy students download (not of the original upload)
+-- size of the file students download (the ORIGINAL upload; see part 2 below)
 ALTER TABLE materials ADD COLUMN IF NOT EXISTS video_bytes bigint;
 ALTER TABLE materials ADD COLUMN IF NOT EXISTS video_duration numeric;
 
@@ -3314,4 +3314,69 @@ SELECT c AS column_name,
 -- ALTER TABLE materials DROP COLUMN IF EXISTS video_bytes;
 -- ALTER TABLE materials DROP COLUMN IF EXISTS video_resource_type;
 -- ALTER TABLE materials DROP COLUMN IF EXISTS video_public_id;
+-- NOTIFY pgrst, 'reload schema';
+
+
+-- =========================================================
+-- PHASE 37, part 2: students play the ORIGINAL uploaded video
+-- =========================================================
+-- Admins compress videos before uploading, so there is no playback transcode
+-- any more: /api/video-url signs the original file (same public_id, no
+-- transformation). The only derived copy is one poster frame, made once.
+-- A signed link must use the original's container as its extension (a
+-- different one makes Cloudinary convert the file), so it is stored here,
+-- together with the video codec read from Cloudinary's upload response.
+--   video_format  e.g. mp4, mov, webm     (NULL = not a hosted video)
+--   video_codec   e.g. h264, hevc, vp8    (NULL = unknown; only used to warn
+--                                          the admin that a video may not play
+--                                          everywhere: anything but MP4/H.264)
+-- video_bytes / video_duration now describe the original file.
+-- Videos uploaded before this part existed would have no video_format and
+-- /api/video-url answers 404 for them: none exist on the live project.
+-- Run this BEFORE deploying the code that writes these columns. Safe to run twice.
+
+ALTER TABLE materials ADD COLUMN IF NOT EXISTS video_format text;
+ALTER TABLE materials ADD COLUMN IF NOT EXISTS video_codec text;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'materials_video_format_valid') THEN
+    ALTER TABLE materials ADD CONSTRAINT materials_video_format_valid
+      CHECK (video_format IS NULL OR video_format ~ '^[a-z0-9]{2,5}$');
+  END IF;
+END $$;
+
+NOTIFY pgrst, 'reload schema';
+
+-- CHECK: anon_can_read must be false for all six PHASE 37 columns (anon has
+-- an explicit column list on materials since PHASE 35; new columns are not on it).
+SELECT c AS column_name,
+       has_column_privilege('anon', 'public.materials', c, 'SELECT') AS anon_can_read
+  FROM unnest(ARRAY['video_public_id','video_resource_type','video_bytes','video_duration','video_format','video_codec']) AS c;
+
+-- ---------------------------------------------------------
+-- Credit table (Cloudinary Free plan: 25 credits a month; 1 credit = 1 GB of
+-- bandwidth OR 1 GB of storage OR 1,000 transformations). Real originals:
+-- no processing cost (one poster frame per upload, about 0.001 credit), and
+-- bandwidth per full view = the file size. 100 full views = size in MB / 10.
+--
+--   file size | per full view | 100 full views | full views in 25 credits
+--   ----------+---------------+----------------+-------------------------
+--      5 MB   |  0.005 credit |   0.5 credit   |  ~5,000
+--     10 MB   |  0.010        |   1.0          |  ~2,500
+--     15 MB   |  0.015        |   1.5          |  ~1,660   <- the target
+--     30 MB   |  0.030        |   3.0          |  ~830
+--     50 MB   |  0.050        |   5.0          |  ~500
+--    100 MB   |  0.100        |  10.0          |  ~250     <- the limit
+--
+-- Stored videos also use storage credits (a 15 MB video is 0.015 credit for
+-- as long as it exists); the meter in the upload form shows the real total.
+-- ---------------------------------------------------------
+
+-- ---------------------------------------------------------
+-- ROLLBACK of part 2 only (the code then needs the 480p version back).
+-- ---------------------------------------------------------
+-- ALTER TABLE materials DROP CONSTRAINT IF EXISTS materials_video_format_valid;
+-- ALTER TABLE materials DROP COLUMN IF EXISTS video_codec;
+-- ALTER TABLE materials DROP COLUMN IF EXISTS video_format;
 -- NOTIFY pgrst, 'reload schema';
