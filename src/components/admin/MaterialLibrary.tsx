@@ -139,7 +139,7 @@ const DEFAULT_FORM: FormData = {
 // every request, so asking twice still opens the dialog.
 type OpenRequest = { n: number; id?: number };
 
-export default function IECMaterials({ uploadRequest, onChanged }: { uploadRequest?: OpenRequest | null; onChanged?: () => void } = {}) {
+export default function IECMaterials({ uploadRequest, editRequest, onChanged }: { uploadRequest?: OpenRequest | null; editRequest?: OpenRequest | null; onChanged?: () => void } = {}) {
   const { toast } = useToast();
   const { user, userName } = useAuth();
 
@@ -1145,6 +1145,17 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
     strip.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
     strip.focus({ preventScroll: true });
   }, [highlightMissing, loading]);
+
+  // A link from the Activity Log opens one material's editor (waits for the list).
+  const handledEditRequest = useRef<number | null>(null);
+  useEffect(() => {
+    if (!editRequest || handledEditRequest.current === editRequest.n) return;
+    const target = materials.find((m) => m.id === editRequest.id);
+    if (!target) return;
+    handledEditRequest.current = editRequest.n;
+    handleOpenDialog(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editRequest, materials]);
 
   // Header "Upload material" opens the upload dialog here.
   const handledUploadRequest = useRef<number | null>(null);

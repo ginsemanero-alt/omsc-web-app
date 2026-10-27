@@ -93,6 +93,7 @@ function ContentManagement() {
   const [newProgramRequest, setNewProgramRequest] = useState<OpenRequest | null>(null);
   const [editProgramRequest, setEditProgramRequest] = useState<OpenRequest | null>(null);
   const [uploadRequest, setUploadRequest] = useState<OpenRequest | null>(null);
+  const [editMaterialRequest, setEditMaterialRequest] = useState<OpenRequest | null>(null);
   const [openSurveyRequest, setOpenSurveyRequest] = useState<OpenRequest | null>(null);
   const [showAllAttention, setShowAllAttention] = useState(false);
 
@@ -114,6 +115,21 @@ function ContentManagement() {
     section.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
     section.focus({ preventScroll: true });
   };
+
+  // ?tab=programs&open=12 (a link from the Activity Log) opens that record once.
+  const openParam = searchParams.get('open');
+  const handledOpen = useRef<string | null>(null);
+  useEffect(() => {
+    if (!openParam) return;
+    const key = `${tab}:${openParam}`;
+    if (handledOpen.current === key) return;
+    handledOpen.current = key;
+    const n = Date.now();
+    if (tab === 'programs') setEditProgramRequest({ n, id: Number(openParam) });
+    else if (tab === 'materials') setEditMaterialRequest({ n, id: Number(openParam) });
+    else setOpenSurveyRequest({ n, id: openParam as unknown as number }); // survey ids are uuids
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openParam, tab]);
 
   const request = (setter: (r: OpenRequest) => void, id?: number) => setter({ n: Date.now(), id });
 
@@ -337,7 +353,7 @@ function ContentManagement() {
         {tab === 'programs' && (
           <ProgramManagement newRequest={newProgramRequest} editRequest={editProgramRequest} onChanged={refreshSummary} />
         )}
-        {tab === 'materials' && <MaterialLibrary uploadRequest={uploadRequest} onChanged={refreshSummary} />}
+        {tab === 'materials' && <MaterialLibrary uploadRequest={uploadRequest} editRequest={editMaterialRequest} onChanged={refreshSummary} />}
         {tab === 'surveys' && <SurveyBuilder openRequest={openSurveyRequest} onChanged={refreshSummary} />}
       </div>
     </div>

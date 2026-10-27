@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../hooks/use-toast';
 import { Card } from '../../components/ui/card';
@@ -7,6 +7,8 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
 import { Label } from '../../components/ui/label';
+import { useAuth } from '../../hooks/useAuth';
+import { logActivity } from '../../lib/activityLog';
 import { Loader2, Save, FileText, User, Contact, Mail, Facebook, Phone, Eye } from 'lucide-react';
 
 interface AboutContent {
@@ -46,6 +48,19 @@ interface SectionCardProps {
   children: React.ReactNode;
 }
 
+// Which section of the editor each field belongs to (the card titles below).
+// Only these names go into the Activity Log, never the text itself.
+const SECTION_OF_FIELD: Record<keyof AboutContent, string> = {
+  heading_title: 'Hero section',
+  hero_intro: 'Hero section',
+  director_name: 'Director / leadership',
+  director_title: 'Director / leadership',
+  collaborative_approach_text: 'Collaborative approach',
+  contact_email: 'Contact information',
+  contact_facebook: 'Contact information',
+  contact_phone: 'Contact information',
+};
+
 const SectionCard: React.FC<SectionCardProps> = ({ icon: Icon, title, description, children }) => (
   <Card className="p-6 md:p-7 rounded-[2rem] border-none shadow-sm bg-white space-y-5">
     <div className="flex items-start gap-3">
@@ -63,8 +78,11 @@ const SectionCard: React.FC<SectionCardProps> = ({ icon: Icon, title, descriptio
 
 export default function AboutContentManager() {
   const { toast } = useToast();
+  const { user, userName } = useAuth();
 
   const [content, setContent] = useState<AboutContent>(EMPTY);
+  // What is saved right now, to tell which sections an edit changed.
+  const savedContent = useRef<AboutContent>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -81,6 +99,7 @@ export default function AboutContentManager() {
         toast({ variant: 'destructive', title: 'Fetch Error', description: error.message });
       } else if (data) {
         setContent(data as AboutContent);
+        savedContent.current = data as AboutContent;
       }
       setLoading(false);
     };
@@ -97,6 +116,26 @@ export default function AboutContentManager() {
         .eq('id', 1);
 
       if (error) throw error;
+
+      const changedSections = Array.from(
+        new Set(
+          (Object.keys(SECTION_OF_FIELD) as (keyof AboutContent)[])
+            .filter((key) => (content[key] ?? '') !== (savedContent.current[key] ?? ''))
+            .map((key) => SECTION_OF_FIELD[key])
+        )
+      );
+      savedContent.current = { ...content };
+      if (changedSections.length > 0) {
+        logActivity({
+          actorEmail: user?.email,
+          actorName: userName,
+          action: 'update',
+          entityType: 'about',
+          entityId: 1,
+          entityLabel: 'About page',
+          details: `Changed: ${changedSections.join(', ')}`,
+        });
+      }
 
       toast({ title: 'Saved', description: 'The About page has been updated.' });
     } catch (err: any) {

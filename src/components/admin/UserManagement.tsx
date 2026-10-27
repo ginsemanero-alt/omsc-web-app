@@ -22,7 +22,8 @@ export default function UserManagement() {
   const { user: authUser, userName: authUserName } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  // ?search=name-or-email (a link from the Activity Log) pre-fills the search box.
+  const [searchQuery, setSearchQuery] = useState(() => new URLSearchParams(window.location.search).get('search') || '');
   const [roleFilter, setRoleFilter] = useState('all');
 
   // A click-through from Analytics (PWD/IP tiles, Campus Distribution,

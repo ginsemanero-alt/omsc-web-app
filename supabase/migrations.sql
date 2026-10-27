@@ -3380,3 +3380,36 @@ SELECT c AS column_name,
 -- ALTER TABLE materials DROP COLUMN IF EXISTS video_codec;
 -- ALTER TABLE materials DROP COLUMN IF EXISTS video_format;
 -- NOTIFY pgrst, 'reload schema';
+
+
+-- =========================================================
+-- PHASE 38: log edits to the About page in the Activity Log
+-- =========================================================
+-- activity_logs.entity_type only allowed program / material / survey / user.
+-- 'about' lets the About-page editor record who changed which section and
+-- when (section names only; the old and new text are NOT stored).
+-- Admins can already insert any row (activity_logs_insert: is_admin()), so
+-- only the CHECK needs to change. Safe to run twice. Run it BEFORE deploying
+-- the code that writes these rows (an unknown entity_type would be rejected,
+-- which the app swallows, so nothing breaks, the edit just is not logged).
+
+ALTER TABLE activity_logs DROP CONSTRAINT IF EXISTS activity_logs_entity_type_check;
+ALTER TABLE activity_logs ADD CONSTRAINT activity_logs_entity_type_check
+  CHECK (entity_type IN ('program', 'material', 'survey', 'user', 'about'));
+
+NOTIFY pgrst, 'reload schema';
+
+-- CHECK (should list all five types):
+SELECT pg_get_constraintdef(oid) AS definition
+  FROM pg_constraint
+ WHERE conname = 'activity_logs_entity_type_check';
+
+-- ---------------------------------------------------------
+-- ROLLBACK of PHASE 38 (run only to undo it). Rows with entity_type 'about'
+-- must go first, or the old CHECK cannot be put back.
+-- ---------------------------------------------------------
+-- DELETE FROM activity_logs WHERE entity_type = 'about';
+-- ALTER TABLE activity_logs DROP CONSTRAINT IF EXISTS activity_logs_entity_type_check;
+-- ALTER TABLE activity_logs ADD CONSTRAINT activity_logs_entity_type_check
+--   CHECK (entity_type IN ('program', 'material', 'survey', 'user'));
+-- NOTIFY pgrst, 'reload schema';
