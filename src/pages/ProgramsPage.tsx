@@ -7,6 +7,7 @@ import { getEffectiveProgramStatus, compareProgramsForDisplay } from "../lib/pro
 import { usePagination } from "../hooks/usePagination";
 import { useAuth } from "../hooks/useAuth";
 import SitePagination from "../components/shared/SitePagination";
+import { useUrlFilter } from "../lib/useUrlFilter";
 
 const PROGRAMS_PAGE_SIZE = 9;
 
@@ -60,7 +61,10 @@ const ProgramsPage = () => {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [guidanceServiceFilter, setGuidanceServiceFilter] = useState("all");
+  // ?service=Counseling+Services (from the About page) pre-selects a service chip;
+  // anything that is not one of the six services means "all".
+  const [serviceParam, setGuidanceServiceFilter] = useUrlFilter("service", "all");
+  const guidanceServiceFilter = GUIDANCE_SERVICES.includes(serviceParam) ? serviceParam : "all";
   const [programComponentFilter, setProgramComponentFilter] = useState("all");
   // Programs that have an active knowledge assessment (pre-test open).
   const [preTestProgramIds, setPreTestProgramIds] = useState<Set<number>>(new Set());

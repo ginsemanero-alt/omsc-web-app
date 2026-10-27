@@ -3723,3 +3723,104 @@ SELECT (SELECT count(*) FROM pg_proc WHERE proname = 'shuffle_assessment_questio
 --
 -- DROP FUNCTION IF EXISTS shuffle_assessment_questions(jsonb, text);
 -- NOTIFY pgrst, 'reload schema';
+
+
+-- =========================================================
+-- PHASE 40: About page: vision, mission, visit us, objectives, pictures
+-- =========================================================
+-- New OPTIONAL fields for the singleton about_content row (all nullable, no
+-- defaults needed: the page shows the standard wording, or hides the part,
+-- when a field is empty). RLS is unchanged: public read, admin-only update.
+--   vision, mission                 shown on the page when written
+--   office_location, office_hours   "Visit us"
+--   system_credits                  "About this system" credits (developers, adviser)
+--   contact_facebook_url            https only; makes the Facebook name a link
+--   objectives (jsonb array, max 6) NULL = the standard three objectives
+--   hero_image_path, org_chart_path object names in the about-assets bucket
+-- Run this BEFORE deploying the code. Safe to run twice.
+
+ALTER TABLE about_content ADD COLUMN IF NOT EXISTS vision               text;
+ALTER TABLE about_content ADD COLUMN IF NOT EXISTS mission              text;
+ALTER TABLE about_content ADD COLUMN IF NOT EXISTS office_location      text;
+ALTER TABLE about_content ADD COLUMN IF NOT EXISTS office_hours         text;
+ALTER TABLE about_content ADD COLUMN IF NOT EXISTS system_credits       text;
+ALTER TABLE about_content ADD COLUMN IF NOT EXISTS contact_facebook_url text;
+ALTER TABLE about_content ADD COLUMN IF NOT EXISTS objectives           jsonb;
+ALTER TABLE about_content ADD COLUMN IF NOT EXISTS hero_image_path      text;
+ALTER TABLE about_content ADD COLUMN IF NOT EXISTS org_chart_path       text;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'about_content_objectives_list') THEN
+    ALTER TABLE about_content ADD CONSTRAINT about_content_objectives_list
+      CHECK (objectives IS NULL OR (jsonb_typeof(objectives) = 'array' AND jsonb_array_length(objectives) <= 6));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'about_content_facebook_url_https') THEN
+    ALTER TABLE about_content ADD CONSTRAINT about_content_facebook_url_https
+      CHECK (contact_facebook_url IS NULL OR contact_facebook_url ~ '^https://');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'about_content_image_paths') THEN
+    ALTER TABLE about_content ADD CONSTRAINT about_content_image_paths
+      CHECK ((hero_image_path IS NULL OR hero_image_path ~ '^about/[A-Za-z0-9._-]+$')
+         AND (org_chart_path  IS NULL OR org_chart_path  ~ '^about/[A-Za-z0-9._-]+$'));
+  END IF;
+END $$;
+
+-- The pictures live in a bucket anyone can READ (they are shown on the public
+-- About page); only admins can add, replace or delete. 5 MB, PNG / JPG / WebP.
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('about-assets', 'about-assets', true, 5242880, ARRAY['image/png', 'image/jpeg', 'image/webp'])
+ON CONFLICT (id) DO UPDATE
+   SET public = true,
+       file_size_limit = EXCLUDED.file_size_limit,
+       allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+DROP POLICY IF EXISTS about_assets_select_public ON storage.objects;
+CREATE POLICY about_assets_select_public ON storage.objects
+  FOR SELECT USING (bucket_id = 'about-assets');
+DROP POLICY IF EXISTS about_assets_insert_admin ON storage.objects;
+CREATE POLICY about_assets_insert_admin ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'about-assets' AND is_admin());
+DROP POLICY IF EXISTS about_assets_update_admin ON storage.objects;
+CREATE POLICY about_assets_update_admin ON storage.objects
+  FOR UPDATE USING (bucket_id = 'about-assets' AND is_admin())
+  WITH CHECK (bucket_id = 'about-assets' AND is_admin());
+DROP POLICY IF EXISTS about_assets_delete_admin ON storage.objects;
+CREATE POLICY about_assets_delete_admin ON storage.objects
+  FOR DELETE USING (bucket_id = 'about-assets' AND is_admin());
+
+NOTIFY pgrst, 'reload schema';
+
+-- CHECK: 9 new columns, the bucket (public, 5242880 bytes, 3 image types), 4 policies.
+SELECT (SELECT count(*) FROM information_schema.columns
+         WHERE table_name = 'about_content'
+           AND column_name IN ('vision','mission','office_location','office_hours','system_credits',
+                               'contact_facebook_url','objectives','hero_image_path','org_chart_path')) AS new_columns,
+       (SELECT public FROM storage.buckets WHERE id = 'about-assets') AS bucket_public,
+       (SELECT file_size_limit FROM storage.buckets WHERE id = 'about-assets') AS size_limit,
+       (SELECT allowed_mime_types FROM storage.buckets WHERE id = 'about-assets') AS mime_types,
+       (SELECT count(*) FROM pg_policies WHERE schemaname = 'storage' AND policyname LIKE 'about_assets_%') AS policies;
+
+-- ---------------------------------------------------------
+-- ROLLBACK of PHASE 40 (run only to undo it). The images in the bucket are
+-- not deleted by SQL alone, so empty the bucket first.
+-- ---------------------------------------------------------
+-- DROP POLICY IF EXISTS about_assets_select_public ON storage.objects;
+-- DROP POLICY IF EXISTS about_assets_insert_admin ON storage.objects;
+-- DROP POLICY IF EXISTS about_assets_update_admin ON storage.objects;
+-- DROP POLICY IF EXISTS about_assets_delete_admin ON storage.objects;
+-- (Empty the about-assets bucket from the Storage page first, then:)
+-- DELETE FROM storage.buckets WHERE id = 'about-assets';
+-- ALTER TABLE about_content DROP CONSTRAINT IF EXISTS about_content_image_paths;
+-- ALTER TABLE about_content DROP CONSTRAINT IF EXISTS about_content_facebook_url_https;
+-- ALTER TABLE about_content DROP CONSTRAINT IF EXISTS about_content_objectives_list;
+-- ALTER TABLE about_content DROP COLUMN IF EXISTS org_chart_path;
+-- ALTER TABLE about_content DROP COLUMN IF EXISTS hero_image_path;
+-- ALTER TABLE about_content DROP COLUMN IF EXISTS objectives;
+-- ALTER TABLE about_content DROP COLUMN IF EXISTS contact_facebook_url;
+-- ALTER TABLE about_content DROP COLUMN IF EXISTS system_credits;
+-- ALTER TABLE about_content DROP COLUMN IF EXISTS office_hours;
+-- ALTER TABLE about_content DROP COLUMN IF EXISTS office_location;
+-- ALTER TABLE about_content DROP COLUMN IF EXISTS mission;
+-- ALTER TABLE about_content DROP COLUMN IF EXISTS vision;
+-- NOTIFY pgrst, 'reload schema';
