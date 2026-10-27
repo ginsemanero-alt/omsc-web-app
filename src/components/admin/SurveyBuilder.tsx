@@ -1535,6 +1535,9 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
 
             {/* CENTER */}
             <div className={`order-2 min-w-0 flex flex-col gap-4 ${showPairs ? "xl:col-start-2 xl:row-start-1 xl:row-span-2" : "xl:col-start-1 xl:row-start-1"}`}>
+              {isKnowledge && (
+                <p className="m-0 px-1 text-sm text-[#5B6477]">Students see questions and choices in a different order.</p>
+              )}
               {/* Side by side: the selected item's Form A and Form B. */}
               {showPairs && (
                 <div className="hidden xl:flex flex-col gap-4">
