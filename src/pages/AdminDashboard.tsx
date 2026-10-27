@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Routes, Route, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import TopNavBar from '../components/layout/TopNavBar';
 import ProgramManagement from '../components/admin/ProgramManager';
 import MaterialLibrary from '../components/admin/MaterialLibrary';
@@ -13,6 +13,7 @@ import { useToast } from '../hooks/use-toast';
 import { supabase } from '../lib/supabase';
 import { getEffectiveProgramStatus } from '../lib/programStatus';
 import { IEC_CATEGORIES } from '../lib/iecCategories';
+import StatTile from '../components/admin/StatTile';
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -81,20 +82,13 @@ async function fetchContentSummary(): Promise<ContentSummary> {
   };
 }
 
-function StatCard({ label, value, note, dark = false }: { label: string; value: number | string; note: string; dark?: boolean }) {
-  return (
-    <div className={`px-6 py-[22px] rounded-[28px] flex flex-col gap-1 min-w-0 ${dark ? 'bg-[#1E1B4B] text-white' : 'bg-white'}`}>
-      <span className={`text-sm font-semibold ${dark ? 'text-[#FBBF24]' : 'text-[#5B6477]'}`}>{label}</span>
-      <span className={`font-bricolage font-extrabold text-[40px] leading-none tracking-[-0.02em] ${dark ? 'text-white' : 'text-[#1E1B4B]'}`}>
-        {value}
-      </span>
-      <span className={`text-[13px] ${dark ? 'text-[#C7C9F2]' : 'text-[#5B6477]'}`}>{note}</span>
-    </div>
-  );
-}
-
 function ContentManagement() {
-  const [tab, setTab] = useState<ContentTab>('programs');
+  // The section and its filters live in the URL (?tab=programs&status=ongoing),
+  // so a dashboard card is a real link and back / refresh keep the view.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const tab: ContentTab = tabParam === 'materials' || tabParam === 'surveys' ? tabParam : 'programs';
+  const setTab = (next: ContentTab) => setSearchParams({ tab: next });
   const [summary, setSummary] = useState<ContentSummary | null>(null);
   const [newProgramRequest, setNewProgramRequest] = useState<OpenRequest | null>(null);
   const [editProgramRequest, setEditProgramRequest] = useState<OpenRequest | null>(null);
@@ -111,6 +105,15 @@ function ContentManagement() {
   useEffect(() => {
     refreshSummary();
   }, [refreshSummary, tab]);
+
+  const attentionRef = useRef<HTMLElement>(null);
+  const goToAttention = () => {
+    const section = attentionRef.current;
+    if (!section) return;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    section.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    section.focus({ preventScroll: true });
+  };
 
   const request = (setter: (r: OpenRequest) => void, id?: number) => setter({ n: Date.now(), id });
 
@@ -131,7 +134,7 @@ function ContentManagement() {
       attention.push({
         key: `no-materials-${check.id}`,
         title: `${(program?.title || check.title).trim()} has no linked IEC materials`,
-        detail: 'Its knowledge check is active, but students can’t unlock the post-test until materials are linked.',
+        detail: 'Its awareness check is active, but students can’t unlock the post-test until materials are linked.',
         action: 'Link materials',
         onClick: () => (program ? openProgram(program.id) : setTab('programs')),
       });
@@ -189,7 +192,7 @@ function ContentManagement() {
             Content
           </h1>
           <p className="m-0 text-base text-[#5B6477]">
-            Programs, IEC materials, and knowledge checks of the Guidance and Testing Center.
+            Programs, IEC materials, and awareness checks of the Guidance and Testing Center.
           </p>
         </div>
         <div className="flex flex-wrap gap-2.5 shrink-0">
@@ -216,16 +219,29 @@ function ContentManagement() {
         </div>
       </div>
 
-      {/* Stats (all from the current data) */}
+      {/* Stats (all from the current data). Each card is a real link to the
+          list its number counts; the sub-line links to the filtered list. */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
-        <StatCard label="Programs" value={summary ? summary.programs.length : '–'} note={summary ? `${ongoingCount} ongoing` : 'Loading...'} />
-        <StatCard
+        <StatTile
+          label="Programs"
+          value={summary ? summary.programs.length : '–'}
+          note={summary ? `${ongoingCount} ongoing` : 'Loading...'}
+          to={summary ? '/admin?tab=programs' : undefined}
+          ariaLabel={summary ? `View all ${summary.programs.length} ${summary.programs.length === 1 ? 'program' : 'programs'}` : undefined}
+          noteTo={summary ? '/admin?tab=programs&status=ongoing' : undefined}
+          noteAriaLabel={`View ${ongoingCount} ongoing ${ongoingCount === 1 ? 'program' : 'programs'}`}
+        />
+        <StatTile
           label="IEC materials"
           value={summary ? summary.materialCount : '–'}
           note={summary ? `${summary.categoriesCovered} of ${IEC_CATEGORIES.length} categories covered` : 'Loading...'}
+          to={summary ? '/admin?tab=materials' : undefined}
+          ariaLabel={summary ? `View all ${summary.materialCount} IEC ${summary.materialCount === 1 ? 'material' : 'materials'}` : undefined}
+          noteTo={summary ? '/admin?tab=materials&category=missing' : undefined}
+          noteAriaLabel={summary ? `View the IEC categories: ${summary.categoriesCovered} of ${IEC_CATEGORIES.length} covered` : undefined}
         />
-        <StatCard
-          label="Knowledge checks"
+        <StatTile
+          label="Awareness checks"
           value={summary ? checkCount : '–'}
           note={
             !summary
@@ -236,21 +252,36 @@ function ContentManagement() {
                   ? 'All in draft'
                   : `${draftChecks} ${draftChecks === 1 ? 'draft' : 'drafts'}`
           }
+          to={summary ? '/admin?tab=surveys&type=knowledge' : undefined}
+          ariaLabel={summary ? `View all ${checkCount} awareness ${checkCount === 1 ? 'check' : 'checks'}` : undefined}
+          noteTo={summary ? (draftChecks > 0 || checkCount === 0 ? '/admin?tab=surveys&type=knowledge&status=draft' : '/admin?tab=surveys&type=knowledge') : undefined}
+          noteAriaLabel={summary ? `View ${draftChecks} draft awareness ${draftChecks === 1 ? 'check' : 'checks'}` : undefined}
         />
-        <StatCard
+        <StatTile
           dark
           label="Needs attention"
           value={summary ? attention.length : '–'}
           note={!summary ? 'Loading...' : attention.length > 0 ? 'See the list below' : 'All clear'}
+          onActivate={summary ? goToAttention : undefined}
+          ariaLabel={summary ? `Go to the needs attention list: ${attention.length} ${attention.length === 1 ? 'item' : 'items'}` : undefined}
         />
       </div>
 
-      {/* Needs attention (hidden when empty) */}
-      {attention.length > 0 && (
-        <section aria-labelledby="attention-heading" className="px-5 py-5 md:px-7 md:py-6 rounded-[32px] bg-white flex flex-col gap-3.5">
-          <h2 id="attention-heading" className="m-0 font-bold text-lg text-[#1E1B4B]">
-            Needs attention
-          </h2>
+      {/* Needs attention: always shown, so its card always has somewhere to go */}
+      <section
+        ref={attentionRef}
+        id="attention"
+        tabIndex={-1}
+        aria-labelledby="attention-heading"
+        className={`px-5 py-5 md:px-7 md:py-6 rounded-[32px] bg-white flex flex-col gap-3.5 scroll-mt-24 ${focusRing}`}
+      >
+        <h2 id="attention-heading" className="m-0 font-bold text-lg text-[#1E1B4B]">
+          Needs attention
+        </h2>
+        {summary && attention.length === 0 && (
+          <p className="m-0 text-[15px] text-[#5B6477]">Nothing needs attention right now.</p>
+        )}
+        {attention.length > 0 && (
           <ul className="m-0 p-0 list-none grid grid-cols-1 lg:grid-cols-2 gap-3">
             {(showAllAttention ? attention : attention.slice(0, ATTENTION_PREVIEW)).map((item) => (
               <li key={item.key} className="px-[18px] py-4 rounded-[22px] bg-[#FFFBEB] flex flex-wrap sm:flex-nowrap gap-x-3.5 gap-y-1 items-start">
@@ -269,18 +300,18 @@ function ContentManagement() {
               </li>
             ))}
           </ul>
-          {attention.length > ATTENTION_PREVIEW && (
-            <button
-              type="button"
-              onClick={() => setShowAllAttention((v) => !v)}
-              aria-expanded={showAllAttention}
-              className={`self-start min-h-[44px] px-4 rounded-xl border-[1.5px] border-[#DDE1EE] bg-white font-bold text-sm text-[#1E1B4B] hover:border-[#A5B4FC] ${focusRing}`}
-            >
-              {showAllAttention ? 'Show fewer' : `Show all ${attention.length}`}
-            </button>
-          )}
-        </section>
-      )}
+        )}
+        {attention.length > ATTENTION_PREVIEW && (
+          <button
+            type="button"
+            onClick={() => setShowAllAttention((v) => !v)}
+            aria-expanded={showAllAttention}
+            className={`self-start min-h-[44px] px-4 rounded-xl border-[1.5px] border-[#DDE1EE] bg-white font-bold text-sm text-[#1E1B4B] hover:border-[#A5B4FC] ${focusRing}`}
+          >
+            {showAllAttention ? 'Show fewer' : `Show all ${attention.length}`}
+          </button>
+        )}
+      </section>
 
       {/* Tabs */}
       <div role="tablist" aria-label="Content sections" className="self-start max-w-full overflow-x-auto flex gap-1 p-[5px] rounded-full bg-white">

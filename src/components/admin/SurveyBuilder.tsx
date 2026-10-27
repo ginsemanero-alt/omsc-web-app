@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { supabase } from "../../lib/supabase";
 import { logActivity } from "../../lib/activityLog";
+import { useUrlFilter } from "../../lib/useUrlFilter";
 import { SURVEY_COLUMNS, withAdminForms } from "../../lib/surveyForms";
 import { notifyStudents } from "../../lib/notifyStudents";
 import { useAuth } from "../../hooks/useAuth";
@@ -227,6 +228,9 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
 
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
+  // ?type=knowledge&status=draft from a dashboard card.
+  const [typeFilter, setTypeFilter] = useUrlFilter("type", "all");
+  const [statusFilter, setStatusFilter] = useUrlFilter("status", "all");
 
   const [creating, setCreating] = useState(false);
 
@@ -309,9 +313,12 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
         categoryFilter === "All" ||
         survey.category === categoryFilter;
 
-      return matchesSearch && matchesCategory;
+      const matchesType = typeFilter === "all" || survey.type === typeFilter;
+      const matchesStatus = statusFilter === "all" || survey.status === statusFilter;
+
+      return matchesSearch && matchesCategory && matchesType && matchesStatus;
     });
-  }, [surveys, search, categoryFilter]);
+  }, [surveys, search, categoryFilter, typeFilter, statusFilter]);
 
   // Flat, most-recent-first was fine at a handful of surveys — once a
   // guidance service has its own Pre-Test, Post-Test, and Opinion survey
@@ -594,7 +601,7 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
         if (survey.program_id == null) {
           toast({
             title: "Can't Publish Yet",
-            description: "Choose the program this knowledge check belongs to, then link IEC materials to that program.",
+            description: "Choose the program this awareness check belongs to, then link IEC materials to that program.",
             variant: "destructive",
           });
           return;
@@ -1880,6 +1887,35 @@ export default function SurveyBuilder({ openRequest, onChanged }: { openRequest?
               placeholder="Search surveys"
               className="w-full h-12 pl-11 pr-4 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B] placeholder:text-[#8A91A6] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
             />
+          </div>
+
+          <div className="md:w-48">
+            <label htmlFor="survey-type-filter" className="sr-only">Type</label>
+            <select
+              id="survey-type-filter"
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="w-full h-12 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] px-4 text-sm font-semibold text-[#1E293B] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
+            >
+              <option value="all">All types</option>
+              <option value="knowledge">Awareness checks</option>
+              <option value="opinion">Opinion surveys</option>
+            </select>
+          </div>
+
+          <div className="md:w-44">
+            <label htmlFor="survey-status-filter" className="sr-only">Status</label>
+            <select
+              id="survey-status-filter"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full h-12 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] px-4 text-sm font-semibold text-[#1E293B] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
+            >
+              <option value="all">All statuses</option>
+              <option value="draft">Draft</option>
+              <option value="active">Published</option>
+              <option value="closed">Closed</option>
+            </select>
           </div>
 
           <div className="md:w-64">

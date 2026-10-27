@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, Suspense, lazy } from 'react';
 import { supabase } from '../../lib/supabase';
 import HostedVideoPlayer from '../shared/HostedVideoPlayer';
+import ZoomableImage from '../shared/ZoomableImage';
 import { compressImageFile, makePreviewThumbnail } from '../../lib/imageCompress';
 import {
   VIDEO_UPLOAD_NOTE,
@@ -30,6 +31,7 @@ import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
 import { usePagination } from '../../hooks/usePagination';
 import { IEC_CATEGORIES } from '../../lib/iecCategories';
+import { useUrlFilter } from '../../lib/useUrlFilter';
 import { CAMPUSES, ALL_CAMPUSES_LABEL, campusLabel } from '../../lib/campuses';
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a PDF preview.
@@ -150,7 +152,11 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
   // background while the dialog is open.
   const [isUploading, setIsUploading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  // ?category=Name from the category strip, or ?category=missing from the dashboard
+  // card: the list is not narrowed and the strip highlights the empty categories.
+  const [selectedCategory, setSelectedCategory] = useUrlFilter('category', 'All');
+  const highlightMissing = selectedCategory === 'missing';
+  const categoryStripRef = useRef<HTMLElement>(null);
   const [selectedComponent, setSelectedComponent] = useState('All');
   const [selectedTag, setSelectedTag] = useState('All');
 
@@ -1083,7 +1089,7 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
     const matchesSearch =
       !normalizedSearch || searchableText.includes(normalizedSearch);
     const matchesCategory =
-      selectedCategory === 'All' || material.category === selectedCategory;
+      selectedCategory === 'All' || highlightMissing || material.category === selectedCategory;
     const matchesComponent =
       selectedComponent === 'All' ||
       material.program_component === selectedComponent;
@@ -1130,6 +1136,16 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
   // RENDER
   // =========================================================
 
+  // Arriving from the "categories covered" card: bring the category strip into view.
+  useEffect(() => {
+    if (!highlightMissing || loading) return;
+    const strip = categoryStripRef.current;
+    if (!strip) return;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    strip.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+    strip.focus({ preventScroll: true });
+  }, [highlightMissing, loading]);
+
   // Header "Upload material" opens the upload dialog here.
   const handledUploadRequest = useRef<number | null>(null);
   useEffect(() => {
@@ -1158,7 +1174,7 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
         </div>
 
         <label className="sr-only" htmlFor="material-category">IEC category</label>
-        <select id="material-category" value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)} className="w-full h-12 px-4 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm font-semibold text-[#1E293B] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]">
+        <select id="material-category" value={highlightMissing ? 'All' : selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)} className="w-full h-12 px-4 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm font-semibold text-[#1E293B] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]">
           <option value="All">All IEC categories</option>
           {IEC_CATEGORIES.map((category) => (
             <option key={category} value={category}>{category}</option>
@@ -1181,6 +1197,50 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
           ))}
         </select>
       </div>
+
+      {/* CATEGORY STRIP: all 8 IEC categories with how many materials each has.
+          Empty ones are highlighted; a click narrows the list to that category. */}
+      {!loading && (
+        <section
+          ref={categoryStripRef}
+          id="iec-category-strip"
+          tabIndex={-1}
+          aria-labelledby="iec-category-strip-heading"
+          className="bg-white rounded-[28px] p-4 md:p-5 flex flex-col gap-3 scroll-mt-24 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
+        >
+          <h2 id="iec-category-strip-heading" className="m-0 text-sm font-bold text-[#1E1B4B]">
+            IEC categories: {IEC_CATEGORIES.filter((c) => materials.some((m) => m.category === c)).length} of {IEC_CATEGORIES.length} covered
+          </h2>
+          <ul className="m-0 p-0 list-none flex flex-wrap gap-2">
+            {IEC_CATEGORIES.map((category) => {
+              const count = materials.filter((m) => m.category === category).length;
+              const active = selectedCategory === category;
+              const empty = count === 0;
+              return (
+                <li key={category}>
+                  <button
+                    type="button"
+                    aria-pressed={active}
+                    aria-label={`${category}: ${empty ? 'no materials' : `${count} ${count === 1 ? 'material' : 'materials'}`}`}
+                    onClick={() => setSelectedCategory(active ? 'All' : category)}
+                    className={`min-h-[44px] px-4 rounded-full border-[1.5px] text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC] ${
+                      active
+                        ? 'bg-[#1E1B4B] border-[#1E1B4B] text-white'
+                        : empty
+                          ? highlightMissing
+                            ? 'bg-[#FEF3C7] border-[#F59E0B] text-[#92400E] ring-2 ring-[#F59E0B]/40'
+                            : 'bg-[#FFFBEB] border-[#FCD34D] text-[#92400E]'
+                          : 'bg-white border-[#DDE1EE] text-[#334155] hover:border-[#A5B4FC]'
+                    }`}
+                  >
+                    {category} <span className="font-bold">{count}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {/* TABS */}
 
@@ -2005,7 +2065,7 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
         open={isPreviewOpen}
         onOpenChange={setIsPreviewOpen}
       >
-        <DialogContent className="max-w-5xl w-[95vw] h-[90vh] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl flex flex-col">
+        <DialogContent className="max-w-5xl w-[95vw] h-[90vh] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl flex flex-col [&>button]:right-3 [&>button]:top-3 [&>button]:w-11 [&>button]:h-11 [&>button]:flex [&>button]:items-center [&>button]:justify-center [&>button]:z-20">
 
           <DialogHeader className="p-6 bg-white border-b border-slate-100 shrink-0">
 
@@ -2068,19 +2128,18 @@ export default function IECMaterials({ uploadRequest, onChanged }: { uploadReque
               previewItem.type === 'Image' &&
               (previewItem.file_url ||
                 previewItem.image_url) ? (
-              /* IMAGE */
+              /* IMAGE: the same zoom viewer students get. Opening it here never
+                 records a material view (that is for students only). */
 
-              <div className="p-4 w-full h-full flex items-center justify-center">
-                <img
-                  src={
-                    previewItem.file_url ||
-                    previewItem.image_url ||
-                    ''
-                  }
-                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                  alt={previewItem.title}
-                />
-              </div>
+              <ZoomableImage
+                src={
+                  previewItem.file_url ||
+                  previewItem.image_url ||
+                  ''
+                }
+                alt={previewItem.title}
+                className="p-4"
+              />
             ) : previewItem &&
               previewItem.type === 'Audio' &&
               previewItem.file_url ? (

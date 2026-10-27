@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
+import ZoomableImage from './ZoomableImage';
 
 export interface ViewerPhoto {
   url: string;
@@ -61,6 +62,9 @@ const SWIPE_THRESHOLD_PX = 50;
 // "3 / 8" counter, and a thumbnail strip. Wraps around at either end.
 export default function PhotoViewer({ state, onChange }: PhotoViewerProps) {
   const touchStartX = useRef<number | null>(null);
+  // A swipe changes the photo only for a one-finger swipe on an unzoomed photo.
+  const zoomed = useRef(false);
+  const multiTouch = useRef(false);
   const activeThumbRef = useRef<HTMLButtonElement>(null);
 
   const photos = state?.photos || [];
@@ -107,7 +111,7 @@ export default function PhotoViewer({ state, onChange }: PhotoViewerProps) {
 
   return (
     <Dialog open={!!state} onOpenChange={(open) => !open && onChange(null)}>
-      <DialogContent className="flex flex-col max-w-5xl w-[95vw] p-0 gap-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl [&>button]:bg-black/50 [&>button]:rounded-full [&>button]:p-1.5 [&>button]:text-white [&>button]:opacity-100 [&>button]:z-20">
+      <DialogContent className="flex flex-col max-w-5xl w-[95vw] p-0 gap-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl [&>button]:bg-black/50 [&>button]:rounded-full [&>button]:w-11 [&>button]:h-11 [&>button]:flex [&>button]:items-center [&>button]:justify-center [&>button]:right-3 [&>button]:top-3 [&>button]:text-white [&>button]:opacity-100 [&>button]:z-20">
         <DialogTitle className="sr-only">{current?.caption || 'Photo'}</DialogTitle>
 
         {current && (
@@ -115,22 +119,30 @@ export default function PhotoViewer({ state, onChange }: PhotoViewerProps) {
             <div
               className="relative w-full min-w-0 flex items-center justify-center bg-slate-950 select-none"
               onTouchStart={(event) => {
+                if (event.touches.length > 1) multiTouch.current = true;
                 touchStartX.current = event.touches[0].clientX;
               }}
               onTouchEnd={(event) => {
+                if (event.touches.length > 0) return;
+                const wasMulti = multiTouch.current;
+                multiTouch.current = false;
                 if (touchStartX.current === null) return;
                 const delta = event.changedTouches[0].clientX - touchStartX.current;
                 touchStartX.current = null;
+                if (wasMulti || zoomed.current) return;
                 if (Math.abs(delta) >= SWIPE_THRESHOLD_PX) go(delta < 0 ? 1 : -1);
               }}
             >
-              <img
-                key={current.url}
-                src={current.url}
-                alt={current.caption}
-                className="w-full max-h-[70vh] object-contain animate-in fade-in duration-200"
-                draggable={false}
-              />
+              <div className="w-full h-[60vh] sm:h-[70vh]">
+                <ZoomableImage
+                  key={current.url}
+                  src={current.url}
+                  alt={current.caption}
+                  onScaleChange={(scale) => {
+                    zoomed.current = scale !== 1;
+                  }}
+                />
+              </div>
 
               {hasMany && (
                 <>

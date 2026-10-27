@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import StatTile from "./StatTile";
 import { supabase } from "../../lib/supabase";
 import { SURVEY_COLUMNS, withAdminForms } from "../../lib/surveyForms";
 
@@ -204,6 +205,11 @@ interface StatCardProps {
   description: string;
   icon: React.ElementType;
   className?: string;
+  to?: string;
+  ariaLabel?: string;
+  noteTo?: string;
+  noteAriaLabel?: string;
+  info?: string;
 }
 
 /* =========================================================
@@ -272,22 +278,32 @@ const AnalyticsTabBar: React.FC<{
   </div>
 );
 
+// A number is a link ONLY when the list it opens shows that same count.
+// Otherwise it stays plain text with an "i" button saying what it counts.
 const StatCard: React.FC<StatCardProps> = ({
   title,
   value,
   description,
   className = "",
-}) => {
-  return (
-    <div className={`h-full px-[22px] py-5 rounded-[26px] bg-white flex flex-col gap-1 min-w-0 ${className}`}>
-      <p className="m-0 text-[13px] font-semibold text-[#5B6477]">{title}</p>
-      <p className="m-0 font-bricolage font-extrabold text-[34px] md:text-[36px] leading-tight tracking-[-0.02em] text-[#1E1B4B] break-words">
-        {value}
-      </p>
-      <p className="m-0 text-[13px] text-[#5B6477]">{description}</p>
-    </div>
-  );
-};
+  to,
+  ariaLabel,
+  noteTo,
+  noteAriaLabel,
+  info,
+}) => (
+  <StatTile
+    variant="analytics"
+    label={title}
+    value={value}
+    note={description}
+    className={className}
+    to={to}
+    ariaLabel={ariaLabel}
+    noteTo={noteTo}
+    noteAriaLabel={noteAriaLabel}
+    info={info}
+  />
+);
 
 /* =========================================================
    INCLUSION BREAKDOWN LIST
@@ -1721,6 +1737,10 @@ export default function AnalyticsDashboard() {
 
   const totalMaterials =
     filteredMaterials.length;
+
+  // The Content list is never narrowed by campus / year, so a materials number
+  // is a link only while those two filters are off.
+  const materialsListMatches = selectedCampus === "all" && selectedAcademicYear === "all";
 
   /* -------------------------------------------------------
      TOTAL IEC MATERIALS
@@ -3317,6 +3337,7 @@ export default function AnalyticsDashboard() {
               value={totalStudents}
               description="Profiles + survey participants"
               icon={Users}
+              info="Student profiles plus anyone who answered a survey, each person counted once (and narrowed by the filters above). The Users page lists accounts, so its count can differ."
             />
 
             <StatCard
@@ -3324,6 +3345,8 @@ export default function AnalyticsDashboard() {
               value={totalGuidancePrograms}
               description="Programs in the system"
               icon={GraduationCap}
+              to="/admin?tab=programs"
+              ariaLabel={`View all ${totalGuidancePrograms} ${totalGuidancePrograms === 1 ? "program" : "programs"}`}
             />
 
             <StatCard
@@ -3331,6 +3354,9 @@ export default function AnalyticsDashboard() {
               value={totalSurveyResponses}
               description={`${activeSurveys} active survey(s)`}
               icon={BarChart3}
+              noteTo="/admin?tab=surveys&status=active"
+              noteAriaLabel={`View ${activeSurveys} published ${activeSurveys === 1 ? "survey" : "surveys"}`}
+              info="Submitted answers, one per survey taken (narrowed by the filters above). No list shows responses one by one here, so only the active-survey count below opens a list."
             />
 
             <StatCard
@@ -3338,6 +3364,9 @@ export default function AnalyticsDashboard() {
               value={totalMaterials}
               description="Materials in the library"
               icon={FileStack}
+              to={materialsListMatches ? "/admin?tab=materials" : undefined}
+              ariaLabel={`View all ${totalMaterials} ${totalMaterials === 1 ? "material" : "materials"}`}
+              info="The campus or year filter above is applied, so this number can differ from the full list. Clear the filters to open the list."
             />
 
           </div>
@@ -3442,6 +3471,7 @@ export default function AnalyticsDashboard() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <StatCard
+                info="The average of every scored answer across all awareness checks, shown as a percentage. No list has a matching count."
                 title="Overall average score"
                 value={
                   awarenessAnalytics.overall !== null
@@ -3457,6 +3487,7 @@ export default function AnalyticsDashboard() {
                 value={awarenessAnalytics.totalResponses}
                 description="Knowledge Assessment submissions counted"
                 icon={Target}
+                info="Pre-test and post-test submissions that were scored (narrowed by the filters above). The Assessments list shows the checks themselves, not submissions, so this number is not a link."
               />
             </div>
 
@@ -3830,6 +3861,9 @@ export default function AnalyticsDashboard() {
                 value={totalIECMaterials}
                 description="All IEC materials"
                 icon={BookOpen}
+                to={materialsListMatches && totalIECMaterials === totalMaterials ? "/admin?tab=materials" : undefined}
+                ariaLabel={`View all ${totalIECMaterials} IEC ${totalIECMaterials === 1 ? "material" : "materials"}`}
+                info="The campus or year filter above is applied, or some library items are not tagged as IEC, so the list would show a different count."
               />
 
               <StatCard
@@ -3837,13 +3871,15 @@ export default function AnalyticsDashboard() {
                 value={totalIECDowloads}
                 description="Total material downloads"
                 icon={Download}
+                info="Every click on a Download button for IEC materials, added up. No list shows this total."
               />
 
               <StatCard
-                title="Downloads (this month's uploads)"
+                title="Downloads of this month's uploads"
                 value={downloadsThisMonth}
-                description="Lifetime downloads of materials uploaded this month"
+                description="All-time downloads of materials uploaded this month"
                 icon={TrendingUp}
+                info="Adds up every download ever made of the materials uploaded this month. It is not the downloads made this month: the system does not record when each download happened."
               />
 
             </div>

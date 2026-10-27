@@ -6,6 +6,7 @@ import { notifyStudents } from '../../lib/notifyStudents';
 import { formatProgramDate } from '../../lib/formatProgramDate';
 import { CAMPUSES, ALL_CAMPUSES_LABEL, campusLabel } from '../../lib/campuses';
 import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
+import { useUrlFilter } from '../../lib/useUrlFilter';
 import ProgramEntryTimeline from '../shared/ProgramEntryTimeline';
 import PhotoViewer, { collectProgramPhotos, viewerAt, type PhotoViewerState } from '../shared/PhotoViewer';
 import { useAuth } from '../../hooks/useAuth';
@@ -80,6 +81,8 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
   const [materialSearch, setMaterialSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  // ?status=ongoing from a dashboard card; matches the effective status the card counts.
+  const [statusFilter, setStatusFilter] = useUrlFilter('status', 'all');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [photoViewer, setPhotoViewer] = useState<PhotoViewerState | null>(null);
   
@@ -796,6 +799,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
 
   const filteredPrograms = programs
     .filter(p => p.title?.toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter(p => statusFilter === 'all' || getEffectiveProgramStatus(p) === statusFilter)
     .slice()
     .sort(compareProgramsForDisplay);
 
@@ -808,23 +812,39 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
 
   useEffect(() => {
     setProgramsPage(1);
-  }, [searchQuery]);
+  }, [searchQuery, statusFilter]);
 
   return (
     <div className="flex flex-col gap-5 w-full font-figtree text-[#1E293B]">
 
       {/* SEARCH (New program lives in the Content page header) */}
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#6B7285] pointer-events-none" aria-hidden="true" />
-        <label htmlFor="program-search" className="sr-only">Search programs</label>
-        <input
-          id="program-search"
-          type="search"
-          placeholder="Search programs by title"
-          className={`w-full h-[52px] pl-12 pr-4 rounded-2xl bg-white border-[1.5px] border-[#DDE1EE] text-[15px] text-[#1E293B] placeholder:text-[#8A91A6] ${focusRing}`}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+      <div className="flex flex-col md:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#6B7285] pointer-events-none" aria-hidden="true" />
+          <label htmlFor="program-search" className="sr-only">Search programs</label>
+          <input
+            id="program-search"
+            type="search"
+            placeholder="Search programs by title"
+            className={`w-full h-[52px] pl-12 pr-4 rounded-2xl bg-white border-[1.5px] border-[#DDE1EE] text-[15px] text-[#1E293B] placeholder:text-[#8A91A6] ${focusRing}`}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <div className="md:w-56">
+          <label htmlFor="program-status-filter" className="sr-only">Program status</label>
+          <select
+            id="program-status-filter"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className={`w-full h-[52px] px-4 rounded-2xl bg-white border-[1.5px] border-[#DDE1EE] text-[15px] font-semibold text-[#1E293B] ${focusRing}`}
+          >
+            <option value="all">All statuses</option>
+            <option value="ongoing">Ongoing</option>
+            <option value="upcoming">Upcoming</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
       </div>
 
       {/* PROGRAM LIST: a table from md up, cards below. */}
@@ -836,7 +856,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
               <th scope="col" className="py-4 px-3 font-semibold">Status</th>
               <th scope="col" className="py-4 px-3 font-semibold">Timeline</th>
               <th scope="col" className="py-4 px-3 font-semibold">Linked materials</th>
-              <th scope="col" className="py-4 px-3 font-semibold">Knowledge check</th>
+              <th scope="col" className="py-4 px-3 font-semibold">Awareness check</th>
               <th scope="col" className="py-4 pl-3 pr-6 font-semibold text-right">Actions</th>
             </tr>
           </thead>
@@ -994,7 +1014,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
 
         {pagedPrograms.length === 0 && (
           <p className="m-0 px-6 py-10 text-center text-[15px] text-[#5B6477]">
-            {loading ? 'Loading programs...' : searchQuery ? 'No programs match your search.' : 'No programs yet.'}
+            {loading ? 'Loading programs...' : searchQuery || statusFilter !== 'all' ? 'No programs match your search or filter.' : 'No programs yet.'}
           </p>
         )}
       </div>
@@ -1208,7 +1228,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
               <div>
                 <Label id="linked-materials-label" className="text-[13px] font-semibold ml-1 text-slate-400">Linked IEC materials</Label>
                 <p className="text-[13px] text-slate-400 ml-1 mt-0.5">
-                  Students view these after the pre-test. The post-test opens once they've viewed all of them. A knowledge check can't be activated until its program has at least one.
+                  Students view these after the pre-test. The post-test opens once they've viewed all of them. An awareness check can't be activated until its program has at least one.
                 </p>
               </div>
 

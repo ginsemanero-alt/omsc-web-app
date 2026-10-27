@@ -986,7 +986,7 @@ export default function ProgramsActivities() {
       /* HANDOUT PREVIEW — opens in-app first; downloading is a separate,
          explicit action below, not the default click behavior. */
       <Dialog open={!!previewHandout} onOpenChange={(open) => !open && setPreviewHandout(null)}>
-        <DialogContent className="max-w-4xl w-[95vw] h-[85vh] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl flex flex-col font-figtree">
+        <DialogContent className="max-w-4xl w-[95vw] h-[85vh] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl flex flex-col font-figtree [&>button]:right-3 [&>button]:top-3 [&>button]:w-11 [&>button]:h-11 [&>button]:flex [&>button]:items-center [&>button]:justify-center [&>button]:z-20">
           <DialogHeader className="p-5 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between shrink-0">
             <DialogTitle className="font-bold text-base text-[#1E1B4B] dark:text-white truncate pr-8">
               {previewHandout?.title}

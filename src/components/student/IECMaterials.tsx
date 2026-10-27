@@ -514,7 +514,7 @@ export default function IECMaterials() {
 
       {/* --- PREVIEW MODAL --- */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="max-w-5xl w-[95vw] h-[90vh] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl flex flex-col">
+        <DialogContent className="max-w-5xl w-[95vw] h-[90vh] p-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl flex flex-col [&>button]:right-3 [&>button]:top-3 [&>button]:w-11 [&>button]:h-11 [&>button]:flex [&>button]:items-center [&>button]:justify-center [&>button]:z-20">
           <DialogHeader className="p-6 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between shrink-0">
             <div>
               <DialogTitle className="font-black uppercase tracking-tighter text-xl text-slate-900 dark:text-white">{previewItem?.title}</DialogTitle>
