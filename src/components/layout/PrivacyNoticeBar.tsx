@@ -53,7 +53,8 @@ export default function PrivacyNoticeBar() {
             {NOTICE_BAR_TEXT}{" "}
             <Link
               to="/privacy"
-              className={`font-bold text-white underline rounded ${focusRing}`}
+              // py-3 with an equal negative margin: a 44px-tall tap area that leaves the text layout alone.
+              className={`inline-block py-3 -my-3 font-bold text-white underline rounded ${focusRing}`}
             >
               Read our Privacy Notice.
             </Link>
