@@ -188,12 +188,27 @@ if (!resend) {
 // about. Primary is tried once; on any failure, the fallback is tried
 // exactly once — no loops, since failed attempts still burn the daily quota.
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-// google/gemma-4-31b-it:free and qwen/qwen3.8-27b:free were both hitting
-// the same congested upstream shared free pool at the same time — swapped
-// primary to nvidia's slug (different upstream provider), confirmed
-// responding correctly, with the old primary kept on as fallback.
-const OPENROUTER_PRIMARY_MODEL = 'nvidia/nemotron-3-super-120b-a12b:free';
-const OPENROUTER_FALLBACK_MODEL = 'google/gemma-4-31b-it:free';
+// Free models come and go. nvidia/nemotron-3-super-120b-a12b:free (the old
+// primary) was still listed but answered 404 "Function not found", and
+// google/gemma-4-31b-it:free was rate-limited upstream, so the button failed
+// for everyone. The models below were checked on 2026-10-28 with the real
+// prompt: laguna answers in ~3-7 s, nemotron-ultra in ~8-12 s. They are tried
+// in order, each ONCE (a failed attempt still counts against the free daily
+// quota), and the first that answers wins. To swap models WITHOUT a code
+// change, set OPENROUTER_MODELS in Vercel to a comma-separated list of
+// OpenRouter ids (most preferred first).
+const DEFAULT_OPENROUTER_MODELS = [
+    'poolside/laguna-s-2.1:free',
+    'nvidia/nemotron-3-ultra-550b-a55b:free',
+    'google/gemma-4-26b-a4b-it:free',
+];
+const OPENROUTER_MODELS = (process.env.OPENROUTER_MODELS || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+if (OPENROUTER_MODELS.length === 0) OPENROUTER_MODELS.push(...DEFAULT_OPENROUTER_MODELS);
+// What the admin sees whenever the AI service cannot answer (any cause).
+const INSIGHT_UNAVAILABLE_MESSAGE = 'Insight is unavailable right now. Please try again later.';
 if (!OPENROUTER_API_KEY) {
     console.warn('⚠️  OPENROUTER_API_KEY not set — the Analytics AI Insight feature is disabled until it is configured.');
 }
@@ -1023,7 +1038,7 @@ app.post('/api/analytics-insight', analyticsInsightLimiter, async (req, res) => 
         }
 
         if (!OPENROUTER_API_KEY) {
-            return res.status(503).json({ message: "AI Insight is not configured on this server yet." });
+            return res.status(503).json({ message: INSIGHT_UNAVAILABLE_MESSAGE });
         }
 
         const { section, sectionLabel, metrics, regenerate } = req.body;
@@ -1065,18 +1080,20 @@ app.post('/api/analytics-insight', analyticsInsightLimiter, async (req, res) => 
 
         let insightText;
         let modelUsed;
-        try {
-            insightText = await callOpenRouter(OPENROUTER_PRIMARY_MODEL, metrics, sectionLabel);
-            modelUsed = OPENROUTER_PRIMARY_MODEL;
-        } catch (primaryError) {
-            console.warn('analytics-insight: primary model failed:', primaryError.message);
+        for (const model of OPENROUTER_MODELS) {
             try {
-                insightText = await callOpenRouter(OPENROUTER_FALLBACK_MODEL, metrics, sectionLabel);
-                modelUsed = OPENROUTER_FALLBACK_MODEL;
-            } catch (fallbackError) {
-                console.error('analytics-insight: fallback model also failed:', fallbackError.message);
-                return res.status(502).json({ message: "AI Insight is temporarily unavailable. Please try again later." });
+                insightText = await callOpenRouter(model, metrics, sectionLabel);
+                modelUsed = model;
+                break;
+            } catch (modelError) {
+                // The provider's own message goes to the function log (never
+                // to the browser, and it never contains the key).
+                console.warn('analytics-insight: model failed:', modelError.message);
             }
+        }
+        if (!insightText) {
+            console.error(`analytics-insight: all ${OPENROUTER_MODELS.length} models failed`);
+            return res.status(502).json({ message: INSIGHT_UNAVAILABLE_MESSAGE });
         }
 
         const generatedAt = new Date().toISOString();

@@ -3016,7 +3016,17 @@ export default function AnalyticsDashboard() {
                 <span className="text-sm font-semibold">Generating explanation...</span>
               </div>
             ) : insightError ? (
-              <p className="m-0 text-sm font-semibold text-rose-300 py-2">{insightError}</p>
+              <div className="flex flex-wrap items-center gap-3 py-1">
+                <p role="alert" className="m-0 text-sm font-semibold text-rose-300">{insightError}</p>
+                <button
+                  type="button"
+                  onClick={() => handleGenerateInsight(false)}
+                  className={`h-11 px-3.5 rounded-xl border-[1.5px] border-white/35 text-white font-bold text-[13px] flex items-center gap-1.5 hover:bg-white/10 ${focusRing}`}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
+                  Try again
+                </button>
+              </div>
             ) : insight ? (
               <>
                 <div className="space-y-3">

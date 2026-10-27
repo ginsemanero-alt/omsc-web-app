@@ -1,5 +1,9 @@
 import { supabase } from './supabase';
 
+// Shown for every failure of the AI service (down, rate-limited, timed out,
+// not configured): one clear sentence instead of a silent or technical error.
+export const INSIGHT_UNAVAILABLE_MESSAGE = 'Insight is unavailable right now. Please try again later.';
+
 export interface AnalyticsInsightResult {
   section: string;
   insight: string;
@@ -25,19 +29,35 @@ export async function fetchAnalyticsInsight(
     throw new Error('No active session — please sign in again.');
   }
 
-  const response = await fetch('/api/analytics-insight', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: JSON.stringify({ section, sectionLabel, metrics, regenerate }),
-  });
+  let response: Response;
+  try {
+    response = await fetch('/api/analytics-insight', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ section, sectionLabel, metrics, regenerate }),
+    });
+  } catch {
+    // Offline / blocked: still one clear sentence.
+    throw new Error(INSIGHT_UNAVAILABLE_MESSAGE);
+  }
 
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data?.message || 'Failed to generate insight.');
+    // An expired session or a non-admin has its own, more useful message.
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(data?.message || 'Please sign in again as an admin to use Insight.');
+    }
+    // Everything else (502 provider down, 503, 429 daily cap, a platform
+    // timeout that returns HTML instead of JSON...) reads the same way.
+    throw new Error(INSIGHT_UNAVAILABLE_MESSAGE);
+  }
+
+  if (!data?.insight) {
+    throw new Error(INSIGHT_UNAVAILABLE_MESSAGE);
   }
 
   return data as AnalyticsInsightResult;
