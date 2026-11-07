@@ -11,6 +11,7 @@ import MyBadges from './MyBadges';
 import {
   loadMaterialProgress, materialProgressFor, type MaterialProgress, type MaterialProgressData,
 } from '../../lib/materialProgress';
+import { useT } from '../../i18n';
 
 const PROGRAMS_PATH = '/student/programs';
 const ASSESSMENT_PATH = '/student/survey';
@@ -180,26 +181,28 @@ function progressPercent(item: ProgramProgress): number {
   }
 }
 
-function detailText(item: ProgramProgress): string {
+function detailText(item: ProgramProgress, tr: (text: string, vars?: Record<string, string | number>) => string): string {
   switch (item.status) {
     case 'coming_soon':
-      return 'Materials are open now';
+      return tr('Materials are open now');
     case 'not_taken':
-      return 'Take the pre-test before you read the materials.';
+      return tr('Take the pre-test before you read the materials.');
     case 'in_progress': {
       const materials = getMaterialProgress(item);
-      const preDone = item.pre && item.pre.score != null ? `Pre-test done (${scoreText(item.pre)}).` : 'Pre-test done.';
-      if (!materials) return `${preDone} Read the materials, then take the post-test.`;
-      if (materials.total === 0) return `${preDone} Materials are coming soon.`;
-      if (materialsDone(item)) return `${preDone} ${materials.total} of ${materials.total} materials viewed. Post-test open.`;
-      return `${preDone} ${materials.viewed} of ${materials.total} materials viewed.`;
+      const preDone =
+        item.pre && item.pre.score != null ? tr('Pre-test done ({score}).', { score: scoreText(item.pre) }) : tr('Pre-test done.');
+      if (!materials) return `${preDone} ${tr('Read the materials, then take the post-test.')}`;
+      if (materials.total === 0) return `${preDone} ${tr('Materials are coming soon.')}`;
+      if (materialsDone(item)) return `${preDone} ${tr('{viewed} of {total} materials viewed. Post-test open.', { viewed: materials.total, total: materials.total })}`;
+      return `${preDone} ${tr('{viewed} of {total} materials viewed.', { viewed: materials.viewed, total: materials.total })}`;
     }
     case 'completed':
       return (
         formatComparison(
           percentFrom(item.pre?.score, item.pre?.total_scored),
-          percentFrom(item.post?.score, item.post?.total_scored)
-        ) ?? `Pre-test ${scoreText(item.pre)}, post-test ${scoreText(item.post)}`
+          percentFrom(item.post?.score, item.post?.total_scored),
+          tr
+        ) ?? tr('Pre-test {pre}, post-test {post}', { pre: scoreText(item.pre), post: scoreText(item.post) })
       );
   }
 }
@@ -286,6 +289,7 @@ interface Step {
 }
 
 function StepList({ steps }: { steps: Step[] }) {
+  const { t } = useT();
   return (
     <ol className="m-0 p-0 list-none grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-5">
       {steps.map((step, index) => (
@@ -304,7 +308,7 @@ function StepList({ steps }: { steps: Step[] }) {
           </span>
           <span className={`font-bold text-[15px] leading-tight ${step.state === 'next' ? 'text-[#C7C9F2]' : 'text-white'}`}>
             <span className="sr-only">
-              {step.state === 'done' ? 'Done: ' : step.state === 'now' ? 'Current step: ' : 'Later: '}
+              {step.state === 'done' ? t('Done:') + ' ' : step.state === 'now' ? t('Current step:') + ' ' : t('Later:') + ' '}
             </span>
             {step.label}
           </span>
@@ -320,6 +324,7 @@ function StepList({ steps }: { steps: Step[] }) {
 /* ------------------------------------------------------------------ */
 
 export default function DashboardOverview() {
+  const { t, tr } = useT();
   const navigate = useNavigate();
   const { dbUserId, loading: authLoading } = useAuth();
 
@@ -358,7 +363,7 @@ export default function DashboardOverview() {
 
         viewerCampus = profile?.campus || null;
         const yearDigit = normalizeYearLevel(profile?.year_level);
-        const yearLabel = YEAR_LEVELS.find((y) => y.value === yearDigit)?.label.toLowerCase();
+        const yearLabel = (() => { const found = YEAR_LEVELS.find((y) => y.value === yearDigit); return found ? tr(found.label).toLowerCase() : undefined; })();
         setProfileLine([profile?.campus, profile?.program, yearLabel].filter(Boolean).join(', '));
       }
 
@@ -436,7 +441,7 @@ export default function DashboardOverview() {
     // A skeleton of the real layout rather than a second full-screen spinner —
     // ProtectedRoute already showed one while verifying the session.
     return (
-      <div className="w-full font-figtree animate-pulse" aria-busy="true" aria-label="Loading your dashboard">
+      <div className="w-full font-figtree animate-pulse" aria-busy="true" aria-label={t('Loading your dashboard')}>
         <div className="flex flex-col gap-3 mb-6">
           <div className="h-12 w-72 max-w-full bg-slate-200 dark:bg-slate-800 rounded-2xl" />
           <div className="h-4 w-60 max-w-full bg-slate-200/70 dark:bg-slate-800/70 rounded-full" />
@@ -465,10 +470,10 @@ export default function DashboardOverview() {
         </div>
         <div className="flex flex-col gap-1">
           <p className="m-0 font-bricolage font-extrabold text-2xl text-[#1E1B4B] dark:text-white">
-            Couldn't load your dashboard
+            {t('Couldn\'t load your dashboard')}
           </p>
           <p className="m-0 text-[15px] text-[#5B6477] dark:text-slate-400 max-w-sm">
-            Check your internet connection and try again.
+            {t('Check your internet connection and try again.')}
           </p>
         </div>
         <button
@@ -476,7 +481,7 @@ export default function DashboardOverview() {
           onClick={fetchDashboardData}
           className={`h-12 px-8 rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] transition-colors ${focusRing}`}
         >
-          Try again
+          {t('Try again')}
         </button>
       </div>
     );
@@ -512,32 +517,32 @@ export default function DashboardOverview() {
     const materials = getMaterialProgress(continueItem);
     const done = materialsDone(continueItem);
     continueSteps = [
-      { label: 'Pre-test', sub: `Submitted ${shortDate(continueItem.pre!.created_at)}`, state: 'done' },
+      { label: t('Pre-test'), sub: t('Submitted {date}', { date: shortDate(continueItem.pre!.created_at) }), state: 'done' },
       {
-        label: 'Read the materials',
+        label: t('Read the materials'),
         sub: !materials
-          ? 'Open the program materials'
+          ? t('Open the program materials')
           : materials.total === 0
-            ? 'Coming soon'
-            : `${materials.viewed} of ${materials.total} viewed`,
+            ? t('Coming soon')
+            : t('{viewed} of {total} viewed', { viewed: materials.viewed, total: materials.total }),
         state: done ? 'done' : 'now',
       },
-      { label: 'Post-test', sub: done ? 'Open now' : 'After the materials', state: done ? 'now' : 'next' },
-      { label: 'Your results', sub: 'Pre-test and post-test scores', state: 'next' },
+      { label: t('Post-test'), sub: done ? t('Open now') : t('After the materials'), state: done ? 'now' : 'next' },
+      { label: t('Your results'), sub: t('Pre-test and post-test scores'), state: 'next' },
     ];
-    continueNote = done ? 'All materials viewed. The post-test is open.' : 'Then take the post-test in Assessment.';
+    continueNote = done ? t('All materials viewed. The post-test is open.') : t('Then take the post-test in Assessment.');
     continueCta = done
-      ? { label: 'Take post-test', path: ctaPath(continueItem) }
-      : { label: 'Open the materials', path: ctaPath(continueItem) };
+      ? { label: t('Take post-test'), path: ctaPath(continueItem) }
+      : { label: t('Open the materials'), path: ctaPath(continueItem) };
   } else if (continueItem?.status === 'not_taken') {
     continueSteps = [
-      { label: 'Pre-test', sub: 'Take it before the materials', state: 'now' },
-      { label: 'Read the materials', sub: 'Open the program materials', state: 'next' },
-      { label: 'Post-test', sub: 'After the materials', state: 'next' },
-      { label: 'Your results', sub: 'Pre-test and post-test scores', state: 'next' },
+      { label: t('Pre-test'), sub: t('Take it before the materials'), state: 'now' },
+      { label: t('Read the materials'), sub: t('Open the program materials'), state: 'next' },
+      { label: t('Post-test'), sub: t('After the materials'), state: 'next' },
+      { label: t('Your results'), sub: t('Pre-test and post-test scores'), state: 'next' },
     ];
-    continueNote = 'Take it before you open the materials.';
-    continueCta = { label: 'Take pre-test', path: ctaPath(continueItem) };
+    continueNote = t('Take it before you open the materials.');
+    continueCta = { label: t('Take pre-test'), path: ctaPath(continueItem) };
   }
 
   /* ------------------------------ render ----------------------------- */
@@ -548,7 +553,7 @@ export default function DashboardOverview() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 sm:gap-6 mb-6">
         <div className="flex flex-col gap-1.5 min-w-0">
           <h1 className="m-0 font-bricolage font-extrabold text-[34px] sm:text-[40px] lg:text-5xl leading-[1.05] tracking-[-0.025em] text-[#1E1B4B] dark:text-white break-words">
-            Mabuhay, <span className="text-[#4F46E5] dark:text-indigo-400">{userName}!</span>
+            {t('Mabuhay,')} <span className="text-[#4F46E5] dark:text-indigo-400">{userName}!</span>
           </h1>
           {profileLine && (
             <p className="m-0 text-[15px] sm:text-base text-[#5B6477] dark:text-slate-400">{profileLine}</p>
@@ -575,7 +580,7 @@ export default function DashboardOverview() {
               <div className="flex flex-col gap-[18px] min-w-0">
                 <div className="flex flex-col gap-2">
                   <span className="self-start px-3 py-1.5 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-[13px]">
-                    Continue where you left off
+                    {t('Continue where you left off')}
                   </span>
                   <h2
                     id="continue-heading"
@@ -606,22 +611,22 @@ export default function DashboardOverview() {
                 id="programs-heading"
                 className="m-0 font-bricolage font-extrabold text-2xl lg:text-[30px] tracking-[-0.02em] text-[#1E1B4B] dark:text-white"
               >
-                Your programs
+                {t('Your programs')}
               </h2>
               <button
                 type="button"
                 onClick={() => navigate(PROGRAMS_PATH)}
                 className={`min-h-[44px] px-2 -mr-2 rounded-xl font-bold text-[15px] text-[#4338CA] dark:text-indigo-300 hover:underline ${focusRing}`}
               >
-                All programs
+                {t('All programs')}
               </button>
             </div>
 
             {yourPrograms.length === 0 ? (
               <div className="rounded-[28px] bg-white dark:bg-slate-900 px-6 py-10 text-center">
-                <p className="m-0 font-bold text-[#1E1B4B] dark:text-white">No programs posted yet</p>
+                <p className="m-0 font-bold text-[#1E1B4B] dark:text-white">{t('No programs posted yet')}</p>
                 <p className="m-0 mt-1 text-sm text-[#5B6477] dark:text-slate-400">
-                  New guidance programs for your campus will show up here.
+                  {t('New guidance programs for your campus will show up here.')}
                 </p>
               </div>
             ) : (
@@ -640,17 +645,17 @@ export default function DashboardOverview() {
                         <h3 className="m-0 font-bold text-base sm:text-[17px] leading-snug text-[#1E1B4B] dark:text-white break-words">
                           {item.program.title}
                         </h3>
-                        <p className="m-0 text-sm text-[#5B6477] dark:text-slate-400">{detailText(item)}</p>
+                        <p className="m-0 text-sm text-[#5B6477] dark:text-slate-400">{detailText(item, tr)}</p>
                       </div>
 
                       <div className="col-span-2 sm:col-span-1 sm:col-start-2 sm:row-start-2 xl:col-start-3 xl:row-start-1 flex flex-col gap-2">
                         <span className={`self-start px-2.5 py-1 rounded-full font-bold text-xs ${style.badge}`}>
-                          {style.label}
+                          {tr(style.label)}
                         </span>
                         <span
                           className="block h-1.5 rounded-full bg-[#EEF0FA] dark:bg-slate-800 overflow-hidden"
                           role="progressbar"
-                          aria-label={`${item.program.title} progress`}
+                          aria-label={t('{title} progress', { title: item.program.title })}
                           aria-valuemin={0}
                           aria-valuemax={100}
                           aria-valuenow={percent}
@@ -662,14 +667,14 @@ export default function DashboardOverview() {
                       <button
                         type="button"
                         onClick={() => navigate(ctaPath(item))}
-                        aria-label={`${style.cta}: ${item.program.title}`}
+                        aria-label={`${tr(style.cta)}: ${item.program.title}`}
                         className={`col-span-2 sm:col-span-1 sm:col-start-3 sm:row-start-1 sm:row-span-2 xl:col-start-4 xl:row-span-1 h-[46px] rounded-[14px] font-bold text-sm flex items-center justify-center transition-colors ${focusRing} ${
                           style.primary
                             ? 'bg-[#4F46E5] hover:bg-[#4338CA] text-white'
                             : 'bg-white dark:bg-slate-900 border-[1.5px] border-[#DDE1EE] dark:border-slate-700 text-[#1E1B4B] dark:text-slate-100 hover:border-[#A5B4FC]'
                         }`}
                       >
-                        {style.cta}
+                        {tr(style.cta)}
                       </button>
                     </li>
                   );
@@ -687,13 +692,13 @@ export default function DashboardOverview() {
             className="rounded-[36px] bg-white dark:bg-slate-900 p-6 sm:p-7 flex flex-col gap-[18px]"
           >
             <h2 id="progress-heading" className="m-0 font-bold text-lg text-[#1E1B4B] dark:text-white">
-              Your progress
+              {t('Your progress')}
             </h2>
             {preTestsTaken === 0 ? (
               <div className="rounded-[22px] bg-[#EEF0FA] dark:bg-slate-800 p-5 flex flex-col gap-1">
-                <p className="m-0 font-bold text-[#1E1B4B] dark:text-white">No results yet</p>
+                <p className="m-0 font-bold text-[#1E1B4B] dark:text-white">{t('No results yet')}</p>
                 <p className="m-0 text-sm text-[#5B6477] dark:text-slate-400">
-                  Take a program's pre-test to start tracking your progress.
+                  {t('Take a program\'s pre-test to start tracking your progress.')}
                 </p>
               </div>
             ) : (
@@ -703,7 +708,7 @@ export default function DashboardOverview() {
                     {completedCount}
                   </span>
                   <span className="text-[13px] text-[#5B6477] dark:text-slate-400">
-                    {completedCount === 1 ? 'Program completed' : 'Programs completed'}
+                    {completedCount === 1 ? t('Program completed') : t('Programs completed')}
                   </span>
                 </div>
                 <div className="rounded-[22px] bg-[#EEF0FA] dark:bg-slate-800 p-[18px] flex flex-col gap-1">
@@ -711,16 +716,16 @@ export default function DashboardOverview() {
                     {preTestsTaken}
                   </span>
                   <span className="text-[13px] text-[#5B6477] dark:text-slate-400">
-                    {preTestsTaken === 1 ? 'Pre-test taken' : 'Pre-tests taken'}
+                    {preTestsTaken === 1 ? t('Pre-test taken') : t('Pre-tests taken')}
                   </span>
                 </div>
                 <div className="col-span-2 rounded-[22px] bg-[#D1FAE5] dark:bg-emerald-500/15 p-[18px] flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-[#065F46] dark:text-emerald-200">Best improvement</span>
+                  <span className="text-sm font-semibold text-[#065F46] dark:text-emerald-200">{t('Best improvement')}</span>
                   {bestImprovement === null ? (
-                    <span className="text-sm font-semibold text-[#065F46] dark:text-emerald-200">No results yet</span>
+                    <span className="text-sm font-semibold text-[#065F46] dark:text-emerald-200">{t('No results yet')}</span>
                   ) : (
                     <span className="font-bricolage font-extrabold text-[26px] leading-none text-[#065F46] dark:text-emerald-200">
-                      {formatPoints(bestImprovement)}
+                      {formatPoints(bestImprovement, tr)}
                     </span>
                   )}
                 </div>
@@ -734,10 +739,10 @@ export default function DashboardOverview() {
             className="rounded-[36px] bg-white dark:bg-slate-900 p-6 sm:p-7 flex flex-col gap-2"
           >
             <h2 id="updates-heading" className="m-0 font-bold text-lg text-[#1E1B4B] dark:text-white">
-              Updates
+              {t('Updates')}
             </h2>
             {notifications.length === 0 ? (
-              <p className="m-0 py-3 text-sm text-[#5B6477] dark:text-slate-400">No updates yet.</p>
+              <p className="m-0 py-3 text-sm text-[#5B6477] dark:text-slate-400">{t('No updates yet.')}</p>
             ) : (
               <ul className="m-0 p-0 list-none flex flex-col">
                 {notifications.map((n, index) => {
@@ -779,8 +784,7 @@ export default function DashboardOverview() {
           <aside className="rounded-[36px] bg-white dark:bg-slate-900 px-6 py-6 sm:px-7 flex gap-3.5 items-start">
             <HeartHandshake className="w-5 h-5 mt-0.5 shrink-0 text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
             <p className="m-0 text-sm leading-[1.55] text-[#334155] dark:text-slate-300">
-              <strong className="text-[#1E1B4B] dark:text-white">Need to talk to someone?</strong> Visit the Guidance Office at
-              your campus. Counseling happens there, in person.
+              <strong className="text-[#1E1B4B] dark:text-white">{t('Need to talk to someone?')}</strong> {t('Visit the Guidance Office at your campus. Counseling happens there, in person.')}
             </p>
           </aside>
         </div>

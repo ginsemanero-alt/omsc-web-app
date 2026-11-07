@@ -1,5 +1,6 @@
 import { ArrowRight, Lock } from "lucide-react";
 import { shortDescription, thumbnailFor, typeStyle, type MaterialPreview } from "../../lib/materialPreview";
+import { useT } from '../../i18n';
 
 // One IEC material as a visitor sees it: thumbnail, type, title, a short
 // description, and a clear "sign in" line. Opening it asks the parent to
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export default function MaterialPreviewCard({ material, signedIn, onOpen }: Props) {
+  const { t, tr } = useT();
   const style = typeStyle(material.type);
   const TypeIcon = style.icon;
   const cover = thumbnailFor(material);
@@ -26,8 +28,8 @@ export default function MaterialPreviewCard({ material, signedIn, onOpen }: Prop
       onClick={() => onOpen(material)}
       aria-label={
         signedIn
-          ? `Open ${style.label.toLowerCase()}: ${material.title}`
-          : `${style.label}: ${material.title}. Sign in to view this material.`
+          ? t('Open {kind}: {title}', { kind: tr(style.label).toLowerCase(), title: material.title })
+          : t('{label}: {title}. Sign in to view this material.', { label: tr(style.label), title: material.title })
       }
       className={`group text-left rounded-[28px] lg:rounded-[32px] bg-white overflow-hidden flex flex-col hover:shadow-[0_20px_40px_-20px_rgba(30,27,75,0.35)] hover:-translate-y-1 transition-all ${focusRing}`}
     >
@@ -44,7 +46,7 @@ export default function MaterialPreviewCard({ material, signedIn, onOpen }: Prop
           <TypeIcon className={`w-14 h-14 ${style.ink}`} strokeWidth={1.6} aria-hidden="true" />
         )}
         <span className={`absolute top-3.5 left-3.5 px-3 py-1.5 rounded-full bg-white font-extrabold text-xs ${style.ink}`}>
-          {style.label}
+          {tr(style.label)}
         </span>
       </div>
 
@@ -58,11 +60,11 @@ export default function MaterialPreviewCard({ material, signedIn, onOpen }: Prop
         <span className="mt-auto pt-2 inline-flex items-center gap-1.5 text-sm font-bold text-[#4338CA]">
           {signedIn ? (
             <>
-              Open <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              {t('Open')} <ArrowRight className="w-4 h-4" aria-hidden="true" />
             </>
           ) : (
             <>
-              <Lock className="w-4 h-4" aria-hidden="true" /> Sign in to view
+              <Lock className="w-4 h-4" aria-hidden="true" /> {t('Sign in to view')}
             </>
           )}
         </span>

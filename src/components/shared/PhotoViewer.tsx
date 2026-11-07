@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
 import ZoomableImage from './ZoomableImage';
+import { useT } from '../../i18n';
 
 export interface ViewerPhoto {
   url: string;
@@ -61,6 +62,7 @@ const SWIPE_THRESHOLD_PX = 50;
 // Full-size photo viewer: arrows, keyboard ← →, swipe on phones, a
 // "3 / 8" counter, and a thumbnail strip. Wraps around at either end.
 export default function PhotoViewer({ state, onChange }: PhotoViewerProps) {
+  const { t } = useT();
   const touchStartX = useRef<number | null>(null);
   // A swipe changes the photo only for a one-finger swipe on an unzoomed photo.
   const zoomed = useRef(false);
@@ -112,7 +114,7 @@ export default function PhotoViewer({ state, onChange }: PhotoViewerProps) {
   return (
     <Dialog open={!!state} onOpenChange={(open) => !open && onChange(null)}>
       <DialogContent className="flex flex-col max-w-5xl w-[95vw] p-0 gap-0 overflow-hidden bg-slate-950 border-none rounded-[2rem] shadow-2xl [&>button]:bg-black/50 [&>button]:rounded-full [&>button]:w-11 [&>button]:h-11 [&>button]:flex [&>button]:items-center [&>button]:justify-center [&>button]:right-3 [&>button]:top-3 [&>button]:text-white [&>button]:opacity-100 [&>button]:z-20">
-        <DialogTitle className="sr-only">{current?.caption || 'Photo'}</DialogTitle>
+        <DialogTitle className="sr-only">{current?.caption || t('Photo')}</DialogTitle>
 
         {current && (
           <>
@@ -153,7 +155,7 @@ export default function PhotoViewer({ state, onChange }: PhotoViewerProps) {
                   <button
                     type="button"
                     onClick={() => go(-1)}
-                    aria-label="Previous photo"
+                    aria-label={t('Previous photo')}
                     className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center transition-colors"
                   >
                     <ChevronLeft className="w-6 h-6" />
@@ -162,7 +164,7 @@ export default function PhotoViewer({ state, onChange }: PhotoViewerProps) {
                   <button
                     type="button"
                     onClick={() => go(1)}
-                    aria-label="Next photo"
+                    aria-label={t('Next photo')}
                     className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center transition-colors"
                   >
                     <ChevronRight className="w-6 h-6" />
@@ -184,7 +186,7 @@ export default function PhotoViewer({ state, onChange }: PhotoViewerProps) {
                       ref={i === index ? activeThumbRef : undefined}
                       type="button"
                       onClick={() => onChange({ photos, index: i })}
-                      aria-label={`Photo ${i + 1}`}
+                      aria-label={t('Photo {n}', { n: i + 1 })}
                       className={`h-12 w-16 sm:h-14 sm:w-20 shrink-0 rounded-lg overflow-hidden ring-2 transition-all ${
                         i === index ? 'ring-indigo-400 opacity-100' : 'ring-transparent opacity-50 hover:opacity-90'
                       }`}

@@ -1,4 +1,5 @@
 // Shared rules and wording for knowledge-assessment results (PHASE 34).
+import { plain, type Translate } from '../i18n/fill';
 
 // The post-test percentage that counts as passed: shown green in the
 // results and needed for the "Knowledge Check Passed" badge. The same
@@ -21,13 +22,18 @@ export function percentFrom(score: number | null | undefined, total: number | nu
   return Math.round((score * 100) / total);
 }
 
-export function formatPointChange(points: number): string {
-  const sign = points > 0 ? '+' : '';
-  return `${sign}${points} ${Math.abs(points) === 1 ? 'point' : 'points'}`;
+// The optional translator is passed by the student portal; everything else gets English.
+export function formatPointChange(points: number, tr: Translate = plain): string {
+  const signed = `${points > 0 ? '+' : ''}${points}`;
+  return Math.abs(points) === 1 ? tr('{points} point', { points: signed }) : tr('{points} points', { points: signed });
 }
 
 // "Pre-test 60% → Post-test 85% (+25 points)"
-export function formatComparison(prePct: number | null | undefined, postPct: number | null | undefined): string | null {
+export function formatComparison(
+  prePct: number | null | undefined,
+  postPct: number | null | undefined,
+  tr: Translate = plain
+): string | null {
   if (prePct === null || prePct === undefined || postPct === null || postPct === undefined) return null;
-  return `Pre-test ${prePct}% → Post-test ${postPct}% (${formatPointChange(postPct - prePct)})`;
+  return tr('Pre-test {pre}% → Post-test {post}% ({change})', { pre: prePct, post: postPct, change: formatPointChange(postPct - prePct, tr) });
 }

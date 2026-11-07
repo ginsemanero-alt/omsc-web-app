@@ -7,6 +7,8 @@ import {
   type BadgeId,
   type BadgeStatus,
 } from '../../lib/badges';
+import { PASS_THRESHOLD_PCT } from '../../lib/assessment';
+import { useT } from '../../i18n';
 
 // "My badges" on the student dashboard (PHASE 34). Display only, for the
 // student alone: no ranking, nothing about other students.
@@ -53,6 +55,7 @@ const TITLE: Record<Tone, string> = {
 };
 
 export default function MyBadges({ programSteps = null }: { programSteps?: number | null }) {
+  const { t, tr } = useT();
   const [statuses, setStatuses] = useState<BadgeStatus[] | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -92,10 +95,10 @@ export default function MyBadges({ programSteps = null }: { programSteps?: numbe
             id="badges-heading"
             className="m-0 font-bricolage font-extrabold text-[32px] lg:text-[34px] leading-tight tracking-[-0.02em] text-[#1E1B4B] dark:text-white"
           >
-            My badges
+            {t('My badges')}
           </h2>
           <p className="m-0 text-sm sm:text-[15px] text-[#5B6477] dark:text-slate-400">
-            Badges celebrate taking part and finishing programs. Only you can see them, and there is no ranking.
+            {t('Badges celebrate taking part and finishing programs. Only you can see them, and there is no ranking.')}
           </p>
         </div>
 
@@ -103,13 +106,13 @@ export default function MyBadges({ programSteps = null }: { programSteps?: numbe
           <div className="flex flex-col gap-2 w-full lg:w-[260px] shrink-0">
             <div className="flex items-baseline justify-between gap-3 text-sm">
               <span className="font-bold text-[#1E1B4B] dark:text-white">
-                {earnedCount} of {BADGE_DEFINITIONS.length} earned
+                {t('{earned} of {total} earned', { earned: earnedCount, total: BADGE_DEFINITIONS.length })}
               </span>
               <span className="text-[#5B6477] dark:text-slate-400">{percent}%</span>
             </div>
             <div
               role="progressbar"
-              aria-label="Badges earned"
+              aria-label={t('Badges earned')}
               aria-valuemin={0}
               aria-valuemax={BADGE_DEFINITIONS.length}
               aria-valuenow={earnedCount}
@@ -127,19 +130,19 @@ export default function MyBadges({ programSteps = null }: { programSteps?: numbe
       {failed ? (
         <div className="flex flex-wrap items-center gap-3">
           <p role="alert" className="m-0 text-sm font-semibold text-[#5B6477] dark:text-slate-400">
-            Couldn't load your badges.
+            {t('Couldn\'t load your badges.')}
           </p>
           <button
             type="button"
             onClick={load}
             className={`min-h-[44px] px-5 rounded-2xl bg-[#EEF0FA] dark:bg-slate-800 text-[#1E1B4B] dark:text-slate-100 font-bold text-sm hover:bg-[#E0E7FF] dark:hover:bg-slate-700 ${focusRing}`}
           >
-            Try again
+            {t('Try again')}
           </button>
         </div>
       ) : !statuses ? (
         <p role="status" className="m-0 flex items-center gap-2 text-sm text-[#5B6477] dark:text-slate-400">
-          <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Loading your badges...
+          <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> {t('Loading your badges...')}
         </p>
       ) : (
         <ul className="m-0 p-0 list-none grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
@@ -156,9 +159,9 @@ export default function MyBadges({ programSteps = null }: { programSteps?: numbe
             let progressLine: string | null = null;
             if (!earned) {
               if (definition.id === 'program_complete' && isNext && programSteps !== null) {
-                progressLine = `${programSteps} of 3 steps done`;
+                progressLine = tr('{n} of 3 steps done', { n: programSteps });
               } else if (progress && progress.target > 1) {
-                progressLine = `${progress.current} of ${progress.target} ${definition.unit ?? ''}`.trim();
+                progressLine = `${tr('{current} of {target}', { current: progress.current, target: progress.target })} ${definition.unit ? tr(definition.unit) : ''}`.trim();
               }
             }
 
@@ -170,7 +173,7 @@ export default function MyBadges({ programSteps = null }: { programSteps?: numbe
               >
                 {isNext && (
                   <span className="absolute top-4 right-4 px-2.5 py-1 rounded-full bg-[#4F46E5] text-white text-xs font-bold">
-                    Next up
+                    {t('Next up')}
                   </span>
                 )}
 
@@ -198,18 +201,18 @@ export default function MyBadges({ programSteps = null }: { programSteps?: numbe
                       isNext ? 'pr-16 md:pr-0' : ''
                     }`}
                   >
-                    {definition.title}
+                    {tr(definition.title)}
                   </h3>
 
                   <p className="m-0 text-sm leading-normal text-[#5B6477] dark:text-slate-300">
-                    {earned ? definition.description : definition.howToEarn}
+                    {tr(earned ? definition.description : definition.howToEarn, { pct: PASS_THRESHOLD_PCT })}
                   </p>
 
                   <div className="mt-auto pt-3 flex flex-col gap-1.5 items-start">
                     {earned ? (
                       <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-3 py-1.5 rounded-full bg-[#CFF5E1] dark:bg-emerald-500/20 text-[#065F46] dark:text-emerald-200 text-xs font-bold">
                         <Check className="w-3.5 h-3.5 shrink-0" strokeWidth={3} aria-hidden="true" />
-                        Earned
+                        {t('Earned')}
                         {date && <span className="font-semibold whitespace-nowrap">{date}</span>}
                       </span>
                     ) : (
@@ -221,7 +224,7 @@ export default function MyBadges({ programSteps = null }: { programSteps?: numbe
                         }`}
                       >
                         <Lock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                        Locked
+                        {t('Locked')}
                       </span>
                     )}
                     {progressLine && (

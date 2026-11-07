@@ -6,6 +6,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 // pdfjs-dist package exactly, or the worker silently refuses to load.
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Loader2, ChevronLeft, ChevronRight, ExternalLink, FileWarning } from 'lucide-react';
+import { useT } from '../../i18n';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -73,6 +74,7 @@ interface PdfPreviewProps {
  * itself, so it renders identically on every browser and device.
  */
 export default function PdfPreview({ url }: PdfPreviewProps) {
+  const { t } = useT();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
@@ -192,8 +194,7 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
           <FileWarning className="w-12 h-12 text-rose-400" />
         </div>
         <p className="text-slate-300 text-sm">
-          This PDF couldn't be previewed here — often a temporary connection
-          issue. You can try again, or open it directly.
+          {t('This PDF couldn\'t be previewed here — often a temporary connection issue. You can try again, or open it directly.')}
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <button
@@ -201,7 +202,7 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
             onClick={() => setRetryToken((t) => t + 1)}
             className="inline-flex items-center gap-2 h-12 px-8 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-black uppercase text-xs transition-colors"
           >
-            Try Again
+            {t('Try Again')}
           </button>
           <a
             href={url}
@@ -209,7 +210,7 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 h-12 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-xs"
           >
-            Open PDF <ExternalLink className="w-4 h-4" />
+            {t('Open PDF')} <ExternalLink className="w-4 h-4" />
           </a>
         </div>
       </div>
@@ -222,7 +223,7 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
         <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
           <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-            {loadProgress !== null ? `Loading PDF... ${loadProgress}%` : 'Loading PDF...'}
+            {loadProgress !== null ? t('Loading PDF... {loadProgress}%', { loadProgress: loadProgress }) : t('Loading PDF...')}
           </p>
         </div>
       ) : (
@@ -243,13 +244,13 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
                 disabled={pageNum <= 1}
                 onClick={() => setPageNum((p) => Math.max(1, p - 1))}
                 className="w-9 h-9 rounded-xl bg-white/10 text-white flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20 transition-colors"
-                aria-label="Previous page"
+                aria-label={t('Previous page')}
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
               <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Page {pageNum} / {numPages}
+                {t('Page')} {pageNum} / {numPages}
               </span>
 
               <button
@@ -257,7 +258,7 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
                 disabled={pageNum >= numPages}
                 onClick={() => setPageNum((p) => Math.min(numPages, p + 1))}
                 className="w-9 h-9 rounded-xl bg-white/10 text-white flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20 transition-colors"
-                aria-label="Next page"
+                aria-label={t('Next page')}
               >
                 <ChevronRight className="w-4 h-4" />
               </button>

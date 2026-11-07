@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Home, BookOpen, Calendar, ClipboardList, type LucideIcon } from 'lucide-react';
+import { useT } from '../../i18n';
 
 interface BottomNavItem {
   label: string;
@@ -24,6 +25,7 @@ interface StudentBottomNavProps {
 // drawer below 768px. Admin keeps the drawer untouched — this component
 // only ever renders where StudentDashboard mounts it.
 export default function StudentBottomNav({ items, currentPath }: StudentBottomNavProps) {
+  const { t, tr } = useT();
   // A fixed-position bar doesn't move with the on-screen keyboard the same
   // way across browsers — some leave it floating mid-screen above the
   // keyboard instead of pinned to the real viewport bottom. Hiding it
@@ -55,7 +57,7 @@ export default function StudentBottomNav({ items, currentPath }: StudentBottomNa
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       <nav
-        aria-label="Primary"
+        aria-label={t('Primary')}
         aria-hidden={keyboardOpen}
         className={`mx-3 mb-3 p-1.5 pointer-events-auto flex gap-1 rounded-[28px] bg-[#1E1B4B] shadow-[0_16px_40px_-12px_rgba(30,27,75,0.5)] transition-transform duration-200 ease-out ${
           keyboardOpen ? 'translate-y-[150%]' : 'translate-y-0'
@@ -76,7 +78,7 @@ export default function StudentBottomNav({ items, currentPath }: StudentBottomNa
               }`}
             >
               {ItemIcon && <ItemIcon className="w-5 h-5 shrink-0" strokeWidth={2} aria-hidden="true" />}
-              <span className="truncate max-w-full">{item.label}</span>
+              <span className="truncate max-w-full">{tr(item.label)}</span>
             </Link>
           );
         })}

@@ -4509,3 +4509,42 @@ SELECT column_name, data_type, is_nullable
 -- every end date that has been entered; the old client ignores the column.
 -- ---------------------------------------------------------
 -- ALTER TABLE programs DROP COLUMN IF EXISTS end_date;
+
+
+-- =========================================================
+-- PHASE 43: profiles.language (the student's chosen language: English / Tagalog)
+-- =========================================================
+-- Additive and harmless. NULL = no choice saved yet (the site shows English, or
+-- the language the device remembers). Run it BEFORE the client that reads or
+-- writes it is deployed. RLS needs no change: profiles_update_own_or_admin
+-- already lets a signed-in student update their own row (id = auth.uid()).
+-- The column is not read by any report, export or Analytics figure.
+
+BEGIN;
+
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS language text;
+
+ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_language_check;
+ALTER TABLE profiles ADD CONSTRAINT profiles_language_check
+  CHECK (language IS NULL OR language IN ('en', 'tl'));
+
+COMMENT ON COLUMN profiles.language IS
+  'Display language chosen by the student: en (English) or tl (Tagalog). NULL = not chosen yet.';
+
+COMMIT;
+
+-- CHECK (expect 2 rows: the column, then the constraint):
+SELECT 'column' AS what, column_name AS name, data_type || ' / nullable=' || is_nullable AS detail
+  FROM information_schema.columns
+ WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'language'
+UNION ALL
+SELECT 'constraint', conname, pg_get_constraintdef(oid)
+  FROM pg_constraint
+ WHERE conrelid = 'public.profiles'::regclass AND conname = 'profiles_language_check';
+
+-- ---------------------------------------------------------
+-- ROLLBACK of PHASE 43 (run only to undo it). Dropping the column deletes every
+-- saved language choice; the old client ignores the column.
+-- ---------------------------------------------------------
+-- ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_language_check;
+-- ALTER TABLE profiles DROP COLUMN IF EXISTS language;

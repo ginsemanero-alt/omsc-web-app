@@ -13,8 +13,10 @@ import { ALL_PROGRAMS, PROGRAMS_BY_CAMPUS, YEAR_LEVELS, normalizeYearLevel } fro
 import { 
   User, ShieldCheck, Loader2, Save, GraduationCap 
 } from 'lucide-react';
+import { useT } from '../../i18n';
 
 export default function StudentProfile() {
+  const { t, tr } = useT();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -65,7 +67,7 @@ export default function StudentProfile() {
       console.error('Error fetching profile:', error.message);
       toast({
         variant: "destructive",
-        title: "Error Loading Profile",
+        title: t('Error Loading Profile'),
         description: error.message
       });
     } finally {
@@ -93,8 +95,8 @@ export default function StudentProfile() {
 
     if (!fullName || !program || !yearLevel || !gender || !age) {
       toast({
-        title: "Validation Warning",
-        description: "Mangyaring kumpletuhin ang lahat ng kinakailangang impormasyon.",
+        title: t('Validation Warning'),
+        description: t('Mangyaring kumpletuhin ang lahat ng kinakailangang impormasyon.'),
         variant: "destructive"
       });
       return;
@@ -131,14 +133,14 @@ export default function StudentProfile() {
       if (error) throw error;
 
       toast({
-        title: "PROFILE UPDATED",
-        description: "Matagumpay na na-update ang iyong profile information.",
+        title: t('PROFILE UPDATED'),
+        description: t('Matagumpay na na-update ang iyong profile information.'),
         className: "bg-emerald-600 text-white font-bold rounded-2xl"
       });
     } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "UPDATE FAILED",
+        title: t('UPDATE FAILED'),
         description: error.message
       });
     } finally {
@@ -153,10 +155,10 @@ export default function StudentProfile() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b pb-6 border-slate-200 dark:border-slate-700">
         <div>
           <h1 className="text-3xl md:text-5xl font-black text-slate-900 dark:text-white tracking-tighter uppercase leading-none">
-            Student <span className="text-indigo-600">Profile</span>
+            {t('Student')} <span className="text-indigo-600">{t('Profile')}</span>
           </h1>
           <p className="text-slate-400 font-bold uppercase text-[9px] md:text-[10px] tracking-widest mt-2 flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" /> Demographics & Academic Profile Setup
+            <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" /> {t('Demographics & Academic Profile Setup')}
           </p>
         </div>
       </div>
@@ -174,14 +176,14 @@ export default function StudentProfile() {
               <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
                 <GraduationCap className="w-5 h-5 text-indigo-600" />
                 <h2 className="text-lg font-black uppercase tracking-tight text-slate-800 dark:text-slate-100">
-                  Academic Information
+                  {t('Academic Information')}
                 </h2>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                    Email Address
+                    {t('Email Address')}
                   </Label>
                   <Input 
                     type="email" 
@@ -193,7 +195,7 @@ export default function StudentProfile() {
 
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                    Full Name
+                    {t('Full Name')}
                   </Label>
                   <Input 
                     type="text" 
@@ -207,11 +209,11 @@ export default function StudentProfile() {
 
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                    Course / Program
+                    {t('Course / Program')}
                   </Label>
                   <Select value={program} onValueChange={setProgram} required>
                     <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold px-4 text-xs">
-                      <SelectValue placeholder="Select Course" />
+                      <SelectValue placeholder={t('Select Course')} />
                     </SelectTrigger>
                     {/* Same list and spellings as registration (lib/programs.ts),
                         for the student's own campus. A saved value that isn't
@@ -230,15 +232,15 @@ export default function StudentProfile() {
 
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                    Year Level
+                    {t('Year Level')}
                   </Label>
                   <Select value={yearLevel} onValueChange={setYearLevel} required>
                     <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold px-4 text-xs">
-                      <SelectValue placeholder="Select Year Level" />
+                      <SelectValue placeholder={t('Select Year Level')} />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl border-none shadow-2xl bg-white dark:bg-slate-900">
                       {YEAR_LEVELS.map((level) => (
-                        <SelectItem key={level.value} value={level.value}>{level.label}</SelectItem>
+                        <SelectItem key={level.value} value={level.value}>{tr(level.label)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -251,30 +253,30 @@ export default function StudentProfile() {
               <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
                 <User className="w-5 h-5 text-indigo-600" />
                 <h2 className="text-lg font-black uppercase tracking-tight text-slate-800 dark:text-slate-100">
-                  Demographics & Diversity
+                  {t('Demographics & Diversity')}
                 </h2>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                    Gender
+                    {t('Gender')}
                   </Label>
                   <Select value={gender} onValueChange={setGender} required>
                     <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold px-4 text-xs">
-                      <SelectValue placeholder="Select Gender" />
+                      <SelectValue placeholder={t('Select Gender')} />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl border-none shadow-2xl bg-white dark:bg-slate-900">
-                      <SelectItem value="Male">Male</SelectItem>
-                      <SelectItem value="Female">Female</SelectItem>
-                      <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
+                      <SelectItem value="Male">{t('Male')}</SelectItem>
+                      <SelectItem value="Female">{t('Female')}</SelectItem>
+                      <SelectItem value="Prefer not to say">{t('Prefer not to say')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                    Age
+                    {t('Age')}
                   </Label>
                   <Input 
                     type="number" 
@@ -298,8 +300,8 @@ export default function StudentProfile() {
                   }`}
                 >
                   <div className="space-y-0.5">
-                    <p className="font-extrabold text-xs">Person with Disability (PWD)</p>
-                    <p className="text-[10px] text-slate-400 font-medium">Are you a registered PWD student?</p>
+                    <p className="font-extrabold text-xs">{t('Person with Disability (PWD)')}</p>
+                    <p className="text-[10px] text-slate-400 font-medium">{t('Are you a registered PWD student?')}</p>
                   </div>
                   <Badge className={`uppercase text-[9px] font-black px-3 py-1 ${isPwd ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
                     {isPwd ? 'YES' : 'NO'}
@@ -313,8 +315,8 @@ export default function StudentProfile() {
                   }`}
                 >
                   <div className="space-y-0.5">
-                    <p className="font-extrabold text-xs">Indigenous People (IP)</p>
-                    <p className="text-[10px] text-slate-400 font-medium">Do you belong to an IP community?</p>
+                    <p className="font-extrabold text-xs">{t('Indigenous People (IP)')}</p>
+                    <p className="text-[10px] text-slate-400 font-medium">{t('Do you belong to an IP community?')}</p>
                   </div>
                   <Badge className={`uppercase text-[9px] font-black px-3 py-1 ${isIp ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
                     {isIp ? 'YES' : 'NO'}
@@ -333,7 +335,7 @@ export default function StudentProfile() {
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
                 <>
-                  <Save className="w-4 h-4" /> Save & Update Profile
+                  <Save className="w-4 h-4" /> {t('Save & Update Profile')}
                 </>
               )}
             </Button>

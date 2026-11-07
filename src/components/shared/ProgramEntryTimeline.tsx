@@ -1,4 +1,5 @@
-interface ProgramEntry {
+
+import { useT } from '../../i18n';interface ProgramEntry {
   id: number;
   label: string;
   description: string | null;
@@ -17,6 +18,7 @@ interface ProgramEntryTimelineProps {
 // Program Manager (as a "this is what students will see" preview) — one
 // rendering, so the admin's preview can never drift from the real thing.
 export default function ProgramEntryTimeline({ entries, onImageClick, className }: ProgramEntryTimelineProps) {
+  const { t } = useT();
   const sorted = entries.slice().sort((a, b) => a.sort_order - b.sort_order);
 
   if (sorted.length === 0) return null;
@@ -40,7 +42,7 @@ export default function ProgramEntryTimeline({ entries, onImageClick, className 
                 {entry.label}
                 {photos.length > 1 && (
                   <span className="ml-2 font-medium text-[13px] text-[#5B6477] dark:text-slate-400">
-                    {photos.length} photos
+                    {t('{n} photos', { n: photos.length })}
                   </span>
                 )}
               </p>
@@ -59,7 +61,7 @@ export default function ProgramEntryTimeline({ entries, onImageClick, className 
                         key={i}
                         type="button"
                         onClick={() => onImageClick(url, entry.label)}
-                        aria-label={`Enlarge photo ${i + 1} of ${photos.length}: ${entry.label}`}
+                        aria-label={t('Enlarge photo {n} of {total}: {label}', { n: i + 1, total: photos.length, label: entry.label })}
                         className="shrink-0 rounded-2xl focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
                       >
                         <img src={url} alt="" className="h-32 w-auto rounded-2xl object-cover" loading="lazy" />

@@ -17,7 +17,7 @@ import {
 } from '../../lib/materialProgress';
 import { PRE_TEST_PRIVACY_NOTE, formatComparison, formatPointChange, percentFrom } from '../../lib/assessment';
 import { formatProgramDate } from '../../lib/formatProgramDate';
-import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
+import { getEffectiveProgramStatus, compareProgramsForDisplay, programStatusLabel } from '../../lib/programStatus';
 import { logActivity } from '../../lib/activityLog';
 import { fetchViewerCampus, campusVisibilityFilter } from '../../lib/campuses';
 import { useAuth } from '../../hooks/useAuth';
@@ -27,6 +27,7 @@ import ProgramEntryTimeline from '../shared/ProgramEntryTimeline';
 import PhotoViewer, { collectProgramPhotos, viewerAt, type PhotoViewerState } from '../shared/PhotoViewer';
 import ZoomableImage from '../shared/ZoomableImage';
 import HostedVideoPlayer from '../shared/HostedVideoPlayer';
+import { useT } from '../../i18n';
 
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
 // this chunk unless someone actually opens a handout PDF preview.
@@ -149,8 +150,8 @@ function getMaterialProgress(data: MaterialProgressData | null, programId: numbe
 
 // Why the post-test is locked (e.g. "View 1 more material to unlock"),
 // or null when it's open.
-function getPostTestLock(data: MaterialProgressData | null, programId: number, failed: boolean): string | null {
-  return postTestLockFor(data, programId, failed);
+function getPostTestLock(data: MaterialProgressData | null, programId: number, failed: boolean, tr: (text: string, vars?: Record<string, string | number>) => string): string | null {
+  return postTestLockFor(data, programId, failed, tr);
 }
 
 // IEC material type -> icon and label. Older rows without a type fall
@@ -246,43 +247,48 @@ interface Step {
   state: StepState;
 }
 
-function stepsFor(assessment: ProgramAssessment, materials: MaterialProgress | null, lock: string | null): Step[] {
+function stepsFor(
+  assessment: ProgramAssessment,
+  materials: MaterialProgress | null,
+  lock: string | null,
+  tr: (text: string, vars?: Record<string, string | number>) => string
+): Step[] {
   const materialsDone = !!materials && materials.total > 0 && materials.viewed >= materials.total;
 
   switch (assessment.status) {
     case 'coming_soon':
       return [
-        { label: 'Pre-test', sub: 'Coming soon', state: 'next' },
-        { label: 'Read the materials', sub: 'Open now, below', state: 'next' },
-        { label: 'Post-test', sub: 'After the materials', state: 'next' },
+        { label: tr('Pre-test'), sub: tr('Coming soon'), state: 'next' },
+        { label: tr('Read the materials'), sub: tr('Open now, below'), state: 'next' },
+        { label: tr('Post-test'), sub: tr('After the materials'), state: 'next' },
       ];
     case 'not_taken':
       return [
-        { label: 'Pre-test', sub: 'Take it before the materials', state: 'now' },
-        { label: 'Read the materials', sub: 'After the pre-test', state: 'next' },
-        { label: 'Post-test', sub: 'After the materials', state: 'next' },
+        { label: tr('Pre-test'), sub: tr('Take it before the materials'), state: 'now' },
+        { label: tr('Read the materials'), sub: tr('After the pre-test'), state: 'next' },
+        { label: tr('Post-test'), sub: tr('After the materials'), state: 'next' },
       ];
     case 'in_progress':
       return [
-        { label: 'Pre-test submitted', sub: longDate(assessment.pre!.created_at), state: 'done' },
+        { label: tr('Pre-test submitted'), sub: longDate(assessment.pre!.created_at), state: 'done' },
         {
-          label: 'Read the materials',
+          label: tr('Read the materials'),
           sub: !materials
-            ? 'Open them below'
+            ? tr('Open them below')
             : materials.total === 0
-              ? 'Coming soon'
-              : `${materials.viewed} of ${materials.total} viewed`,
+              ? tr('Coming soon')
+              : tr('{viewed} of {total} viewed', { viewed: materials.viewed, total: materials.total }),
           state: materialsDone ? 'done' : 'now',
         },
         lock
-          ? { label: 'Post-test', sub: 'Opens after the materials', state: 'locked' }
-          : { label: 'Post-test', sub: 'Open now', state: 'now' },
+          ? { label: tr('Post-test'), sub: tr('Opens after the materials'), state: 'locked' }
+          : { label: tr('Post-test'), sub: tr('Open now'), state: 'now' },
       ];
     case 'completed':
       return [
-        { label: 'Pre-test submitted', sub: longDate(assessment.pre!.created_at), state: 'done' },
-        { label: 'Read the materials', sub: 'Done', state: 'done' },
-        { label: 'Post-test submitted', sub: longDate(assessment.post!.created_at), state: 'done' },
+        { label: tr('Pre-test submitted'), sub: longDate(assessment.pre!.created_at), state: 'done' },
+        { label: tr('Read the materials'), sub: tr('Done'), state: 'done' },
+        { label: tr('Post-test submitted'), sub: longDate(assessment.post!.created_at), state: 'done' },
       ];
   }
 }
@@ -292,6 +298,7 @@ function stepsFor(assessment: ProgramAssessment, materials: MaterialProgress | n
 /* ------------------------------------------------------------------ */
 
 export default function ProgramsActivities() {
+  const { t, tr, language } = useT();
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user, userName: authUserName, dbUserId, loading: authLoading } = useAuth();
@@ -392,8 +399,8 @@ export default function ProgramsActivities() {
       setLoadFailed(true);
       toast({
         variant: "destructive",
-        title: "SYNC ERROR",
-        description: err.message || "Failed to connect to database.",
+        title: t('SYNC ERROR'),
+        description: err.message || t('Failed to connect to database.'),
       });
     } finally {
       setLoading(false);
@@ -537,7 +544,7 @@ export default function ProgramsActivities() {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
-        <p className="text-slate-500 font-bold text-[10px] uppercase tracking-widest">Syncing Cloud Data...</p>
+        <p className="text-slate-500 font-bold text-[10px] uppercase tracking-widest">{t('Syncing Cloud Data...')}</p>
       </div>
     );
   }
@@ -554,9 +561,9 @@ export default function ProgramsActivities() {
     const assessment = resolveAssessment(program.id, knowledgeSurveys, responses);
     const assessmentBadge = ASSESSMENT_BADGE[assessment.status];
     const materialsLoading = !materialData && !materialLoadFailed;
-    const postTestLock = getPostTestLock(materialData, program.id, materialLoadFailed);
+    const postTestLock = getPostTestLock(materialData, program.id, materialLoadFailed, tr);
     const materialProgress = getMaterialProgress(materialData, program.id);
-    const steps = stepsFor(assessment, materialProgress, postTestLock);
+    const steps = stepsFor(assessment, materialProgress, postTestLock, tr);
     const linkedMaterials = linkedMaterialsFor(materialData, program.id);
     const handouts = program.materials?.filter((m) => !m.title?.startsWith('CERTIFICATE_TEMPLATE:')) || [];
     const entries = program.program_entries || [];
@@ -579,7 +586,7 @@ export default function ProgramsActivities() {
     return (
       <div className="w-full max-w-[1440px] mx-auto font-figtree text-[#1E293B] dark:text-slate-200 animate-in fade-in duration-300">
         {/* Breadcrumb */}
-        <nav aria-label="Breadcrumb" className="mb-4">
+        <nav aria-label={t('Breadcrumb')} className="mb-4">
           <ol className="m-0 p-0 list-none flex items-center flex-wrap gap-1 text-sm text-[#5B6477] dark:text-slate-400">
             <li>
               <button
@@ -587,7 +594,7 @@ export default function ProgramsActivities() {
                 onClick={() => closeProgram()}
                 className={`min-h-[44px] px-1 -ml-1 rounded-lg font-bold text-[#4338CA] dark:text-indigo-300 hover:underline ${focusRing}`}
               >
-                Programs
+                {t('Programs')}
               </button>
             </li>
             <li aria-hidden="true">
@@ -605,7 +612,7 @@ export default function ProgramsActivities() {
             <button
               type="button"
               onClick={() => setPhotoViewer(viewerAt(photos, poster, program.title))}
-              aria-label={`Enlarge poster: ${program.title}`}
+              aria-label={t('Enlarge poster: {title}', { title: program.title })}
               className={`group relative w-full h-56 sm:h-72 xl:w-[260px] xl:h-[260px] rounded-[28px] xl:rounded-[32px] overflow-hidden bg-[#E0E7FF] ${focusRing}`}
             >
               <img src={poster} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -616,10 +623,10 @@ export default function ProgramsActivities() {
 
             <div className="flex flex-col gap-3.5 min-w-0 px-1 sm:px-0">
               <div className="flex flex-wrap gap-2">
-                <span className={`px-3 py-1.5 rounded-full font-extrabold text-xs ${statusBadge.className}`}>{statusBadge.label}</span>
+                <span className={`px-3 py-1.5 rounded-full font-extrabold text-xs ${statusBadge.className}`}>{tr(statusBadge.label)}</span>
                 {!assessmentLoading && !assessmentLoadFailed && (
                   <span className={`px-3 py-1.5 rounded-full font-bold text-xs ${assessmentBadge.className}`}>
-                    {assessmentBadge.label}
+                    {tr(assessmentBadge.label)}
                   </span>
                 )}
               </div>
@@ -639,7 +646,7 @@ export default function ProgramsActivities() {
               )}
               {program.content && (
                 <div className="pt-1">
-                  <h2 className="m-0 font-bold text-[15px] text-[#1E1B4B] dark:text-white">About this program</h2>
+                  <h2 className="m-0 font-bold text-[15px] text-[#1E1B4B] dark:text-white">{t('About this program')}</h2>
                   <p className="m-0 mt-1 text-[15px] leading-relaxed text-[#334155] dark:text-slate-300 whitespace-pre-wrap">
                     {program.content}
                   </p>
@@ -659,31 +666,31 @@ export default function ProgramsActivities() {
                 id="assessment-heading"
                 className="m-0 font-bricolage font-extrabold text-2xl tracking-[-0.02em]"
               >
-                Your pre- and post-test
+                {t('Your pre- and post-test')}
               </h2>
 
               {assessmentLoading || materialsLoading ? (
                 <p className="m-0 flex items-center gap-2 text-sm text-[#C7C9F2]">
-                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Checking your progress...
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> {t('Checking your progress...')}
                 </p>
               ) : assessmentLoadFailed ? (
                 <div className="flex flex-col gap-3">
                   <p className="m-0 flex gap-2 text-sm text-[#C7C9F2]">
                     <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
-                    Couldn't load your assessment status.
+                    {t('Couldn\'t load your assessment status.')}
                   </p>
                   <button
                     type="button"
                     onClick={fetchAssessments}
                     className={`h-11 rounded-2xl bg-white/[0.12] hover:bg-white/20 text-white font-bold text-[15px] ${focusRing}`}
                   >
-                    Try again
+                    {t('Try again')}
                   </button>
                 </div>
               ) : (
                 <>
                   {assessment.status === 'coming_soon' && (
-                    <p className="m-0 font-bold text-[15px] text-[#FBBF24]">Pre-test coming soon</p>
+                    <p className="m-0 font-bold text-[15px] text-[#FBBF24]">{t('Pre-test coming soon')}</p>
                   )}
 
                   <ol className="m-0 p-0 list-none flex flex-col gap-3.5">
@@ -710,7 +717,7 @@ export default function ProgramsActivities() {
                         <span className="flex flex-col min-w-0">
                           <span className={`font-bold text-[15px] ${step.state === 'next' || step.state === 'locked' ? 'text-[#C7C9F2]' : 'text-white'}`}>
                             <span className="sr-only">
-                              {step.state === 'done' ? 'Done: ' : step.state === 'now' ? 'Current step: ' : step.state === 'locked' ? 'Locked: ' : ''}
+                              {step.state === 'done' ? t('Done:') + ' ' : step.state === 'now' ? t('Current step:') + ' ' : step.state === 'locked' ? t('Locked:') + ' ' : ''}
                             </span>
                             {step.label}
                           </span>
@@ -722,13 +729,13 @@ export default function ProgramsActivities() {
 
                   {assessment.status === 'in_progress' && assessment.pre?.score != null && (
                     <p className="m-0 text-sm font-semibold text-white">
-                      Pre-test score: {scoreText(assessment.pre)}
+                      {t('Pre-test score:')} {scoreText(assessment.pre)}
                       {prePct !== null ? ` (${prePct}%)` : ''}
                     </p>
                   )}
 
-                  {assessment.status === 'completed' && formatComparison(prePct, postPct) && (
-                    <p className="m-0 text-sm font-semibold text-white">{formatComparison(prePct, postPct)}</p>
+                  {assessment.status === 'completed' && formatComparison(prePct, postPct, tr) && (
+                    <p className="m-0 text-sm font-semibold text-white">{formatComparison(prePct, postPct, tr)}</p>
                   )}
 
                   {assessment.status === 'completed' && (
@@ -736,10 +743,10 @@ export default function ProgramsActivities() {
                       {[
                         { label: 'Pre-test', value: scoreText(assessment.pre) },
                         { label: 'Post-test', value: scoreText(assessment.post) },
-                        { label: 'Change', value: improvement === null ? '—' : formatPoints(improvement) },
+                        { label: 'Change', value: improvement === null ? '—' : formatPoints(improvement, tr) },
                       ].map((tile) => (
                         <div key={tile.label} className="rounded-2xl bg-white/10 px-3 py-3 flex flex-col gap-0.5 min-w-0">
-                          <dt className="text-xs text-[#C7C9F2]">{tile.label}</dt>
+                          <dt className="text-xs text-[#C7C9F2]">{tr(tile.label)}</dt>
                           <dd className="m-0 font-bricolage font-extrabold text-lg leading-tight text-white break-words">{tile.value}</dd>
                         </div>
                       ))}
@@ -752,7 +759,7 @@ export default function ProgramsActivities() {
                       onClick={() => navigate(`${ASSESSMENT_PATH}?survey=${assessment.surveyId}`)}
                       className={`h-[52px] rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-[#1E1B4B] font-extrabold text-[15px] transition-colors ${focusRing}`}
                     >
-                      Take pre-test
+                      {t('Take pre-test')}
                     </button>
                   )}
 
@@ -766,7 +773,7 @@ export default function ProgramsActivities() {
                             aria-describedby="post-test-lock-reason"
                             className="h-[52px] rounded-2xl bg-white/[0.12] text-[#C7C9F2] font-bold text-[15px] cursor-not-allowed flex items-center justify-center gap-2"
                           >
-                            <Lock className="w-4 h-4" aria-hidden="true" /> Take post-test
+                            <Lock className="w-4 h-4" aria-hidden="true" /> {t('Take post-test')}
                           </button>
                           <p id="post-test-lock-reason" className="m-0 -mt-1 text-sm font-semibold text-[#FBBF24]">
                             {postTestLock}
@@ -778,11 +785,11 @@ export default function ProgramsActivities() {
                           onClick={() => navigate(`${ASSESSMENT_PATH}?survey=${assessment.surveyId}`)}
                           className={`h-[52px] rounded-2xl bg-[#FBBF24] hover:bg-[#F59E0B] text-[#1E1B4B] font-extrabold text-[15px] transition-colors ${focusRing}`}
                         >
-                          Take post-test
+                          {t('Take post-test')}
                         </button>
                       )}
                       <p className="m-0 text-[13px] leading-normal text-[#A5A8E0]">
-                        {PRE_TEST_PRIVACY_NOTE}
+                        {tr(PRE_TEST_PRIVACY_NOTE)}
                       </p>
                     </>
                   )}
@@ -793,7 +800,7 @@ export default function ProgramsActivities() {
                       onClick={() => navigate(`${ASSESSMENT_PATH}?view=results`)}
                       className={`h-[52px] rounded-2xl bg-white hover:bg-[#E0E7FF] text-[#1E1B4B] font-extrabold text-[15px] transition-colors ${focusRing}`}
                     >
-                      See results
+                      {t('See results')}
                     </button>
                   )}
                 </>
@@ -808,7 +815,7 @@ export default function ProgramsActivities() {
             >
               <div className="flex justify-between items-baseline gap-3 px-1">
                 <h2 id="materials-heading" className="m-0 font-bold text-lg text-[#1E1B4B] dark:text-white">
-                  Materials
+                  {t('Materials')}
                 </h2>
                 {materialProgress && materialProgress.total > 0 && (
                   <span
@@ -818,31 +825,31 @@ export default function ProgramsActivities() {
                         : 'text-[#92400E] dark:text-amber-200'
                     }`}
                   >
-                    {materialProgress.viewed} of {materialProgress.total} viewed
+                    {tr('{viewed} of {total} viewed', { viewed: materialProgress.viewed, total: materialProgress.total })}
                   </span>
                 )}
               </div>
 
               {materialsLoading ? (
                 <p className="m-0 px-1 flex items-center gap-2 text-sm text-[#5B6477] dark:text-slate-400">
-                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Loading materials...
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> {t('Loading materials...')}
                 </p>
               ) : materialLoadFailed ? (
                 <div className="flex flex-col gap-2 px-1">
                   <p className="m-0 flex gap-2 text-sm text-[#5B6477] dark:text-slate-400">
                     <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
-                    Couldn't load the program's materials.
+                    {t('Couldn\'t load the program\'s materials.')}
                   </p>
                   <button
                     type="button"
                     onClick={fetchMaterialProgress}
                     className={`self-start h-11 px-4 rounded-xl bg-[#F5F6FB] dark:bg-slate-800 hover:bg-[#E0E7FF] text-[#4338CA] dark:text-indigo-200 font-bold text-sm ${focusRing}`}
                   >
-                    Try again
+                    {t('Try again')}
                   </button>
                 </div>
               ) : linkedMaterials.length === 0 ? (
-                <p className="m-0 px-1 text-sm text-[#5B6477] dark:text-slate-400">{MATERIALS_COMING_SOON}</p>
+                <p className="m-0 px-1 text-sm text-[#5B6477] dark:text-slate-400">{tr(MATERIALS_COMING_SOON)}</p>
               ) : (
                 <ul className="m-0 p-0 list-none flex flex-col gap-2.5">
                   {linkedMaterials.map((material) => {
@@ -872,11 +879,11 @@ export default function ProgramsActivities() {
                           <span className="text-xs text-[#5B6477] dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-1">
                             <span className="inline-flex items-center gap-1.5">
                               {(material.thumb_url || (material.type === 'Video' && material.image_url)) && <KindIcon className="w-3.5 h-3.5" aria-hidden="true" />}
-                              {kind.label}
+                              {tr(kind.label)}
                             </span>
                             {viewed === true && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#D1FAE5] text-[#065F46] dark:bg-emerald-500/20 dark:text-emerald-200 font-bold">
-                                <Check className="w-3 h-3" strokeWidth={3} aria-hidden="true" /> Viewed
+                                <Check className="w-3 h-3" strokeWidth={3} aria-hidden="true" /> {t('Viewed')}
                               </span>
                             )}
                           </span>
@@ -884,10 +891,10 @@ export default function ProgramsActivities() {
                         <button
                           type="button"
                           onClick={() => openLinkedMaterial(material)}
-                          aria-label={`Open ${material.title}`}
+                          aria-label={t('Open {title}', { title: material.title })}
                           className={`h-11 px-4 shrink-0 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[13px] transition-colors ${focusRing}`}
                         >
-                          Open
+                          {t('Open')}
                         </button>
                       </li>
                     );
@@ -898,8 +905,8 @@ export default function ProgramsActivities() {
               {handouts.length > 0 && (
                 <div className="flex flex-col gap-2.5 pt-1">
                   <div className="px-1">
-                    <h3 className="m-0 font-bold text-[15px] text-[#1E1B4B] dark:text-white">Session handouts</h3>
-                    <p className="m-0 text-xs text-[#5B6477] dark:text-slate-400">Extra reading from the session. These don't unlock the post-test.</p>
+                    <h3 className="m-0 font-bold text-[15px] text-[#1E1B4B] dark:text-white">{t('Session handouts')}</h3>
+                    <p className="m-0 text-xs text-[#5B6477] dark:text-slate-400">{t('Extra reading from the session. These don\'t unlock the post-test.')}</p>
                   </div>
                   <ul className="m-0 p-0 list-none flex flex-col gap-2.5">
                     {handouts.map((material) => {
@@ -913,15 +920,15 @@ export default function ProgramsActivities() {
                           </span>
                           <span className="grow flex flex-col gap-0.5 min-w-0">
                             <span className="font-bold text-sm text-[#1E1B4B] dark:text-white break-words">{title}</span>
-                            <span className="text-xs text-[#5B6477] dark:text-slate-400">{kind.label}</span>
+                            <span className="text-xs text-[#5B6477] dark:text-slate-400">{tr(kind.label)}</span>
                           </span>
                           <button
                             type="button"
                             onClick={() => setPreviewHandout({ url: material.file_url, title })}
-                            aria-label={`Open ${title}`}
+                            aria-label={t('Open {title}', { title: title })}
                             className={`h-11 px-4 shrink-0 rounded-xl bg-white dark:bg-slate-700 hover:bg-[#E0E7FF] text-[#4338CA] dark:text-indigo-200 font-bold text-[13px] transition-colors ${focusRing}`}
                           >
-                            Open
+                            {t('Open')}
                           </button>
                         </li>
                       );
@@ -944,7 +951,7 @@ export default function ProgramsActivities() {
                     id="covered-heading"
                     className="m-0 font-bricolage font-extrabold text-[22px] sm:text-[26px] tracking-[-0.02em] text-[#1E1B4B] dark:text-white"
                   >
-                    What the program covered
+                    {t('What the program covered')}
                   </h2>
                   <ProgramEntryTimeline
                     entries={entries}
@@ -959,7 +966,7 @@ export default function ProgramsActivities() {
                     id={entries.length > 0 ? undefined : 'covered-heading'}
                     className="m-0 font-bold text-base text-[#1E1B4B] dark:text-white"
                   >
-                    More photos <span className="font-medium text-[#5B6477] dark:text-slate-400">{program.gallery_urls!.length}</span>
+                    {t('More photos')} <span className="font-medium text-[#5B6477] dark:text-slate-400">{program.gallery_urls!.length}</span>
                   </h2>
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     {program.gallery_urls!.map((url, i) => (
@@ -967,7 +974,7 @@ export default function ProgramsActivities() {
                         key={i}
                         type="button"
                         onClick={() => setPhotoViewer(viewerAt(photos, url, program.title))}
-                        aria-label={`Enlarge photo ${i + 1} of ${program.gallery_urls!.length}`}
+                        aria-label={t('Enlarge photo {n} of {total}', { n: i + 1, total: program.gallery_urls!.length })}
                         className={`shrink-0 rounded-2xl ${focusRing}`}
                       >
                         <img src={url} alt="" className="h-28 w-auto rounded-2xl object-cover" loading="lazy" />
@@ -1032,7 +1039,7 @@ export default function ProgramsActivities() {
                 fallback={
                   <div className="flex flex-col items-center justify-center gap-3">
                     <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
-                    <p className="text-sm text-slate-400">Loading PDF...</p>
+                    <p className="text-sm text-slate-400">{t('Loading PDF...')}</p>
                   </div>
                 }
               >
@@ -1045,14 +1052,14 @@ export default function ProgramsActivities() {
             ) : (
               <div className="text-center px-6">
                 <HardDrive className="w-16 h-16 text-slate-700 dark:text-slate-200 mx-auto" />
-                <p className="font-bold text-slate-400 mt-4 text-sm">Preview not available for this file type</p>
-                <p className="text-slate-400 text-[13px] mt-1">Download it below to open it.</p>
+                <p className="font-bold text-slate-400 mt-4 text-sm">{t('Preview not available for this file type')}</p>
+                <p className="text-slate-400 text-[13px] mt-1">{t('Download it below to open it.')}</p>
               </div>
             )}
           </div>
 
           <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 shrink-0">
-            <Button variant="ghost" onClick={() => setPreviewHandout(null)} className="h-11 rounded-xl font-bold text-sm">Close</Button>
+            <Button variant="ghost" onClick={() => setPreviewHandout(null)} className="h-11 rounded-xl font-bold text-sm">{t('Close')}</Button>
             {/* Downloading from an open preview is part of the same open:
                 the view was recorded when it opened. A YouTube video has
                 nothing to download. */}
@@ -1067,7 +1074,7 @@ export default function ProgramsActivities() {
                 }}
                 className="h-11 bg-[#4F46E5] hover:bg-[#4338CA] rounded-xl font-bold text-sm px-6 text-white"
               >
-                <Download className="w-4 h-4 mr-2" /> Download
+                <Download className="w-4 h-4 mr-2" /> {t('Download')}
               </Button>
             )}
           </div>
@@ -1082,9 +1089,9 @@ export default function ProgramsActivities() {
     <div className="space-y-6 md:space-y-8 p-4 md:p-6 pb-20 max-w-7xl mx-auto font-sans w-full overflow-hidden animate-in fade-in duration-300">
       <div>
         <h1 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase mb-1">
-          Programs & <span className="text-indigo-600">Activities</span>
+          {t('Programs &')} <span className="text-indigo-600">{t('Activities')}</span>
         </h1>
-        <p className="text-slate-400 font-bold text-[9px] uppercase tracking-wider">Guidance and development events console</p>
+        <p className="text-slate-400 font-bold text-[9px] uppercase tracking-wider">{t('Guidance and development events console')}</p>
       </div>
 
       {/* ?program=<id> that doesn't match a program this student can see */}
@@ -1092,12 +1099,12 @@ export default function ProgramsActivities() {
         <div role="status" className="flex items-center justify-between gap-3 rounded-2xl bg-[#FEF3C7] dark:bg-amber-500/15 text-[#92400E] dark:text-amber-200 pl-4 pr-1 py-1 font-figtree">
           <p className="m-0 flex items-center gap-2 text-sm font-semibold">
             <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
-            Program not found. It may have been removed or isn't available for your campus.
+            {t('Program not found. It may have been removed or isn\'t available for your campus.')}
           </p>
           <button
             type="button"
             onClick={() => closeProgram({ replace: true })}
-            aria-label="Dismiss message"
+            aria-label={t('Dismiss message')}
             className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center hover:bg-black/5 ${focusRing}`}
           >
             <X className="w-4 h-4" aria-hidden="true" />
@@ -1110,7 +1117,7 @@ export default function ProgramsActivities() {
         <div className="flex-1 relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
-            placeholder="Filter active activity titles..."
+            placeholder={t('Filter active activity titles...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-11 h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold text-xs md:text-sm text-slate-700 dark:text-slate-200 focus-visible:ring-2 focus-visible:ring-indigo-100 w-full"
@@ -1118,10 +1125,10 @@ export default function ProgramsActivities() {
         </div>
         <Select value={guidanceServiceFilter} onValueChange={setGuidanceServiceFilter}>
           <SelectTrigger className="w-full sm:w-56 h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold text-slate-600 dark:text-slate-300 uppercase text-[10px] tracking-widest">
-            <SelectValue placeholder="Guidance Service" />
+            <SelectValue placeholder={t('Guidance Service')} />
           </SelectTrigger>
           <SelectContent className="rounded-xl border-none shadow-xl bg-white dark:bg-slate-900">
-            <SelectItem value="all">All Guidance Services</SelectItem>
+            <SelectItem value="all">{t('All Guidance Services')}</SelectItem>
             {GUIDANCE_SERVICES.map((service) => (
               <SelectItem key={service} value={service}>{service}</SelectItem>
             ))}
@@ -1129,10 +1136,10 @@ export default function ProgramsActivities() {
         </Select>
         <Select value={programComponentFilter} onValueChange={setProgramComponentFilter}>
           <SelectTrigger className="w-full sm:w-56 h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold text-slate-600 dark:text-slate-300 uppercase text-[10px] tracking-widest">
-            <SelectValue placeholder="Program Component" />
+            <SelectValue placeholder={t('Program Component')} />
           </SelectTrigger>
           <SelectContent className="rounded-xl border-none shadow-xl bg-white dark:bg-slate-900">
-            <SelectItem value="all">All Program Components</SelectItem>
+            <SelectItem value="all">{t('All Program Components')}</SelectItem>
             {PROGRAM_COMPONENTS.map((component) => (
               <SelectItem key={component} value={component}>{component}</SelectItem>
             ))}
@@ -1142,10 +1149,10 @@ export default function ProgramsActivities() {
 
       {loadFailed && (
         <div role="alert" className="rounded-3xl bg-white dark:bg-slate-900 px-6 py-10 text-center flex flex-col items-center gap-3 border border-slate-100 dark:border-slate-800">
-          <p className="m-0 font-bold text-slate-800 dark:text-slate-100">We couldn't load the programs.</p>
-          <p className="m-0 text-sm text-slate-500 dark:text-slate-400">Check your internet connection, then try again.</p>
+          <p className="m-0 font-bold text-slate-800 dark:text-slate-100">{t('We couldn\'t load the programs.')}</p>
+          <p className="m-0 text-sm text-slate-500 dark:text-slate-400">{t('Check your internet connection, then try again.')}</p>
           <button type="button" onClick={() => fetchData()} className={`min-h-[44px] px-5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm ${focusRing}`}>
-            Try again
+            {t('Try again')}
           </button>
         </div>
       )}
@@ -1175,17 +1182,17 @@ export default function ProgramsActivities() {
               </div>
               <div className={`absolute top-4 right-4 px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm
                 ${effectiveStatus === 'ongoing' ? 'bg-emerald-500 text-white animate-pulse' : effectiveStatus === 'completed' ? 'bg-slate-700 text-white' : effectiveStatus === 'postponed' ? 'bg-orange-600 text-white' : effectiveStatus === 'cancelled' ? 'bg-rose-700 text-white' : 'bg-indigo-600 text-white'}`}>
-                {effectiveStatus}
+                {language === 'tl' ? tr(programStatusLabel(effectiveStatus)) : effectiveStatus}
               </div>
             </div>
 
             <div className="px-6 md:px-8 space-y-3 -mt-2">
               <div className="flex flex-wrap gap-2">
                 <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase tracking-widest rounded-md inline-block">
-                  {program.guidance_service || 'General Guidance'}
+                  {program.guidance_service || t('General Guidance')}
                 </span>
                 <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-widest rounded-md inline-block">
-                  {program.program_component || 'General'}
+                  {program.program_component || t('General')}
                 </span>
               </div>
               <h3 className="text-xl md:text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight uppercase leading-tight max-w-[85%]">
@@ -1200,7 +1207,7 @@ export default function ProgramsActivities() {
               </div>
               <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-50/70 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100/30 dark:border-slate-700/30">
                 <Clock className="w-4 h-4 text-indigo-500 shrink-0" />
-                <span className="truncate">{program.time_range || 'All Day Schedule'}</span>
+                <span className="truncate">{program.time_range || t('All Day Schedule')}</span>
               </div>
               <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-50/70 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100/30 dark:border-slate-700/30 sm:col-span-2">
                 <MapPin className="w-4 h-4 text-indigo-500 shrink-0" />
@@ -1214,7 +1221,7 @@ export default function ProgramsActivities() {
                 className="w-full border-t border-dashed rounded-none pt-4 justify-between text-indigo-600 hover:text-indigo-700 hover:bg-transparent px-0 font-black text-[9px] md:text-[10px] uppercase tracking-widest transition-colors"
                 onClick={() => openProgram(program.id)}
               >
-                View Details
+                {t('View Details')}
                 <ChevronRight className="w-4 h-4" />
               </Button>
             </div>

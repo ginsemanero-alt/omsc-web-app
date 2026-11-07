@@ -1,5 +1,6 @@
 import { Button } from './button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useT } from '../../i18n';
 
 interface PaginationControlsProps {
   page: number;
@@ -27,6 +28,7 @@ export function PaginationControls({
   className = '',
   variant = 'default',
 }: PaginationControlsProps) {
+  const { t } = useT();
   if (totalItems === 0 || totalPages <= 1) return null;
 
   const start = (page - 1) * pageSize + 1;
@@ -36,19 +38,19 @@ export function PaginationControls({
     const buttonClass =
       'h-11 px-4 rounded-xl border-[1.5px] border-[#DDE1EE] bg-white text-[#1E1B4B] font-bold text-sm flex items-center gap-1.5 hover:border-[#A5B4FC] disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]';
     return (
-      <nav aria-label="Pagination" className={`flex flex-col sm:flex-row items-center justify-between gap-3 font-figtree ${className}`}>
+      <nav aria-label={t('Pagination')} className={`flex flex-col sm:flex-row items-center justify-between gap-3 font-figtree ${className}`}>
         <p className="m-0 text-sm text-[#5B6477]">
-          Showing {start}&ndash;{end} of {totalItems}
+          {t('Showing {start}–{end} of {total}', { start, end, total: totalItems })}
         </p>
         <div className="flex items-center gap-2">
           <button type="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)} className={buttonClass}>
-            <ChevronLeft className="w-4 h-4" aria-hidden="true" /> Previous
+            <ChevronLeft className="w-4 h-4" aria-hidden="true" /> {t('Previous')}
           </button>
           <span className="text-sm font-semibold text-[#334155] px-2 whitespace-nowrap">
-            Page {page} of {totalPages}
+            {t('Page {page} of {pages}', { page, pages: totalPages })}
           </span>
           <button type="button" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} className={buttonClass}>
-            Next <ChevronRight className="w-4 h-4" aria-hidden="true" />
+            {t('Next')} <ChevronRight className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
       </nav>
@@ -58,7 +60,7 @@ export function PaginationControls({
   return (
     <div className={`flex flex-col sm:flex-row items-center justify-between gap-3 ${className}`}>
       <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-        Showing {start}&ndash;{end} of {totalItems}
+        {t('Showing {start}–{end} of {total}', { start, end, total: totalItems })}
       </p>
       <div className="flex items-center gap-2">
         <Button
@@ -68,10 +70,10 @@ export function PaginationControls({
           onClick={() => onPageChange(page - 1)}
           className="h-9 rounded-xl px-3 font-black uppercase text-[10px] border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
         >
-          <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Prev
+          <ChevronLeft className="w-3.5 h-3.5 mr-1" /> {t('Prev')}
         </Button>
         <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider px-2 whitespace-nowrap">
-          Page {page} of {totalPages}
+          {t('Page {page} of {pages}', { page, pages: totalPages })}
         </span>
         <Button
           type="button"
@@ -80,7 +82,7 @@ export function PaginationControls({
           onClick={() => onPageChange(page + 1)}
           className="h-9 rounded-xl px-3 font-black uppercase text-[10px] border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
         >
-          Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+          {t('Next')} <ChevronRight className="w-3.5 h-3.5 ml-1" />
         </Button>
       </div>
     </div>

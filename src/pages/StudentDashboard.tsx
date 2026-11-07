@@ -10,12 +10,14 @@ import { useToast } from '../hooks/use-toast';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth } from '../hooks/useAuth';
 import { logActivity } from '../lib/activityLog';
+import { useT } from '../i18n';
 
 interface StudentDashboardProps {
   onLogout: () => void;
 }
 
 export default function StudentDashboard({ onLogout }: StudentDashboardProps) {
+  const { t } = useT();
   const location = useLocation();
   const { toast } = useToast();
   const { isDark, toggleTheme } = useTheme();
@@ -47,8 +49,8 @@ export default function StudentDashboard({ onLogout }: StudentDashboardProps) {
     });
 
     toast({
-      title: "LOGOUT SUCCESSFULLY",
-      description: "You have been signed out. Come back soon!",
+      title: t('LOGOUT SUCCESSFULLY'),
+      description: t('You have been signed out. Come back soon!'),
       className: "bg-emerald-600 text-white font-black uppercase tracking-tight border-none rounded-2xl shadow-2xl py-6",
     });
 

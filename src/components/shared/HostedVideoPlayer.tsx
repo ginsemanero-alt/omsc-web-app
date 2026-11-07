@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { fetchPlaybackUrl, VIDEO_PLAY_FAILED_MESSAGE } from '../../lib/videoHosting';
+import { useT } from '../../i18n';
 
 interface HostedVideoPlayerProps {
   materialId: number;
@@ -13,6 +14,7 @@ interface HostedVideoPlayerProps {
 // one. preload="metadata" means nothing is downloaded until play is pressed,
 // which is what keeps the monthly bandwidth in check.
 export default function HostedVideoPlayer({ materialId, poster, className }: HostedVideoPlayerProps) {
+  const { t } = useT();
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const retried = useRef(false);
@@ -51,7 +53,7 @@ export default function HostedVideoPlayer({ materialId, poster, className }: Hos
     return (
       <div className="flex flex-col items-center gap-3" role="status">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-400" aria-hidden="true" />
-        <p className="text-sm text-slate-300">Loading video…</p>
+        <p className="text-sm text-slate-300">{t('Loading video…')}</p>
       </div>
     );
   }

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { signMaterialRows } from './materialAccess';
+import { plain, type Translate } from '../i18n/fill';
 
 // Material progress for the pre-test -> materials -> post-test flow
 // (PHASE 29, supabase/migrations.sql).
@@ -138,15 +139,16 @@ export function materialProgressFor(data: MaterialProgressData | null, programId
 export function postTestLockFor(
   data: MaterialProgressData | null,
   programId: number | null | undefined,
-  failed = false
+  failed = false,
+  tr: Translate = plain
 ): string | null {
-  if (failed) return MATERIALS_CHECK_FAILED;
+  if (failed) return tr(MATERIALS_CHECK_FAILED);
   if (!data || programId == null) return null;
   const progress = materialProgressFor(data, programId)!;
-  if (progress.total === 0) return MATERIALS_COMING_SOON;
+  if (progress.total === 0) return tr(MATERIALS_COMING_SOON);
   const remaining = progress.total - progress.viewed;
   if (remaining <= 0) return null;
-  return `View ${remaining} more material${remaining === 1 ? '' : 's'} to unlock`;
+  return remaining === 1 ? tr('View {n} more material to unlock', { n: remaining }) : tr('View {n} more materials to unlock', { n: remaining });
 }
 
 // Records one open (preview, download, play) of a material for the

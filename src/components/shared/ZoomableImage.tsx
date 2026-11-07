@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { useT } from '../../i18n';
 
 // 100% = the picture fitted to the window. Out to 50%, in to 400%.
 const MIN_SCALE = 0.5;
@@ -28,6 +29,7 @@ const toolbarButton =
 // trackpad pinch, double-click, drag to pan, and two-finger pinch on touch.
 // Esc is left to the dialog the viewer sits in. Used by students and admins.
 export default function ZoomableImage({ src, alt, className, onScaleChange }: ZoomableImageProps) {
+  const { t } = useT();
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
@@ -179,7 +181,7 @@ export default function ZoomableImage({ src, alt, className, onScaleChange }: Zo
     >
       <img
         src={src}
-        alt={alt || 'Preview'}
+        alt={alt || t('Preview')}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -196,16 +198,16 @@ export default function ZoomableImage({ src, alt, className, onScaleChange }: Zo
 
       <div
         role="group"
-        aria-label="Zoom controls"
+        aria-label={t('Zoom controls')}
         className="absolute bottom-3 right-3 flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-2xl p-1 z-10"
       >
-        <button type="button" onClick={zoomOut} disabled={scale <= MIN_SCALE} className={toolbarButton} aria-label="Zoom out">
+        <button type="button" onClick={zoomOut} disabled={scale <= MIN_SCALE} className={toolbarButton} aria-label={t('Zoom out')}>
           <ZoomOut className="w-5 h-5" aria-hidden="true" />
         </button>
-        <span role="status" aria-live="polite" aria-label={`Zoom ${percent}%`} className="min-w-[3.25rem] text-center text-sm font-bold tabular-nums text-white select-none">
+        <span role="status" aria-live="polite" aria-label={t('Zoom {percent}%', { percent: percent })} className="min-w-[3.25rem] text-center text-sm font-bold tabular-nums text-white select-none">
           {percent}%
         </span>
-        <button type="button" onClick={zoomIn} disabled={scale >= MAX_SCALE} className={toolbarButton} aria-label="Zoom in">
+        <button type="button" onClick={zoomIn} disabled={scale >= MAX_SCALE} className={toolbarButton} aria-label={t('Zoom in')}>
           <ZoomIn className="w-5 h-5" aria-hidden="true" />
         </button>
         <button
@@ -213,7 +215,7 @@ export default function ZoomableImage({ src, alt, className, onScaleChange }: Zo
           onClick={reset}
           disabled={scale === 1 && pan.x === 0 && pan.y === 0}
           className={toolbarButton}
-          aria-label="Reset zoom"
+          aria-label={t('Reset zoom')}
         >
           <RotateCcw className="w-4 h-4" aria-hidden="true" />
         </button>

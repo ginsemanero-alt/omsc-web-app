@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 
 // Auth
 import { AuthProvider, useAuth } from './hooks/useAuth';
+import { LanguageProvider } from './i18n';
 import ProtectedRoute from './components/ProtectedRoute';
 import ConsentGate from './components/ConsentGate';
 
@@ -162,7 +163,9 @@ export default function App() {
   return (
     <AuthProvider>
       <Router>
-        <AppContent />
+        <LanguageProvider>
+          <AppContent />
+        </LanguageProvider>
       </Router>
     </AuthProvider>
   );

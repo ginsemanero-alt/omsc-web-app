@@ -38,6 +38,8 @@ import {
 } from '../../components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import StudentBottomNav from '../student/StudentBottomNav';
+import { useT } from '../../i18n';
+import LanguageToggle from '../shared/LanguageToggle';
 
 // The student nav (desktop pill and floating mobile bar) only ever shows
 // these 4 destinations, in this exact order, regardless of how
@@ -114,6 +116,7 @@ export default function TopNavBar({
   sidebarCollapsed = false,
   onToggleSidebar,
 }: TopNavBarProps) {
+  const { t, tr } = useT();
   const navigate = useNavigate();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -228,7 +231,7 @@ export default function TopNavBar({
           <div className="max-w-[1440px] mx-auto h-full px-4 sm:px-6 lg:px-10 flex items-center gap-2 md:gap-3 lg:gap-7">
             <Link
               to="/student"
-              aria-label="OMSU Guidance, dashboard"
+              aria-label={t('OMSU Guidance, dashboard')}
               className={`min-h-[44px] min-w-[44px] flex items-center gap-3 shrink-0 rounded-full text-[#1E1B4B] dark:text-white ${studentFocusRing}`}
             >
               <img
@@ -245,7 +248,7 @@ export default function TopNavBar({
             </Link>
 
             <nav
-              aria-label="Student"
+              aria-label={t('Student')}
               className="hidden md:flex items-center gap-1 p-[5px] rounded-full bg-white dark:bg-slate-900 lg:ml-5"
             >
               {bottomNavItems.map((item) => {
@@ -261,7 +264,7 @@ export default function TopNavBar({
                         : 'text-[#334155] dark:text-slate-300 font-semibold hover:bg-[#EEF0FA] dark:hover:bg-slate-800'
                     }`}
                   >
-                    {item.label}
+                    {tr(item.label)}
                   </Link>
                 );
               })}
@@ -273,7 +276,7 @@ export default function TopNavBar({
                   <button
                     type="button"
                     className={studentIconButton}
-                    aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+                    aria-label={unreadCount > 0 ? t('Notifications ({count} unread)', { count: unreadCount }) : t('Notifications')}
                   >
                     <Bell className="w-5 h-5" aria-hidden="true" />
                     {unreadCount > 0 && (
@@ -288,11 +291,11 @@ export default function TopNavBar({
                   className="w-[min(20rem,calc(100vw-2rem))] rounded-3xl p-2 shadow-xl border-[#DDE1EE] dark:border-slate-800 dark:bg-slate-900 max-h-96 overflow-y-auto font-figtree"
                 >
                   <DropdownMenuLabel className="font-bold text-[15px] text-[#1E1B4B] dark:text-slate-100 px-3 py-2">
-                    Notifications
+                    {t('Notifications')}
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator className="dark:bg-slate-800" />
                   {notifications.length === 0 ? (
-                    <p className="text-center text-sm text-[#5B6477] dark:text-slate-400 py-6">Nothing yet</p>
+                    <p className="text-center text-sm text-[#5B6477] dark:text-slate-400 py-6">{t('Nothing yet')}</p>
                   ) : (
                     notifications.map((n) => (
                       <DropdownMenuItem
@@ -315,12 +318,19 @@ export default function TopNavBar({
                 </DropdownMenuContent>
               </DropdownMenu>
 
+              {role === 'student' && (
+                <>
+                  <LanguageToggle className="hidden sm:inline-flex" />
+                  <LanguageToggle variant="compact" className="sm:hidden" />
+                </>
+              )}
+
               {onToggleTheme && (
                 <button
                   type="button"
                   className={studentIconButton}
                   onClick={onToggleTheme}
-                  aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                  aria-label={isDark ? t('Switch to light mode') : t('Switch to dark mode')}
                 >
                   {isDark ? <Sun className="w-5 h-5" aria-hidden="true" /> : <Moon className="w-5 h-5" aria-hidden="true" />}
                 </button>
@@ -330,7 +340,7 @@ export default function TopNavBar({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    aria-label={`Account menu for ${displayName}`}
+                    aria-label={t('Account menu for {displayName}', { displayName: displayName })}
                     className={`h-11 md:h-[46px] pl-[5px] pr-[5px] sm:pr-3.5 rounded-full bg-white dark:bg-slate-900 flex items-center gap-2.5 hover:bg-[#E0E7FF] dark:hover:bg-slate-800 transition-colors ${studentFocusRing}`}
                   >
                     <span
@@ -357,20 +367,20 @@ export default function TopNavBar({
                     onClick={() => navigate('/student/profile')}
                     className="rounded-2xl cursor-pointer min-h-[44px] px-3 font-semibold text-sm text-[#334155] dark:text-slate-200"
                   >
-                    <User className="w-4 h-4 mr-2" aria-hidden="true" /> Profile
+                    <User className="w-4 h-4 mr-2" aria-hidden="true" /> {t('Profile')}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => navigate('/student/about')}
                     className="rounded-2xl cursor-pointer min-h-[44px] px-3 font-semibold text-sm text-[#334155] dark:text-slate-200"
                   >
-                    <Info className="w-4 h-4 mr-2" aria-hidden="true" /> About
+                    <Info className="w-4 h-4 mr-2" aria-hidden="true" /> {t('About')}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="dark:bg-slate-800" />
                   <DropdownMenuItem
                     onClick={() => setShowLogoutConfirm(true)}
                     className="rounded-2xl cursor-pointer min-h-[44px] px-3 font-semibold text-sm text-red-600 dark:text-red-400 focus:bg-red-50 dark:focus:bg-red-500/10 focus:text-red-700"
                   >
-                    <LogOut className="w-4 h-4 mr-2" aria-hidden="true" /> Sign out
+                    <LogOut className="w-4 h-4 mr-2" aria-hidden="true" /> {t('Sign out')}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -384,7 +394,7 @@ export default function TopNavBar({
         <>
           <aside
             id="admin-sidebar"
-            aria-label="Admin"
+            aria-label={'Admin'}
             data-collapsed={sidebarCollapsed ? 'true' : 'false'}
             className={`hidden lg:flex fixed top-4 bottom-4 left-4 z-40 flex-col gap-7 rounded-[2.5rem] bg-[#1E1B4B] text-white py-6 font-figtree transition-[width,padding] duration-200 motion-reduce:transition-none ${
               sidebarCollapsed ? 'w-20 px-3' : 'w-[264px] px-4'
@@ -399,13 +409,13 @@ export default function TopNavBar({
               {!sidebarCollapsed && (
                 <span className="flex flex-col min-w-0">
                   <span className="font-bricolage font-extrabold text-[17px] leading-tight">OMSU Guidance</span>
-                  <span className="text-xs text-[#C7C9F2]">Admin</span>
+                  <span className="text-xs text-[#C7C9F2]">{'Admin'}</span>
                 </span>
               )}
             </Link>
 
             <nav
-              aria-label="Admin sections"
+              aria-label={'Admin sections'}
               className={`flex flex-col gap-1 ${sidebarCollapsed ? 'overflow-visible' : 'overflow-y-auto'}`}
             >
               {navigationItems.map((item: NavigationItem) => {
@@ -416,7 +426,7 @@ export default function TopNavBar({
                     <Link
                       to={item.path}
                       aria-current={active ? 'page' : undefined}
-                      aria-label={sidebarCollapsed ? item.label : undefined}
+                      aria-label={sidebarCollapsed ? tr(item.label) : undefined}
                       className={`h-[50px] rounded-2xl flex items-center gap-3 text-[15px] transition-colors ${studentFocusRing} ${
                         sidebarCollapsed ? 'justify-center px-0' : 'px-4'
                       } ${
@@ -424,14 +434,14 @@ export default function TopNavBar({
                       }`}
                     >
                       {ItemIcon && <ItemIcon className="w-5 h-5 shrink-0" aria-hidden="true" />}
-                      {!sidebarCollapsed && item.label}
+                      {!sidebarCollapsed && tr(item.label)}
                     </Link>
                     {sidebarCollapsed && (
                       <span
                         aria-hidden="true"
                         className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 whitespace-nowrap rounded-xl bg-[#1E1B4B] border border-white/20 px-3 py-2 text-sm font-semibold text-white shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 motion-safe:transition-opacity"
                       >
-                        {item.label}
+                        {tr(item.label)}
                       </span>
                     )}
                   </div>
@@ -464,7 +474,7 @@ export default function TopNavBar({
                       aria-hidden="true"
                       className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 whitespace-nowrap rounded-xl bg-[#1E1B4B] border border-white/20 px-3 py-2 text-sm font-semibold text-white shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 motion-safe:transition-opacity"
                     >
-                      Expand menu
+                      {'Expand menu'}
                     </span>
                   )}
                 </div>
@@ -474,7 +484,7 @@ export default function TopNavBar({
                 <button
                   type="button"
                   onClick={onToggleTheme}
-                  aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                  aria-label={isDark ? t('Switch to light mode') : t('Switch to dark mode')}
                   className={`h-11 rounded-2xl flex items-center gap-3 text-sm font-semibold text-[#C7C9F2] hover:bg-white/10 ${studentFocusRing} ${
                     sidebarCollapsed ? 'justify-center px-0' : 'px-4'
                   }`}
@@ -490,7 +500,7 @@ export default function TopNavBar({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    aria-label={`Account menu for ${displayName}`}
+                    aria-label={t('Account menu for {displayName}', { displayName: displayName })}
                     className={`rounded-[22px] bg-white/[0.08] hover:bg-white/[0.14] flex items-center transition-colors ${studentFocusRing} ${
                       sidebarCollapsed ? 'w-full h-14 justify-center p-0' : 'w-full p-3.5 gap-3 text-left'
                     }`}
@@ -525,7 +535,7 @@ export default function TopNavBar({
                     onClick={() => setShowLogoutConfirm(true)}
                     className="rounded-2xl cursor-pointer min-h-[44px] px-3 font-semibold text-sm text-red-600 focus:bg-red-50 focus:text-red-700"
                   >
-                    <LogOut className="w-4 h-4 mr-2" aria-hidden="true" /> Sign out
+                    <LogOut className="w-4 h-4 mr-2" aria-hidden="true" /> {t('Sign out')}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -537,7 +547,7 @@ export default function TopNavBar({
               <button
                 type="button"
                 onClick={() => setIsSidebarOpen(true)}
-                aria-label="Open menu"
+                aria-label={'Open menu'}
                 aria-expanded={isSidebarOpen}
                 className={`w-11 h-11 rounded-2xl bg-white text-[#1E1B4B] flex items-center justify-center ${studentFocusRing}`}
               >
@@ -547,7 +557,7 @@ export default function TopNavBar({
                 <img src="/guidance-logo.jpg" alt="" className="w-10 h-10 rounded-full object-cover bg-white shrink-0" />
                 <span className="flex flex-col min-w-0">
                   <span className="font-bricolage font-extrabold text-base text-[#1E1B4B] leading-tight">OMSU Guidance</span>
-                  <span className="text-xs text-[#5B6477]">Admin</span>
+                  <span className="text-xs text-[#5B6477]">{'Admin'}</span>
                 </span>
               </Link>
             </div>
@@ -583,7 +593,7 @@ export default function TopNavBar({
                   <button
                     type="button"
                     onClick={onToggleTheme}
-                    aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                    aria-label={isDark ? t('Switch to light mode') : t('Switch to dark mode')}
                     tabIndex={isSidebarOpen ? 0 : -1}
                     className={`w-11 h-11 rounded-xl flex items-center justify-center text-[#C7C9F2] hover:bg-white/10 ${studentFocusRing}`}
                   >
@@ -593,7 +603,7 @@ export default function TopNavBar({
                 <button
                   type="button"
                   onClick={() => setIsSidebarOpen(false)}
-                  aria-label="Close menu"
+                  aria-label={'Close menu'}
                   tabIndex={isSidebarOpen ? 0 : -1}
                   className={`w-11 h-11 rounded-xl flex items-center justify-center text-[#C7C9F2] hover:bg-white/10 ${studentFocusRing}`}
                 >
@@ -602,7 +612,7 @@ export default function TopNavBar({
               </div>
             </div>
 
-            <nav aria-label="Admin sections" className="flex flex-col gap-1">
+            <nav aria-label={'Admin sections'} className="flex flex-col gap-1">
               {/* Re-mounted (not just hidden) each time the drawer opens, so
                   the fade/slide-in replays instead of only playing once ever. */}
               {isSidebarOpen &&
@@ -621,7 +631,7 @@ export default function TopNavBar({
                       }`}
                     >
                       {ItemIcon && <ItemIcon className="w-5 h-5 shrink-0" aria-hidden="true" />}
-                      {item.label}
+                      {tr(item.label)}
                     </Link>
                   );
                 })}
@@ -635,7 +645,7 @@ export default function TopNavBar({
                 className={`w-full h-12 px-4 rounded-2xl flex items-center gap-3 text-[15px] font-semibold text-rose-300 hover:bg-white/10 ${studentFocusRing}`}
               >
                 <LogOut className="w-5 h-5" aria-hidden="true" />
-                Sign out
+                {t('Sign out')}
               </button>
             </div>
           </div>
@@ -663,12 +673,12 @@ export default function TopNavBar({
 
           <DialogHeader className="mt-4">
             <DialogTitle className="text-xl font-black text-center dark:text-slate-100">
-              Sign Out?
+              {t('Sign Out?')}
             </DialogTitle>
           </DialogHeader>
 
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
-            You'll need to log in again to continue.
+            {t('You\'ll need to log in again to continue.')}
           </p>
 
           <div className="grid grid-cols-2 gap-3 mt-6">
@@ -677,7 +687,7 @@ export default function TopNavBar({
               onClick={() => setShowLogoutConfirm(false)}
               className="rounded-xl font-black"
             >
-              Cancel
+              {t('Cancel')}
             </Button>
 
             <Button
@@ -687,7 +697,7 @@ export default function TopNavBar({
               }}
               className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black"
             >
-              Yes, Sign Out
+              {t('Yes, Sign Out')}
             </Button>
           </div>
         </DialogContent>
@@ -703,7 +713,7 @@ export default function TopNavBar({
 
           <DialogHeader className="mt-4">
             <DialogTitle className="font-bricolage font-extrabold text-2xl text-center text-[#1E1B4B] dark:text-slate-100">
-              {unreadCount} new update{unreadCount === 1 ? '' : 's'}
+              {unreadCount === 1 ? t('{count} new update', { count: unreadCount }) : t('{count} new updates', { count: unreadCount })}
             </DialogTitle>
           </DialogHeader>
 
@@ -734,7 +744,7 @@ export default function TopNavBar({
             }}
             className={`w-full mt-5 h-12 rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] transition-colors ${studentFocusRing}`}
           >
-            Dismiss
+            {t('Dismiss')}
           </button>
         </DialogContent>
       </Dialog>

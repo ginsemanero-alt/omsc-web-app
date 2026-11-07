@@ -39,8 +39,10 @@ import {
   Loader2,
   Play,
 } from 'lucide-react';
+import { useT } from '../../i18n';
 
 export default function IECMaterials() {
+  const { t } = useT();
   const { user, userName: authUserName } = useAuth();
   const [activeTab, setActiveTab] = useState('infographics');
   const [materials, setMaterials] = useState<any[]>([]);
@@ -295,11 +297,11 @@ export default function IECMaterials() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm">
         <div className="space-y-1">
           <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">
-            IEC <span className="text-indigo-600">Materials</span>
+            IEC <span className="text-indigo-600">{t('Materials')}</span>
           </h1>
           <p className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-2">
             <Calendar className="w-4 h-4 text-indigo-400" />
-            Guidance Resources Library
+            {t('Guidance Resources Library')}
           </p>
         </div>
 
@@ -307,7 +309,7 @@ export default function IECMaterials() {
           <div className="relative w-full md:w-80 group">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
-              placeholder="Search materials..."
+              placeholder={t('Search materials...')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-11 h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl focus:ring-2 focus:ring-indigo-500/20"
@@ -319,7 +321,7 @@ export default function IECMaterials() {
             onChange={(e) => setSelectedCategory(e.target.value)}
             className="h-12 px-4 bg-slate-50 dark:bg-slate-800 dark:text-white border-none rounded-2xl font-bold text-sm text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/20"
           >
-            <option value="All">All IEC Categories</option>
+            <option value="All">{t('All IEC Categories')}</option>
             {IEC_CATEGORIES.map((category) => (
               <option key={category} value={category}>{category}</option>
             ))}
@@ -329,10 +331,10 @@ export default function IECMaterials() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-slate-100/50 dark:bg-slate-800/50 p-1.5 rounded-2xl mb-8 border border-slate-100 dark:border-slate-800">
-          <TabsTrigger value="infographics" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">Infographics</TabsTrigger>
-          <TabsTrigger value="videos" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">Videos</TabsTrigger>
-          <TabsTrigger value="audio" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">Audio</TabsTrigger>
-          <TabsTrigger value="links" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">Links</TabsTrigger>
+          <TabsTrigger value="infographics" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">{t('Infographics')}</TabsTrigger>
+          <TabsTrigger value="videos" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">{t('Videos')}</TabsTrigger>
+          <TabsTrigger value="audio" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">{t('Audio')}</TabsTrigger>
+          <TabsTrigger value="links" className="px-4 sm:px-8 rounded-xl font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400 uppercase text-xs">{t('Links')}</TabsTrigger>
         </TabsList>
 
         {loading ? (
@@ -344,16 +346,16 @@ export default function IECMaterials() {
         ) : loadFailed ? (
           <div className="h-64 flex flex-col items-center justify-center gap-4 text-center px-4">
             <p className="text-base font-black text-slate-800 dark:text-slate-100 uppercase tracking-tight">
-              Couldn't load materials
+              {t('Couldn\'t load materials')}
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm">
-              Check your internet connection and try again.
+              {t('Check your internet connection and try again.')}
             </p>
             <Button
               onClick={fetchMaterials}
               className="h-11 px-8 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
             >
-              Try Again
+              {t('Try Again')}
             </Button>
           </div>
         ) : (
@@ -388,7 +390,7 @@ export default function IECMaterials() {
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handlePreview(item); }}
                       className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/90 dark:bg-slate-900/90 text-slate-900 dark:text-white shadow-lg flex items-center justify-center hover:bg-white dark:hover:bg-slate-900 transition-colors"
-                      aria-label="Preview"
+                      aria-label={t('Preview')}
                     >
                       <Maximize2 className="w-4 h-4" />
                     </button>
@@ -400,7 +402,7 @@ export default function IECMaterials() {
                       <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">{item.description}</p>
                     )}
                     <Button onClick={() => { downloadFile(item.file_url, item.title); incrementDownloadCount(item.id); markOpened(item); }} className="w-full h-12 bg-slate-900 hover:bg-indigo-600 rounded-2xl font-black uppercase text-xs">
-                      <Download className="w-4 h-4 mr-2" /> Download
+                      <Download className="w-4 h-4 mr-2" /> {t('Download')}
                     </Button>
                   </div>
                 </Card>
@@ -443,7 +445,7 @@ export default function IECMaterials() {
                       <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">{item.description}</p>
                     )}
                     <Button onClick={() => handlePreview(item)} className="bg-red-600 hover:bg-red-700 h-12 px-8 rounded-2xl font-black uppercase text-xs shadow-lg shadow-red-100 text-white">
-                      Watch Now
+                      {t('Watch Now')}
                     </Button>
                   </div>
                 </Card>
@@ -499,7 +501,7 @@ export default function IECMaterials() {
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 h-11 px-6 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs text-white transition-colors"
                       >
-                        Open Resource <ExternalLink className="w-3.5 h-3.5" />
+                        {t('Open Resource')} <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     </div>
                   </div>
@@ -518,7 +520,7 @@ export default function IECMaterials() {
           <DialogHeader className="p-6 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between shrink-0">
             <div>
               <DialogTitle className="font-black uppercase tracking-tighter text-xl text-slate-900 dark:text-white">{previewItem?.title}</DialogTitle>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Material Preview Mode</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">{t('Material Preview Mode')}</p>
             </div>
           </DialogHeader>
           
@@ -536,7 +538,7 @@ export default function IECMaterials() {
                 src={getYouTubeEmbedUrl(previewItem.file_url)}
                 className="w-full aspect-video max-w-4xl rounded-2xl shadow-2xl border-none"
                 allowFullScreen
-                title="YouTube Video"
+                title={t('YouTube Video')}
               />
             ) : previewItem?.type === 'Video' && previewItem?.file_url ? (
               // Self-hosted upload, not YouTube — native <video> controls
@@ -557,7 +559,7 @@ export default function IECMaterials() {
                   <div className="flex flex-col items-center justify-center gap-3">
                     <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                      Loading PDF...
+                      {t('Loading PDF...')}
                     </p>
                   </div>
                 }
@@ -585,19 +587,19 @@ export default function IECMaterials() {
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 h-12 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-xs"
                 >
-                  Open in New Tab <ExternalLink className="w-4 h-4" />
+                  {t('Open in New Tab')} <ExternalLink className="w-4 h-4" />
                 </a>
               </div>
             ) : (
               <div className="text-center">
                 <HardDrive className="w-16 h-16 text-slate-700 dark:text-slate-200 mx-auto" />
-                <p className="font-bold text-slate-500 dark:text-slate-400 mt-4 uppercase text-xs">Format not supported for preview</p>
+                <p className="font-bold text-slate-500 dark:text-slate-400 mt-4 uppercase text-xs">{t('Format not supported for preview')}</p>
               </div>
             )}
           </div>
           
           <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 shrink-0">
-            <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="rounded-xl font-bold uppercase text-[10px]">Close</Button>
+            <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="rounded-xl font-bold uppercase text-[10px]">{t('Close')}</Button>
             
             {/* Downloading from an open preview is part of the same open, so it
                 isn't recorded as a second view (handlePreview already did).
@@ -609,7 +611,7 @@ export default function IECMaterials() {
               !previewItem?.file_url?.includes('youtube') &&
               !previewItem?.file_url?.includes('youtu.be') && (
               <Button onClick={() => { downloadFile(previewItem.file_url, previewItem.title); incrementDownloadCount(previewItem.id); logMaterialView(previewItem); }} className="bg-indigo-600 rounded-xl font-black uppercase text-[10px] px-6 text-white">
-                Download Resource
+                {t('Download Resource')}
               </Button>
             )}
           </div>
@@ -623,9 +625,10 @@ export default function IECMaterials() {
 // not imported from there since that component isn't exported, but kept
 // visually identical so a category means the same thing in both places.
 function MaterialCategoryBadge({ category }: { category?: string | null }) {
+  const { t } = useT();
   return (
     <span className="inline-block px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-black uppercase text-[8px] tracking-wider rounded mb-1.5">
-      {category || 'General Guidance'}
+      {category || t('General Guidance')}
     </span>
   );
 }
