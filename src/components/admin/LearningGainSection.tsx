@@ -3,13 +3,6 @@ import { supabase } from "../../lib/supabase";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../ui/select";
-import {
   TrendingUp,
   AlertTriangle,
   RefreshCw,
@@ -33,8 +26,8 @@ import {
 } from "recharts";
 import {
   AGE_BRACKETS,
-  SMALL_SAMPLE_N,
   T_TEST_CAUTION_N,
+  buildLearningGainParams,
   emptyRow,
   formatPValue,
   normalizedGainLevel,
@@ -45,6 +38,7 @@ import {
   type LearningGainRow,
   type LearningGainSummary,
 } from "../../lib/learningGain";
+import { ALL, MIN_GROUP_SIZE, TOO_FEW_TEXT, type AnalyticsFilters } from "../../lib/analyticsFilters";
 
 /* =========================================================
    LEARNING GAIN (pre-test vs post-test)
@@ -79,26 +73,6 @@ const BREAKDOWNS: { id: BreakdownDimension; label: string }[] = [
   { id: "pwd", label: "PWD status" },
   { id: "ip", label: "IP status" },
 ];
-
-interface Filters {
-  programId: string;
-  course: string;
-  yearLevel: string;
-  gender: string;
-  ageBracket: string;
-  academicYear: string;
-}
-
-const ALL = "all";
-
-const DEFAULT_FILTERS: Filters = {
-  programId: ALL,
-  course: ALL,
-  yearLevel: ALL,
-  gender: ALL,
-  ageBracket: ALL,
-  academicYear: ALL,
-};
 
 const EMPTY_OPTIONS: LearningGainOptions = {
   programs: [],
@@ -146,6 +120,7 @@ function normalizeRow(raw: any): LearningGainRow {
     mean_gain: asNumber(raw.mean_gain),
     sd_diff: asNumber(raw.sd_diff),
     norm_gain: asNumber(raw.norm_gain),
+    suppressed: raw.suppressed === true,
   };
 }
 
@@ -153,8 +128,8 @@ function groupLabel(dimension: BreakdownDimension, key: string): string {
   return dimension === "year_level" ? yearLevelLabel(key) : key;
 }
 
-export default function LearningGainSection() {
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+// The filters come from the dashboard's shared filter bar (one set for the whole page).
+export default function LearningGainSection({ filters }: { filters: AnalyticsFilters }) {
   const [breakdown, setBreakdown] = useState<BreakdownDimension>("course");
 
   const [summary, setSummary] = useState<LearningGainSummary>({
@@ -168,15 +143,7 @@ export default function LearningGainSection() {
     setLoading(true);
     setLoadError(null);
 
-    const { data, error } = await supabase.rpc("learning_gain_summary", {
-      p_program_id: filters.programId === ALL ? null : Number(filters.programId),
-      p_course: filters.course === ALL ? null : filters.course,
-      p_year_level: filters.yearLevel === ALL ? null : filters.yearLevel,
-      p_gender: filters.gender === ALL ? null : filters.gender,
-      p_age_bracket: filters.ageBracket === ALL ? null : filters.ageBracket,
-      p_academic_year: filters.academicYear === ALL ? null : Number(filters.academicYear),
-      p_age_brackets: AGE_BRACKETS,
-    });
+    const { data, error } = await supabase.rpc("learning_gain_summary", buildLearningGainParams(filters));
 
     if (error) {
       console.error("Learning gain:", error);
@@ -209,11 +176,6 @@ export default function LearningGainSection() {
     fetchSummary();
   }, [fetchSummary]);
 
-  const setFilter = (field: keyof Filters) => (value: string) =>
-    setFilters((previous) => ({ ...previous, [field]: value }));
-
-  const filtersActive = Object.values(filters).some((value) => value !== ALL);
-
   /* ---------------------------------------------------------
      DERIVED ROWS
   --------------------------------------------------------- */
@@ -237,13 +199,13 @@ export default function LearningGainSection() {
     return summary.options.programs
       .filter(
         (program) =>
-          filters.programId === ALL || String(program.id) === filters.programId
+          filters.program === ALL || String(program.id) === filters.program
       )
       .map((program) => ({
         ...(byKey.get(String(program.id)) || emptyRow("program", String(program.id))),
         label: program.title,
       }));
-  }, [summary, filters.programId]);
+  }, [summary, filters.program]);
 
   const breakdownRows: DisplayRow[] = useMemo(() => {
     const byKey = new Map(
@@ -310,7 +272,7 @@ export default function LearningGainSection() {
   }, [summary, breakdown]);
 
   const programChartData = programRows
-    .filter((row) => row.paired_n > 0)
+    .filter((row) => row.paired_n > 0 && !row.suppressed)
     .map((row) => ({
       name: row.label,
       pre: row.mean_pre,
@@ -319,7 +281,7 @@ export default function LearningGainSection() {
     }));
 
   const gainChartData = breakdownRows
-    .filter((row) => row.paired_n > 0 && row.mean_gain !== null)
+    .filter((row) => row.paired_n > 0 && !row.suppressed && row.mean_gain !== null)
     .map((row) => ({
       name: row.label,
       gain: row.mean_gain as number,
@@ -336,82 +298,7 @@ export default function LearningGainSection() {
   return (
     <div className="flex flex-col gap-5 font-figtree text-[#1E293B]">
 
-      {/* FILTERS — all six combine (AND) inside the SQL function. */}
-      <Card className="border-none shadow-none rounded-[28px] px-5 py-5 md:px-6 bg-white flex flex-col gap-3.5">
-        <h2 className="sr-only">Learning gain filters</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-          <FilterSelect
-            label="Program"
-            value={filters.programId}
-            onChange={setFilter("programId")}
-            allLabel="All programs"
-            options={summary.options.programs.map((program) => ({
-              value: String(program.id),
-              label: program.title,
-            }))}
-          />
-          <FilterSelect
-            label="Course"
-            value={filters.course}
-            onChange={setFilter("course")}
-            allLabel="All courses"
-            options={[...summary.options.courses].sort().map((course) => ({
-              value: course,
-              label: course,
-            }))}
-          />
-          <FilterSelect
-            label="Year level"
-            value={filters.yearLevel}
-            onChange={setFilter("yearLevel")}
-            allLabel="All year levels"
-            options={[...summary.options.year_levels]
-              .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-              .map((level) => ({ value: level, label: yearLevelLabel(level) }))}
-          />
-          <FilterSelect
-            label="Gender"
-            value={filters.gender}
-            onChange={setFilter("gender")}
-            allLabel="All genders"
-            options={[...summary.options.genders].sort().map((gender) => ({
-              value: gender,
-              label: gender,
-            }))}
-          />
-          <FilterSelect
-            label="Age"
-            value={filters.ageBracket}
-            onChange={setFilter("ageBracket")}
-            allLabel="All ages"
-            options={AGE_BRACKETS.map((bracket) => ({
-              value: bracket.label,
-              label: bracket.label,
-            }))}
-          />
-          <FilterSelect
-            label="Academic year"
-            value={filters.academicYear}
-            onChange={setFilter("academicYear")}
-            allLabel="All years"
-            options={[...summary.options.years]
-              .sort((a, b) => b - a)
-              .map((year) => ({ value: String(year), label: String(year) }))}
-          />
-        </div>
-
-        {filtersActive && (
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => setFilters(DEFAULT_FILTERS)}
-              className="h-11 px-3.5 rounded-xl font-bold text-sm text-[#4338CA] hover:bg-[#EEF0FA] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
-            >
-              Reset filters
-            </button>
-          </div>
-        )}
-      </Card>
+      {/* The filters are the dashboard's shared bar above (one set for the whole page). */}
 
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
@@ -472,43 +359,49 @@ export default function LearningGainSection() {
             <div className="px-[22px] py-5 rounded-[26px] bg-white flex flex-col gap-1 min-w-0">
               <span className="text-[13px] font-semibold text-[#5B6477]">Students with both tests</span>
               <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#1E1B4B]">{overall.paired_n}</span>
-              {overall.paired_n > 0 && overall.paired_n < SMALL_SAMPLE_N && (
-                <span className="self-start"><SmallSampleBadge /></span>
+              {overall.suppressed && (
+                <span className="text-xs text-[#92400E]">Scores are hidden for a group under {MIN_GROUP_SIZE}.</span>
               )}
             </div>
             <div className="px-[22px] py-5 rounded-[26px] bg-white flex flex-col gap-1 min-w-0">
               <span className="text-[13px] font-semibold text-[#5B6477]">Mean pre-test</span>
-              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#1E1B4B]">{fmtPct(overall.mean_pre)}</span>
+              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#1E1B4B]">{overall.suppressed ? <TooFew /> : fmtPct(overall.mean_pre)}</span>
             </div>
             <div className="px-[22px] py-5 rounded-[26px] bg-white flex flex-col gap-1 min-w-0">
               <span className="text-[13px] font-semibold text-[#5B6477]">Mean post-test</span>
-              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#1E1B4B]">{fmtPct(overall.mean_post)}</span>
+              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#1E1B4B]">{overall.suppressed ? <TooFew /> : fmtPct(overall.mean_post)}</span>
             </div>
             <div className="px-[22px] py-5 rounded-[26px] bg-[#D1FAE5] flex flex-col gap-1 min-w-0">
               <span className="text-[13px] font-semibold text-[#065F46]">Mean gain</span>
-              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#065F46]">{fmtGain(overall.mean_gain)}</span>
+              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#065F46]">{overall.suppressed ? <TooFew /> : fmtGain(overall.mean_gain)}</span>
               <span className="text-xs text-[#065F46]">
-                {overall.paired_n > 0 && overall.norm_gain === null
-                  ? "Normalized gain: pre-test mean is 100%, no room to gain"
-                  : `Normalized gain ${fmtG(overall.norm_gain)}`}
+                {overall.suppressed
+                  ? "Hidden: too few students"
+                  : overall.paired_n > 0 && overall.norm_gain === null
+                    ? "Normalized gain: pre-test mean is 100%, no room to gain"
+                    : `Normalized gain ${fmtG(overall.norm_gain)}`}
               </span>
               {overallLevel && <span className="self-start mt-1"><GainLevelBadge level={overallLevel} /></span>}
             </div>
             <div className="col-span-2 lg:col-span-1 px-[22px] py-5 rounded-[26px] bg-[#1E1B4B] text-white flex flex-col gap-1 min-w-0">
               <span className="text-[13px] font-semibold text-[#FBBF24]">Paired t-test</span>
               <span className="font-bricolage font-extrabold text-[28px] leading-tight">
-                {overallTest
-                  ? overallTest.p < 0.001
-                    ? "p < .001"
-                    : `p = ${formatPValue(overallTest.p)}`
-                  : "Not enough data"}
+                {overall.suppressed
+                  ? TOO_FEW_TEXT
+                  : overallTest
+                    ? overallTest.p < 0.001
+                      ? "p < .001"
+                      : `p = ${formatPValue(overallTest.p)}`
+                    : "Not enough data"}
               </span>
               <span className="text-xs text-[#C7C9F2]">
-                {overallTest
-                  ? `t(${overallTest.df}) = ${overallTest.t.toFixed(2)} · ${overallTest.significant ? "Significant at 0.05" : "Not significant at 0.05"}`
-                  : "Needs at least 2 paired students with differing gains"}
+                {overall.suppressed
+                  ? "The test is not shown for a group this small"
+                  : overallTest
+                    ? `t(${overallTest.df}) = ${overallTest.t.toFixed(2)} · ${overallTest.significant ? "Significant at 0.05" : "Not significant at 0.05"}`
+                    : "Needs at least 2 paired students with differing gains"}
               </span>
-              {overall.paired_n > 0 && overall.paired_n < T_TEST_CAUTION_N && (
+              {!overall.suppressed && overall.paired_n > 0 && overall.paired_n < T_TEST_CAUTION_N && (
                 <span className="self-start mt-1"><CautionBadge compact /></span>
               )}
             </div>
@@ -725,7 +618,7 @@ export default function LearningGainSection() {
               <strong>⟨g⟩</strong> (normalized gain) = gain ÷ (100 − pre-test), the share of the
               possible improvement actually achieved: High ≥ 0.70, Medium 0.30–0.69, Low &lt; 0.30.
               It is blank when the pre-test mean is already 100%.{" "}
-              <strong>Small sample</strong> marks groups under {SMALL_SAMPLE_N} paired students.
+              A group under {MIN_GROUP_SIZE} paired students shows <strong>{TOO_FEW_TEXT}</strong> instead of scores; its counts stay visible.
               Incomplete students (pre-test only) are never included in the means.
             </p>
           </div>
@@ -738,41 +631,6 @@ export default function LearningGainSection() {
 /* =========================================================
    PIECES
 ========================================================= */
-
-function FilterSelect({
-  label,
-  value,
-  onChange,
-  allLabel,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  allLabel: string;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <div className="flex flex-col gap-1.5 min-w-0">
-      <p className="m-0 text-[13px] font-semibold text-[#334155]">
-        {label}
-      </p>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger aria-label={label} className="h-11 rounded-[14px] bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B]">
-          <SelectValue placeholder={allLabel} />
-        </SelectTrigger>
-        <SelectContent className="max-h-72">
-          <SelectItem value={ALL}>{allLabel}</SelectItem>
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}
 
 function MetricsTable({
   firstColumn,
@@ -820,15 +678,14 @@ function MetricsTable({
             </tr>
           ) : (
             rows.map((row) => {
-              const test = pairedTTest(row.paired_n, row.mean_gain, row.sd_diff);
-              const level = normalizedGainLevel(row.norm_gain);
+              const test = row.suppressed ? null : pairedTTest(row.paired_n, row.mean_gain, row.sd_diff);
+              const level = row.suppressed ? null : normalizedGainLevel(row.norm_gain);
 
               return (
                 <tr key={`${row.dimension}-${row.key}`} className="border-b border-slate-50 align-top">
                   <td className="py-3 pr-4">
                     <p className="text-xs font-black text-slate-800 max-w-[240px]">{row.label}</p>
                     <div className="mt-1 flex flex-wrap gap-1">
-                      {row.paired_n > 0 && row.paired_n < SMALL_SAMPLE_N && <SmallSampleBadge />}
                       {row.ceiling_n > 0 && (
                         <span className="px-2 py-[3px] rounded-full bg-[#F1F5F9] text-[#475569] text-xs font-bold">
                           {row.ceiling_n} at 100% pre
@@ -838,6 +695,10 @@ function MetricsTable({
                   </td>
                   <td className="py-3 pr-4 text-xs font-black text-slate-900">{row.paired_n}</td>
                   <td className="py-3 pr-4 text-xs font-bold text-slate-500">{row.incomplete_n}</td>
+                  {row.suppressed ? (
+                    <td colSpan={8} className="py-3 text-xs font-bold text-[#92400E]">{TOO_FEW_TEXT}</td>
+                  ) : (
+                  <>
                   <td className="py-3 pr-4 text-xs font-bold text-[#5B6477]">{fmtPct(row.mean_pre)}</td>
                   <td className="py-3 pr-4 text-xs font-bold text-indigo-600">{fmtPct(row.mean_post)}</td>
                   <td
@@ -873,6 +734,8 @@ function MetricsTable({
                       {test && row.paired_n < T_TEST_CAUTION_N && <CautionBadge compact />}
                     </div>
                   </td>
+                  </>
+                  )}
                 </tr>
               );
             })
@@ -892,13 +755,9 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
-function SmallSampleBadge() {
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-[3px] rounded-full bg-[#FEF3C7] text-[#92400E] text-xs font-bold whitespace-nowrap">
-      <AlertTriangle className="w-2.5 h-2.5" />
-      Small sample
-    </span>
-  );
+// Shown where a score would be, for a group too small to report.
+function TooFew() {
+  return <span className="text-[15px] font-bold text-[#92400E]">{TOO_FEW_TEXT}</span>;
 }
 
 function CautionBadge({ compact = false }: { compact?: boolean }) {

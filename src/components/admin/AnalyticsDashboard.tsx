@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import StatTile from "./StatTile";
 import { supabase } from "../../lib/supabase";
 import { SURVEY_COLUMNS, withAdminForms } from "../../lib/surveyForms";
@@ -12,7 +12,9 @@ import { Label } from "../../components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
@@ -64,6 +66,19 @@ import autoTable from "jspdf-autotable";
 import { fetchAnalyticsInsight, type AnalyticsInsightResult } from "../../lib/analyticsInsight";
 import { campusLabel } from "../../lib/campuses";
 import LearningGainSection from "./LearningGainSection";
+import {
+  ALL as ALL_FILTER,
+  DEFAULT_FILTERS,
+  PARTICIPANTS_DEFINITION,
+  TOO_FEW_TEXT,
+  describeFilters,
+  filtersFromParams,
+  filtersToParams,
+  hasActiveFilters as anyFilterActive,
+  isTooFew,
+  type AnalyticsFilters,
+} from "../../lib/analyticsFilters";
+import { downloadReportXlsx, type ReportModel, type ReportSection } from "../../lib/analyticsExcel";
 import MaterialReachSection from "./MaterialReachSection";
 import {
   fetchMaterialReach,
@@ -76,6 +91,7 @@ import {
   T_TEST_CAUTION_N,
   pairedTTest,
   yearLevelLabel,
+  buildLearningGainParams,
 } from "../../lib/learningGain";
 
 /* =========================================================
@@ -124,6 +140,8 @@ interface Survey {
   title: string;
   status?: string | null;
   type?: string | null;
+  // The program a knowledge assessment is the pre-test / post-test for.
+  program_id?: string | number | null;
   iec_category?: string | null;
   questions_data?: any[];
   // Form B, the parallel post-test form (PHASE 27).
@@ -480,27 +498,70 @@ export default function AnalyticsDashboard() {
   /* MATERIALS */
 
   const [materials, setMaterials] = useState<Material[]>([]);
+  // PHASE 41: program_materials, so the Program filter can narrow the materials sections too.
+  const [programMaterialLinks, setProgramMaterialLinks] = useState<{ program_id: number | string; material_id: number | string }[]>([]);
 
   /* FILTERS */
 
-  const [activeTab, setActiveTab] = useState<AnalyticsTab>("overview");
-  const [selectedCampus, setSelectedCampus] = useState("all");
-  const [selectedProgram, setSelectedProgram] = useState("all");
-  const [selectedYearLevel, setSelectedYearLevel] = useState("all");
-  const [selectedGender, setSelectedGender] = useState("all");
-  const [selectedAge, setSelectedAge] = useState("all");
-  const [selectedAcademicYear, setSelectedAcademicYear] =
-    useState("all");
+  // Every filter (and the tab) lives in the URL, like the Activity Log, so a
+  // filtered view survives a reload and can be shared with another admin.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const paramsKey = searchParams.toString();
+  const filters = useMemo(() => filtersFromParams(new URLSearchParams(paramsKey)), [paramsKey]);
+  const tabParam = searchParams.get("tab");
+  const activeTab: AnalyticsTab = ANALYTICS_TABS.some((t) => t.id === tabParam) ? (tabParam as AnalyticsTab) : "overview";
+
+  const setActiveTab = (tab: AnalyticsTab) =>
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (tab === "overview") next.delete("tab");
+      else next.set("tab", tab);
+      return next;
+    });
+
+  // Picking a filter replaces the history entry (like the Activity Log), so
+  // the Back button is not filled with every dropdown change.
+  const updateFilters = (patch: Partial<AnalyticsFilters>) =>
+    setSearchParams((previous) => filtersToParams({ ...filtersFromParams(previous), ...patch }, previous), { replace: true });
+  const clearFilters = () => updateFilters(DEFAULT_FILTERS);
+
+  const selectedCampus = filters.campus;
+  // NOTE: "selectedProgram" is the student's degree COURSE (its old name,
+  // kept so the code below stays recognisable). The new Program filter is a
+  // GUIDANCE program: selectedGuidanceProgram.
+  const selectedProgram = filters.course;
+  const selectedYearLevel = filters.yearLevel;
+  const selectedGender = filters.gender;
+  const selectedAge = filters.age;
+  const selectedAcademicYear = filters.academicYear;
+  const selectedGuidanceProgram = filters.program;
+  const selectedPwd = filters.pwd;
+  const selectedIp = filters.ip;
+
+  const setSelectedProgram = (value: string) => updateFilters({ course: value });
+  const setSelectedYearLevel = (value: string) => updateFilters({ yearLevel: value });
+  const setSelectedGender = (value: string) => updateFilters({ gender: value });
+  const setSelectedAge = (value: string) => updateFilters({ age: value });
+  const setSelectedAcademicYear = (value: string) => updateFilters({ academicYear: value });
 
   // Changing campus resets the course filter — a previously-selected
   // course almost certainly doesn't belong to the newly-picked campus,
   // and silently keeping an invisible/mismatched filter active would be
   // more confusing than just clearing it. Same behavior as
   // UserManagement.tsx's handleCampusFilterChange.
-  const handleCampusFilterChange = (value: string) => {
-    setSelectedCampus(value);
-    setSelectedProgram("all");
-  };
+  const handleCampusFilterChange = (value: string) => updateFilters({ campus: value, course: ALL_FILTER });
+
+  useEffect(() => {
+    if (
+      !loading &&
+      selectedGuidanceProgram !== ALL_FILTER &&
+      programs.length > 0 &&
+      !programs.some((p) => safeString(p.id) === selectedGuidanceProgram)
+    ) {
+      updateFilters({ program: ALL_FILTER });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, programs, selectedGuidanceProgram]);
 
   /* MATERIAL REACH BY COURSE (PHASE 32) — the aggregation is the
      material_reach_summary RPC; it follows the filters above plus its own
@@ -520,8 +581,12 @@ export default function AnalyticsDashboard() {
       gender: selectedGender,
       age: selectedAge,
       academicYear: selectedAcademicYear,
-      iecProgramId: reachIecProgramId,
+      // With a guidance program on the shared bar, "reached" means that program's own materials.
+      iecProgramId: selectedGuidanceProgram !== ALL_FILTER ? selectedGuidanceProgram : reachIecProgramId,
       includeTest: reachIncludeTest,
+      guidanceProgramId: selectedGuidanceProgram,
+      pwd: selectedPwd,
+      ip: selectedIp,
     }),
     [
       selectedCampus,
@@ -530,6 +595,9 @@ export default function AnalyticsDashboard() {
       selectedGender,
       selectedAge,
       selectedAcademicYear,
+      selectedGuidanceProgram,
+      selectedPwd,
+      selectedIp,
       reachIecProgramId,
       reachIncludeTest,
     ]
@@ -596,6 +664,7 @@ export default function AnalyticsDashboard() {
         materialsResult,
         userBridgeResult,
         materialViewLogsResult,
+        programMaterialsResult,
       ] = await Promise.all([
         supabase.from("profiles").select("*"),
 
@@ -643,6 +712,9 @@ export default function AnalyticsDashboard() {
           .select("actor_email, entity_id")
           .eq("action", "view")
           .eq("entity_type", "material"),
+
+        // PHASE 41: which IEC materials are linked to which program.
+        supabase.from("program_materials").select("program_id, material_id"),
       ]);
 
       if (profilesResult.error) {
@@ -708,6 +780,7 @@ export default function AnalyticsDashboard() {
       setMaterials((materialsResult.data || []) as Material[]);
       setUserBridge((userBridgeResult.data || []) as UserBridge[]);
       setMaterialViewLogs((materialViewLogsResult.data || []) as MaterialViewLog[]);
+      setProgramMaterialLinks((programMaterialsResult.data || []) as { program_id: number | string; material_id: number | string }[]);
     } catch (error) {
       console.error("Analytics loading error:", error);
     } finally {
@@ -824,13 +897,71 @@ export default function AnalyticsDashboard() {
      FILTER STATE
   ======================================================= */
 
-  const hasActiveFilters =
-    selectedCampus !== "all" ||
-    selectedProgram !== "all" ||
-    selectedYearLevel !== "all" ||
-    selectedGender !== "all" ||
-    selectedAge !== "all" ||
-    selectedAcademicYear !== "all";
+  const hasActiveFilters = anyFilterActive(filters);
+
+  // PHASE 41. "Participants" of a program = students who answered (pre-test
+  // or post-test) that program's awareness check.
+  const programParticipantStudentIds = useMemo(() => {
+    if (selectedGuidanceProgram === ALL_FILTER) return null;
+    const programSurveyIds = new Set(
+      surveys
+        .filter((survey) => survey.type === "knowledge" && safeString(survey.program_id) === selectedGuidanceProgram)
+        .map((survey) => safeString(survey.id))
+    );
+    const studentByUserId: Record<string, string> = {};
+    userBridge.forEach((user) => {
+      const studentId = safeString(user.student_id);
+      if (studentId) studentByUserId[safeString(user.id)] = studentId;
+    });
+    const ids = new Set<string>();
+    surveyResponses.forEach((response) => {
+      if (!programSurveyIds.has(safeString(response.survey_id))) return;
+      const studentId = studentByUserId[safeString(response.user_id)] || safeString(response.student_id);
+      if (studentId) ids.add(studentId);
+    });
+    return ids;
+  }, [selectedGuidanceProgram, surveys, surveyResponses, userBridge]);
+
+  // The program, its surveys and its materials, when one is chosen.
+  const scopedPrograms = useMemo(
+    () => (selectedGuidanceProgram === ALL_FILTER ? programs : programs.filter((p) => safeString(p.id) === selectedGuidanceProgram)),
+    [programs, selectedGuidanceProgram]
+  );
+  const scopedSurveys = useMemo(
+    () => (selectedGuidanceProgram === ALL_FILTER ? surveys : surveys.filter((s) => safeString(s.program_id) === selectedGuidanceProgram)),
+    [surveys, selectedGuidanceProgram]
+  );
+  const programMaterialIds = useMemo(() => {
+    if (selectedGuidanceProgram === ALL_FILTER) return null;
+    return new Set(
+      programMaterialLinks
+        .filter((link) => safeString(link.program_id) === selectedGuidanceProgram)
+        .map((link) => safeString(link.material_id))
+    );
+  }, [programMaterialLinks, selectedGuidanceProgram]);
+
+  // The Program filter's options: every program, grouped by guidance service.
+  const programFilterGroups = useMemo(() => {
+    const byService = new Map<string, { id: string; label: string }[]>();
+    programs.forEach((program) => {
+      const service = safeString(program.guidance_service) || "Not categorized";
+      if (!byService.has(service)) byService.set(service, []);
+      byService.get(service)!.push({ id: safeString(program.id), label: getProgramName(program).trim() });
+    });
+    const order = [...GUIDANCE_SERVICES, "Not categorized"];
+    return order
+      .filter((service) => byService.has(service))
+      .map((service) => ({
+        service,
+        items: byService.get(service)!.sort((a, b) => a.label.localeCompare(b.label)),
+      }));
+  }, [programs]);
+
+  // The program name as the exports print it.
+  const selectedProgramName = useMemo(() => {
+    const program = programs.find((p) => safeString(p.id) === selectedGuidanceProgram);
+    return program ? getProgramName(program).trim() : undefined;
+  }, [programs, selectedGuidanceProgram]);
 
   /* =======================================================
      FILTERED PROFILES
@@ -869,13 +1000,27 @@ export default function AnalyticsDashboard() {
             new Date(profile.created_at).getFullYear()
           ) === selectedAcademicYear);
 
+      const guidanceProgramMatch =
+        programParticipantStudentIds === null ||
+        programParticipantStudentIds.has(safeString(profile.student_id));
+
+      // PWD / IP only narrow the group; nothing here lists or names a student.
+      const pwdMatch =
+        selectedPwd === ALL_FILTER || (selectedPwd === "pwd") === (profile.is_pwd === true);
+
+      const ipMatch =
+        selectedIp === ALL_FILTER || (selectedIp === "ip") === (profile.is_ip === true);
+
       return (
         campusMatch &&
         programMatch &&
         yearMatch &&
         genderMatch &&
         ageMatch &&
-        academicYearMatch
+        academicYearMatch &&
+        guidanceProgramMatch &&
+        pwdMatch &&
+        ipMatch
       );
     });
   }, [
@@ -886,6 +1031,9 @@ export default function AnalyticsDashboard() {
     selectedGender,
     selectedAge,
     selectedAcademicYear,
+    programParticipantStudentIds,
+    selectedPwd,
+    selectedIp,
   ]);
 
   /* =======================================================
@@ -921,7 +1069,17 @@ export default function AnalyticsDashboard() {
   }, [userBridge]);
 
   const filteredSurveyResponses = useMemo(() => {
+    const surveyById = new Map(surveys.map((survey) => [safeString(survey.id), survey]));
+
     return surveyResponses.filter((response) => {
+      // With a program chosen, only answers to THAT program's awareness check count.
+      if (selectedGuidanceProgram !== ALL_FILTER) {
+        const survey = surveyById.get(safeString(response.survey_id));
+        if (!survey || survey.type !== "knowledge" || safeString(survey.program_id) !== selectedGuidanceProgram) {
+          return false;
+        }
+      }
+
       if (!hasActiveFilters) {
         return true;
       }
@@ -937,6 +1095,8 @@ export default function AnalyticsDashboard() {
     userIdToStudentId,
     filteredStudentIds,
     hasActiveFilters,
+    selectedGuidanceProgram,
+    surveys,
   ]);
 
   /* =======================================================
@@ -947,7 +1107,8 @@ export default function AnalyticsDashboard() {
      Therefore:
      - Campus filter applies to materials.
      - Academic year filter applies to created_at.
-     - Program/year/gender filters do not alter materials.
+     - A Program filter keeps only that program's linked materials.
+     - Year/gender/PWD/IP filters do not alter materials.
   ======================================================= */
 
   const filteredMaterials = useMemo(() => {
@@ -977,12 +1138,16 @@ export default function AnalyticsDashboard() {
             new Date(material.created_at).getFullYear()
           ) === selectedAcademicYear);
 
-      return campusMatch && academicYearMatch;
+      const programMatch =
+        programMaterialIds === null || programMaterialIds.has(safeString(material.id));
+
+      return campusMatch && academicYearMatch && programMatch;
     });
   }, [
     materials,
     selectedCampus,
     selectedAcademicYear,
+    programMaterialIds,
   ]);
 
   /* =======================================================
@@ -1073,9 +1238,13 @@ export default function AnalyticsDashboard() {
 
     filteredSurveyResponses.forEach(
       (response) => {
+        // A response carries the users.id, not the student ID: resolve it so
+        // the same student is not counted once as a profile and again as a
+        // responder (that double-counted every student who had a profile).
         addParticipant(
           response.user_id,
-          response.student_id
+          response.student_id ||
+            userIdToStudentId[safeString(response.user_id)]
         );
       }
     );
@@ -1084,6 +1253,7 @@ export default function AnalyticsDashboard() {
   }, [
     filteredProfiles,
     filteredSurveyResponses,
+    userIdToStudentId,
   ]);
 
   /* =======================================================
@@ -1347,41 +1517,59 @@ export default function AnalyticsDashboard() {
     });
   }, [filteredSurveyResponses, surveys]);
 
+  // The small-group rule (PHASE 41): the scores of fewer than 5 DISTINCT students
+  // are never shown, on the page, in the exports or in the AI insight. Counts stay.
+  const studentOfResponse = (response: SurveyResponse) =>
+    userIdToStudentId[safeString(response.user_id)] ||
+    safeString(response.student_id) ||
+    `user:${safeString(response.user_id)}`;
+
   const awarenessAnalytics = useMemo(() => {
     const average = (values: number[]) =>
       values.length > 0
         ? Math.round(values.reduce((sum, v) => sum + v, 0) / values.length)
         : null;
 
-    const overall = average(
-      scoredSurveyResponses.map((r) => r.percentage || 0)
-    );
+    const overallStudents = new Set(scoredSurveyResponses.map(studentOfResponse)).size;
+    const overallTooFew = isTooFew(overallStudents);
+
+    const overall = overallTooFew
+      ? null
+      : average(scoredSurveyResponses.map((r) => r.percentage || 0));
 
     const groupBy = (
       keyFn: (profile: Profile | undefined) => string
     ) => {
-      const buckets: Record<string, number[]> = {};
+      const buckets: Record<string, { values: number[]; students: Set<string> }> = {};
 
       scoredSurveyResponses.forEach((response) => {
         const studentId = userIdToStudentId[safeString(response.user_id)];
         const profile = studentId ? profileByStudentId[studentId] : undefined;
         const key = keyFn(profile);
 
-        if (!buckets[key]) buckets[key] = [];
-        buckets[key].push(response.percentage || 0);
+        if (!buckets[key]) buckets[key] = { values: [], students: new Set() };
+        buckets[key].values.push(response.percentage || 0);
+        buckets[key].students.add(studentOfResponse(response));
       });
 
       return Object.entries(buckets)
-        .map(([label, values]) => ({
-          label,
-          average: average(values) ?? 0,
-          count: values.length,
-        }))
+        .map(([label, { values, students }]) => {
+          const tooFew = isTooFew(students.size);
+          return {
+            label,
+            average: tooFew ? null : average(values) ?? 0,
+            count: values.length,
+            students: students.size,
+            tooFew,
+          };
+        })
         .sort((a, b) => b.count - a.count);
     };
 
     return {
       overall,
+      overallTooFew,
+      overallStudents,
       totalResponses: scoredSurveyResponses.length,
       byYearLevel: groupBy((p) => getYearLevel(p?.year_level)),
       byGender: groupBy((p) => safeString(p?.gender) || "Not Specified"),
@@ -1391,7 +1579,7 @@ export default function AnalyticsDashboard() {
   }, [scoredSurveyResponses, userIdToStudentId, profileByStudentId]);
 
   const programAwarenessAnalytics = useMemo(() => {
-    const buckets: Record<string, number[]> = {};
+    const buckets: Record<string, { values: number[]; students: Set<string> }> = {};
 
     scoredSurveyResponses.forEach((response) => {
       const survey = surveys.find(
@@ -1399,6 +1587,7 @@ export default function AnalyticsDashboard() {
       );
 
       const questions = questionsForResponse(survey, response);
+      const studentId = studentOfResponse(response);
 
       questions.forEach((question: any) => {
         if (
@@ -1410,31 +1599,38 @@ export default function AnalyticsDashboard() {
         }
 
         const programId = safeString(question.related_program_id);
+        // With a program chosen on the shared bar, only that program.
+        if (selectedGuidanceProgram !== ALL_FILTER && programId !== selectedGuidanceProgram) return;
+
         const given = response.answers?.[String(question.id)];
         const isCorrect = given === question.correct_option ? 1 : 0;
 
-        if (!buckets[programId]) buckets[programId] = [];
-        buckets[programId].push(isCorrect * 100);
+        if (!buckets[programId]) buckets[programId] = { values: [], students: new Set() };
+        buckets[programId].values.push(isCorrect * 100);
+        buckets[programId].students.add(studentId);
       });
     });
 
     return Object.entries(buckets)
-      .map(([programId, values]) => {
+      .map(([programId, { values, students }]) => {
         const program = programs.find(
           (p) => safeString(p.id) === programId
         );
+        const tooFew = isTooFew(students.size);
 
         return {
           programId,
           name: program ? getProgramName(program) : `Program #${programId}`,
-          average: Math.round(
-            values.reduce((sum, v) => sum + v, 0) / values.length
-          ),
+          average: tooFew
+            ? null
+            : Math.round(values.reduce((sum, v) => sum + v, 0) / values.length),
           count: values.length,
+          students: students.size,
+          tooFew,
         };
       })
       .sort((a, b) => b.count - a.count);
-  }, [scoredSurveyResponses, surveys, programs]);
+  }, [scoredSurveyResponses, surveys, programs, userIdToStudentId, selectedGuidanceProgram]);
 
   /* =======================================================
      GUIDANCE SERVICE COVERAGE
@@ -1448,18 +1644,18 @@ export default function AnalyticsDashboard() {
   const guidanceServiceCoverage = useMemo(() => {
     const programCounts: Record<string, number> = {};
 
-    programs.forEach((program) => {
+    scopedPrograms.forEach((program) => {
       const service = safeString(program.guidance_service);
       if (service) programCounts[service] = (programCounts[service] || 0) + 1;
     });
 
     const serviceByProgramId: Record<string, string> = {};
-    programs.forEach((program) => {
+    scopedPrograms.forEach((program) => {
       const service = safeString(program.guidance_service);
       if (service) serviceByProgramId[safeString(program.id)] = service;
     });
 
-    const scoreBuckets: Record<string, number[]> = {};
+    const scoreBuckets: Record<string, { values: number[]; students: Set<string> }> = {};
 
     scoredSurveyResponses.forEach((response) => {
       const survey = surveys.find(
@@ -1467,6 +1663,7 @@ export default function AnalyticsDashboard() {
       );
 
       const questions = questionsForResponse(survey, response);
+      const studentId = studentOfResponse(response);
 
       questions.forEach((question: any) => {
         if (
@@ -1483,24 +1680,27 @@ export default function AnalyticsDashboard() {
         const given = response.answers?.[String(question.id)];
         const isCorrect = given === question.correct_option ? 1 : 0;
 
-        if (!scoreBuckets[service]) scoreBuckets[service] = [];
-        scoreBuckets[service].push(isCorrect * 100);
+        if (!scoreBuckets[service]) scoreBuckets[service] = { values: [], students: new Set() };
+        scoreBuckets[service].values.push(isCorrect * 100);
+        scoreBuckets[service].students.add(studentId);
       });
     });
 
     return GUIDANCE_SERVICES.map((service) => {
-      const scores = scoreBuckets[service] || [];
+      const bucket = scoreBuckets[service];
+      const tooFew = bucket ? isTooFew(bucket.students.size) : false;
 
       return {
         service,
         programCount: programCounts[service] || 0,
         averageScore:
-          scores.length > 0
-            ? Math.round(scores.reduce((sum, v) => sum + v, 0) / scores.length)
+          bucket && bucket.values.length > 0 && !tooFew
+            ? Math.round(bucket.values.reduce((sum, v) => sum + v, 0) / bucket.values.length)
             : null,
+        tooFew,
       };
     });
-  }, [programs, scoredSurveyResponses, surveys]);
+  }, [scopedPrograms, scoredSurveyResponses, surveys, userIdToStudentId]);
 
   /* =======================================================
      PROGRAM PARTICIPATION BY COURSE
@@ -1651,7 +1851,9 @@ export default function AnalyticsDashboard() {
   }, [materialViewLogs, emailToStudentId, materialIdToCategory]);
 
   const materialExposureAwareness = useMemo(() => {
-    const buckets: Record<string, { opened: number[]; notOpened: number[] }> = {};
+    type Side = { values: number[]; students: Set<string> };
+    const buckets: Record<string, { opened: Side; notOpened: Side }> = {};
+    const newSide = (): Side => ({ values: [], students: new Set() });
 
     scoredSurveyResponses.forEach((response) => {
       const survey = surveys.find((s) => safeString(s.id) === safeString(response.survey_id));
@@ -1663,22 +1865,29 @@ export default function AnalyticsDashboard() {
 
       const opened = studentOpenedCategories[studentId]?.has(category) ?? false;
 
-      if (!buckets[category]) buckets[category] = { opened: [], notOpened: [] };
-      (opened ? buckets[category].opened : buckets[category].notOpened).push(response.percentage || 0);
+      if (!buckets[category]) buckets[category] = { opened: newSide(), notOpened: newSide() };
+      const side = opened ? buckets[category].opened : buckets[category].notOpened;
+      side.values.push(response.percentage || 0);
+      side.students.add(studentId);
     });
 
     return Object.entries(buckets)
       .map(([category, { opened, notOpened }]) => {
-        const openedAvg = average(opened);
-        const notOpenedAvg = average(notOpened);
+        // Each side is judged on its own number of distinct students.
+        const openedTooFew = isTooFew(opened.students.size);
+        const notOpenedTooFew = isTooFew(notOpened.students.size);
+        const openedAvg = openedTooFew ? null : average(opened.values);
+        const notOpenedAvg = notOpenedTooFew ? null : average(notOpened.values);
         return {
           category,
           openedAvg,
           notOpenedAvg,
+          openedTooFew,
+          notOpenedTooFew,
           difference: openedAvg !== null && notOpenedAvg !== null ? openedAvg - notOpenedAvg : null,
-          openedCount: opened.length,
-          notOpenedCount: notOpened.length,
-          totalRespondents: opened.length + notOpened.length,
+          openedCount: opened.values.length,
+          notOpenedCount: notOpened.values.length,
+          totalRespondents: opened.values.length + notOpened.values.length,
         };
       })
       .sort((a, b) => b.totalRespondents - a.totalRespondents);
@@ -1718,12 +1927,12 @@ export default function AnalyticsDashboard() {
   ======================================================= */
 
   const activeSurveys = useMemo(() => {
-    return surveys.filter(
+    return scopedSurveys.filter(
       (survey) =>
         normalize(survey.status) ===
         "active"
     ).length;
-  }, [surveys]);
+  }, [scopedSurveys]);
 
   /* =======================================================
      =======================================================
@@ -1740,7 +1949,7 @@ export default function AnalyticsDashboard() {
 
   // The Content list is never narrowed by campus / year, so a materials number
   // is a link only while those two filters are off.
-  const materialsListMatches = selectedCampus === "all" && selectedAcademicYear === "all";
+  const materialsListMatches = selectedCampus === "all" && selectedAcademicYear === "all" && selectedGuidanceProgram === ALL_FILTER;
 
   /* -------------------------------------------------------
      TOTAL IEC MATERIALS
@@ -2115,7 +2324,7 @@ export default function AnalyticsDashboard() {
     participantCount;
 
   const totalGuidancePrograms =
-    programs.length;
+    scopedPrograms.length;
 
   const totalSurveyResponses =
     filteredSurveyResponses.length;
@@ -2211,19 +2420,21 @@ export default function AnalyticsDashboard() {
      to generate.
   ======================================================= */
 
+  // PHASE 41: every export follows the dropdown filters (Program, PWD, IP and
+  // the rest) AND the date range below.
   const reportFilteredProfiles = useMemo(
-    () => profiles.filter((p) => isWithinRange(p.created_at, reportStartDate, reportEndDate)),
-    [profiles, reportStartDate, reportEndDate]
+    () => filteredProfiles.filter((p) => isWithinRange(p.created_at, reportStartDate, reportEndDate)),
+    [filteredProfiles, reportStartDate, reportEndDate]
   );
 
   const reportFilteredResponses = useMemo(
-    () => surveyResponses.filter((r) => isWithinRange(r.created_at, reportStartDate, reportEndDate)),
-    [surveyResponses, reportStartDate, reportEndDate]
+    () => filteredSurveyResponses.filter((r) => isWithinRange(r.created_at, reportStartDate, reportEndDate)),
+    [filteredSurveyResponses, reportStartDate, reportEndDate]
   );
 
   const reportFilteredMaterials = useMemo(
-    () => materials.filter((m) => isWithinRange(m.created_at, reportStartDate, reportEndDate)),
-    [materials, reportStartDate, reportEndDate]
+    () => filteredMaterials.filter((m) => isWithinRange(m.created_at, reportStartDate, reportEndDate)),
+    [filteredMaterials, reportStartDate, reportEndDate]
   );
 
   const reportScoredResponses = useMemo(() => {
@@ -2239,11 +2450,12 @@ export default function AnalyticsDashboard() {
   }, [reportFilteredResponses, surveys]);
 
   const reportProgramAwareness = useMemo(() => {
-    const buckets: Record<string, number[]> = {};
+    const buckets: Record<string, { values: number[]; students: Set<string> }> = {};
 
     reportScoredResponses.forEach((response) => {
       const survey = surveys.find((s) => safeString(s.id) === safeString(response.survey_id));
       const questions = questionsForResponse(survey, response);
+      const studentId = studentOfResponse(response);
 
       questions.forEach((question: any) => {
         if (question?.type !== "mcq" || !question?.correct_option || !question?.related_program_id) {
@@ -2251,23 +2463,28 @@ export default function AnalyticsDashboard() {
         }
 
         const programId = safeString(question.related_program_id);
-        if (!buckets[programId]) buckets[programId] = [];
-        buckets[programId].push(response.percentage || 0);
+        if (selectedGuidanceProgram !== ALL_FILTER && programId !== selectedGuidanceProgram) return;
+
+        if (!buckets[programId]) buckets[programId] = { values: [], students: new Set() };
+        buckets[programId].values.push(response.percentage || 0);
+        buckets[programId].students.add(studentId);
       });
     });
 
-    return programs
+    return scopedPrograms
       .map((program) => {
-        const values = buckets[safeString(program.id)] || [];
+        const bucket = buckets[safeString(program.id)];
+        const tooFew = bucket ? isTooFew(bucket.students.size) : false;
         return {
           name: getProgramName(program),
           guidanceService: safeString(program.guidance_service) || "Not Categorized",
-          averageScore: average(values),
-          responseCount: values.length,
+          averageScore: bucket && !tooFew ? average(bucket.values) : null,
+          responseCount: bucket ? bucket.values.length : 0,
+          tooFew,
         };
       })
       .sort((a, b) => b.responseCount - a.responseCount);
-  }, [programs, reportScoredResponses, surveys]);
+  }, [scopedPrograms, reportScoredResponses, surveys, userIdToStudentId, selectedGuidanceProgram]);
 
   const reportDemographics = useMemo(() => {
     const groupBy = (keyFn: (p: Profile) => string) => {
@@ -2298,21 +2515,22 @@ export default function AnalyticsDashboard() {
 
   const reportGuidanceCoverage = useMemo(() => {
     const programCounts: Record<string, number> = {};
-    programs.forEach((p) => {
+    scopedPrograms.forEach((p) => {
       const service = safeString(p.guidance_service);
       if (service) programCounts[service] = (programCounts[service] || 0) + 1;
     });
 
     const serviceByProgramId: Record<string, string> = {};
-    programs.forEach((p) => {
+    scopedPrograms.forEach((p) => {
       const service = safeString(p.guidance_service);
       if (service) serviceByProgramId[safeString(p.id)] = service;
     });
 
-    const scoreBuckets: Record<string, number[]> = {};
+    const scoreBuckets: Record<string, { values: number[]; students: Set<string> }> = {};
     reportScoredResponses.forEach((response) => {
       const survey = surveys.find((s) => safeString(s.id) === safeString(response.survey_id));
       const questions = questionsForResponse(survey, response);
+      const studentId = studentOfResponse(response);
 
       questions.forEach((question: any) => {
         if (question?.type !== "mcq" || !question?.correct_option || !question?.related_program_id) {
@@ -2322,17 +2540,23 @@ export default function AnalyticsDashboard() {
         const service = serviceByProgramId[safeString(question.related_program_id)];
         if (!service) return;
 
-        if (!scoreBuckets[service]) scoreBuckets[service] = [];
-        scoreBuckets[service].push(response.percentage || 0);
+        if (!scoreBuckets[service]) scoreBuckets[service] = { values: [], students: new Set() };
+        scoreBuckets[service].values.push(response.percentage || 0);
+        scoreBuckets[service].students.add(studentId);
       });
     });
 
-    return GUIDANCE_SERVICES.map((service) => ({
-      service,
-      programCount: programCounts[service] || 0,
-      averageScore: average(scoreBuckets[service] || []),
-    }));
-  }, [programs, reportScoredResponses, surveys]);
+    return GUIDANCE_SERVICES.map((service) => {
+      const bucket = scoreBuckets[service];
+      const tooFew = bucket ? isTooFew(bucket.students.size) : false;
+      return {
+        service,
+        programCount: programCounts[service] || 0,
+        averageScore: bucket && !tooFew ? average(bucket.values) : null,
+        tooFew,
+      };
+    });
+  }, [scopedPrograms, reportScoredResponses, surveys, userIdToStudentId]);
 
   const reportMaterialReach = useMemo(() => {
     const byCategory: Record<string, { count: number; downloads: number }> = {};
@@ -2365,6 +2589,171 @@ export default function AnalyticsDashboard() {
   // downloads, so that section isn't duplicated here — Recent IEC
   // Materials is kept since it's the one piece the old Export Report
   // never had.
+  // A score cell: the small-group text when the group is under the rule,
+  // "No data" when there is nothing to show.
+  const scoreCell = (value: number | null, tooFew: boolean) =>
+    tooFew ? TOO_FEW_TEXT : value !== null ? `${value}%` : "No data";
+
+  const [generatingExcel, setGeneratingExcel] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  // Learning gain (pre-test vs post-test) under the current filters. The SQL
+  // already withholds the scores of a group under 5 paired students.
+  const buildLearningSection = async (): Promise<ReportSection | null> => {
+    const { data, error } = await supabase.rpc("learning_gain_summary", buildLearningGainParams(filters));
+    if (error || !data) return null;
+
+    const payload = data as any;
+    const rows = (payload.rows || []) as any[];
+    const programTitles = new Map<string, string>(
+      (payload.options?.programs || []).map((p: any) => [String(p.id), String(p.title).trim()])
+    );
+    const pct = (value: unknown) => (value === null || value === undefined ? "—" : `${Number(value).toFixed(1)}%`);
+
+    return {
+      title: "Learning Gain (Pre vs Post)",
+      head: ["Group", "Paired students", "Mean pre-test", "Mean post-test", "Mean gain"],
+      rows: rows
+        .filter((row) => row.dimension === "overall" || row.dimension === "program")
+        .map((row) => {
+          const hidden = row.suppressed === true;
+          const gain =
+            row.mean_gain === null || row.mean_gain === undefined
+              ? "—"
+              : `${Number(row.mean_gain) > 0 ? "+" : ""}${Number(row.mean_gain).toFixed(1)} pts`;
+          return [
+            row.dimension === "overall" ? "All paired students" : programTitles.get(String(row.key)) || `Program ${row.key}`,
+            Number(row.paired_n) || 0,
+            hidden ? TOO_FEW_TEXT : pct(row.mean_pre),
+            hidden ? TOO_FEW_TEXT : pct(row.mean_post),
+            hidden ? TOO_FEW_TEXT : gain,
+          ];
+        }),
+      note: "Paired students only (both a pre-test and a post-test). A group under 5 paired students is not reported.",
+    };
+  };
+
+  const reportTitle = selectedProgramName
+    ? `Program report: ${selectedProgramName}`
+    : "Guidance Awareness & Analytics Report";
+
+  const reportFileBase = () => {
+    const day = new Date().toISOString().slice(0, 10);
+    if (selectedGuidanceProgram === ALL_FILTER) return `OMSU_Guidance_Analytics_Report_${day}`;
+    const slug = (selectedProgramName || selectedGuidanceProgram).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+    return `OMSU_Program_Report_${slug}_${day}`;
+  };
+
+  // The same tables as the PDF, as workbook sheets.
+  const buildReportModel = (
+    reach: Awaited<ReturnType<typeof fetchMaterialReach>> | null,
+    learning: ReportSection | null
+  ): ReportModel => {
+    const small = (n: number) => (n < SMALL_SAMPLE_N ? " (small sample)" : "");
+    const sections: ReportSection[] = [
+      { title: "Overview Metrics", head: ["Metric", "Value"], rows: getReportRows().slice(1) as (string | number)[][] },
+      {
+        title: "Program Awareness",
+        head: ["Program", "Guidance Service", "Avg. Score", "Responses"],
+        rows: reportProgramAwareness.map((row) => [row.name, row.guidanceService, scoreCell(row.averageScore, row.tooFew), row.responseCount]),
+      },
+      {
+        title: "Demographic Breakdown",
+        head: ["Dimension", "Segment", "Count"],
+        rows: [
+          ...reportDemographics.byYearLevel.map((r) => ["Year Level", r.label, r.count]),
+          ...reportDemographics.byGender.map((r) => ["Gender", r.label, r.count]),
+          ...reportDemographics.byAgeBand.map((r) => ["Age Band", r.label, r.count]),
+          ["PWD Status", "PWD", reportDemographics.pwd],
+          ["PWD Status", "Non-PWD", reportDemographics.nonPwd],
+          ["IP Status", "Indigenous Peoples", reportDemographics.ip],
+          ["IP Status", "Non-IP", reportDemographics.nonIp],
+        ],
+        note: "Counts only. No names, emails, or student IDs.",
+      },
+      {
+        title: "Guidance Service Coverage",
+        head: ["Guidance Service", "Programs", "Avg. Awareness Score"],
+        rows: reportGuidanceCoverage.map((row) => [row.service, row.programCount, scoreCell(row.averageScore, row.tooFew)]),
+      },
+      {
+        title: "Awareness by Exposure",
+        head: ["IEC Category", "Opened", "Did Not Open", "Difference", "Respondents"],
+        rows: materialExposureAwareness.map((row) => [
+          row.category,
+          row.openedTooFew ? `${TOO_FEW_TEXT} (${row.openedCount})` : row.openedAvg !== null ? `${row.openedAvg}% (${row.openedCount})` : "No data",
+          row.notOpenedTooFew ? `${TOO_FEW_TEXT} (${row.notOpenedCount})` : row.notOpenedAvg !== null ? `${row.notOpenedAvg}% (${row.notOpenedCount})` : "No data",
+          row.openedTooFew || row.notOpenedTooFew ? TOO_FEW_TEXT : row.difference !== null ? `${row.difference >= 0 ? "+" : ""}${row.difference}pp` : "No data",
+          row.totalRespondents,
+        ]),
+      },
+      {
+        title: "IEC Material Reach",
+        head: ["Category", "Materials", "Downloads"],
+        rows: reportMaterialReach.byCategory.map((row) => [row.category, row.count, row.downloads]),
+        note: `${reportMaterialReach.totalMaterials} materials, ${reportMaterialReach.totalDownloads} downloads`,
+      },
+      {
+        title: "Recent IEC Materials",
+        head: ["Title", "Format", "Category", "Campus", "Downloads", "Created"],
+        rows: recentIECMaterials.map((material) => [
+          safeString(material.title),
+          safeString(material.format),
+          safeString(material.category),
+          campusLabel(safeString(material.campus)),
+          Number(material.downloads || 0),
+          material.created_at ? new Date(material.created_at).toLocaleDateString() : "",
+        ]),
+      },
+    ];
+    if (learning) sections.push(learning);
+    if (reach) {
+      sections.push({
+        title: "Material Reach by Course",
+        head: ["Course", "Students", "Opened at least one", "Reached"],
+        rows: reach.by_course.map((row) => [`${row.key}${small(row.students)}`, row.students, row.reached, pctPdf(row.pct)]),
+        note: "Percentages are based on students with an account in the system, not on total enrollment.",
+      });
+      sections.push({
+        title: "Material Reach by Year Level",
+        head: ["Year level", "Students", "Opened at least one", "Reached"],
+        rows: reach.by_year_level.map((row) => [`${row.key}${small(row.students)}`, row.students, row.reached, pctPdf(row.pct)]),
+      });
+    }
+
+    return {
+      title: reportTitle,
+      periodLabel: reportRangeLabel,
+      generatedAt: new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }),
+      filtersLine: describeFilters(filters, selectedProgramName),
+      definition: PARTICIPANTS_DEFINITION,
+      sections,
+      fileBase: reportFileBase(),
+    };
+  };
+
+  const exportReportExcel = async () => {
+    setGeneratingExcel(true);
+    setExportError(null);
+    try {
+      let reach = materialReach;
+      if (!reach) {
+        try {
+          reach = await fetchMaterialReach(reachFilters);
+        } catch (reachError) {
+          console.error("Material reach (Excel):", reachError);
+        }
+      }
+      const learning = await buildLearningSection();
+      await downloadReportXlsx(buildReportModel(reach, learning));
+    } catch (error) {
+      console.error("Excel export:", error);
+      setExportError("The Excel file could not be created. Please try again.");
+    } finally {
+      setGeneratingExcel(false);
+    }
+  };
+
   const pctPdf = (pct: number | null) => (pct === null ? "—" : `${pct}%`);
 
   const exportReportPDF = async () => {
@@ -2382,6 +2771,10 @@ export default function AnalyticsDashboard() {
         timeStyle: "short",
       });
 
+      const learningSection = await buildLearningSection();
+      const filtersLine = describeFilters(filters, selectedProgramName);
+      let bodyTop = 46;
+
       const addHeader = () => {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(16);
@@ -2389,18 +2782,30 @@ export default function AnalyticsDashboard() {
         doc.text("OMSU GUIDANCE AND TESTING CENTER", 14, 18);
 
         doc.setFontSize(12);
-        doc.text("Guidance Awareness & Analytics Report", 14, 26);
+        const titleLines = doc.splitTextToSize(reportTitle, 182).slice(0, 2);
+        doc.text(titleLines, 14, 26);
+        const shift = (titleLines.length - 1) * 5;
 
         doc.setFont("helvetica", "normal");
         doc.setFontSize(9);
         doc.setTextColor(100);
-        doc.text(`Report Period: ${reportRangeLabel}`, 14, 33);
-        doc.text(`Generated: ${generatedAtLabel}`, 14, 38);
+        doc.text(`Report Period: ${reportRangeLabel}`, 14, 33 + shift);
+        doc.text(`Generated: ${generatedAtLabel}`, 14, 38 + shift);
+
+        // The filters in force and what "participants" means, on every page.
+        doc.setTextColor(40);
+        const filterLines = doc.splitTextToSize(filtersLine, 182);
+        doc.text(filterLines, 14, 43 + shift);
+        let y = 43 + shift + filterLines.length * 4;
+        const definitionLines = doc.splitTextToSize(PARTICIPANTS_DEFINITION, 182);
+        doc.text(definitionLines, 14, y);
+        y += definitionLines.length * 4;
+        bodyTop = y + 5;
       };
 
       addHeader();
 
-      let nextY = 46;
+      let nextY = bodyTop;
 
       // SECTION 1 — Overview Metrics
       doc.setFont("helvetica", "bold");
@@ -2422,7 +2827,7 @@ export default function AnalyticsDashboard() {
       if (nextY > 250) {
         doc.addPage();
         addHeader();
-        nextY = 46;
+        nextY = bodyTop;
       }
 
       // SECTION 2 — Program Awareness Summary
@@ -2438,7 +2843,7 @@ export default function AnalyticsDashboard() {
         body: tableBodyOrPlaceholder(reportProgramAwareness, 4, (row) => [
           row.name,
           row.guidanceService,
-          row.averageScore !== null ? `${row.averageScore}%` : "No data",
+          scoreCell(row.averageScore, row.tooFew),
           row.responseCount,
         ]),
         headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
@@ -2457,7 +2862,7 @@ export default function AnalyticsDashboard() {
       if (nextY > 250) {
         doc.addPage();
         addHeader();
-        nextY = 46;
+        nextY = bodyTop;
       }
 
       // SECTION 3 — Demographic Breakdown
@@ -2486,7 +2891,7 @@ export default function AnalyticsDashboard() {
       if (nextY > 250) {
         doc.addPage();
         addHeader();
-        nextY = 46;
+        nextY = bodyTop;
       }
 
       // SECTION 4 — Guidance Service Coverage
@@ -2501,7 +2906,7 @@ export default function AnalyticsDashboard() {
         body: reportGuidanceCoverage.map((row) => [
           row.service,
           row.programCount,
-          row.averageScore !== null ? `${row.averageScore}%` : "No data",
+          scoreCell(row.averageScore, row.tooFew),
         ]),
         headStyles: { fillColor: [217, 119, 6], textColor: [255, 255, 255], fontStyle: "bold" },
         styles: { fontSize: 12 },
@@ -2511,7 +2916,7 @@ export default function AnalyticsDashboard() {
       if (nextY > 250) {
         doc.addPage();
         addHeader();
-        nextY = 46;
+        nextY = bodyTop;
       }
 
       // SECTION 5 — Awareness by Material Exposure
@@ -2526,9 +2931,9 @@ export default function AnalyticsDashboard() {
         head: [["IEC Category", "Opened", "Did Not Open", "Difference", "Respondents"]],
         body: tableBodyOrPlaceholder(materialExposureAwareness, 5, (row) => [
           row.category,
-          row.openedAvg !== null ? `${row.openedAvg}% (${row.openedCount})` : "No data",
-          row.notOpenedAvg !== null ? `${row.notOpenedAvg}% (${row.notOpenedCount})` : "No data",
-          row.difference !== null ? `${row.difference >= 0 ? "+" : ""}${row.difference}pp` : "No data",
+          row.openedTooFew ? `${TOO_FEW_TEXT} (${row.openedCount})` : row.openedAvg !== null ? `${row.openedAvg}% (${row.openedCount})` : "No data",
+          row.notOpenedTooFew ? `${TOO_FEW_TEXT} (${row.notOpenedCount})` : row.notOpenedAvg !== null ? `${row.notOpenedAvg}% (${row.notOpenedCount})` : "No data",
+          row.openedTooFew || row.notOpenedTooFew ? TOO_FEW_TEXT : row.difference !== null ? `${row.difference >= 0 ? "+" : ""}${row.difference}pp` : "No data",
           row.totalRespondents,
         ]),
         headStyles: { fillColor: [8, 145, 178], textColor: [255, 255, 255], fontStyle: "bold" },
@@ -2547,7 +2952,7 @@ export default function AnalyticsDashboard() {
       if (nextY > 250) {
         doc.addPage();
         addHeader();
-        nextY = 46;
+        nextY = bodyTop;
       }
 
       // SECTION 6 — IEC Material Reach
@@ -2580,7 +2985,7 @@ export default function AnalyticsDashboard() {
       if (nextY > 250) {
         doc.addPage();
         addHeader();
-        nextY = 46;
+        nextY = bodyTop;
       }
 
       // SECTION 7 — Recent IEC Materials
@@ -2605,6 +3010,41 @@ export default function AnalyticsDashboard() {
         styles: { fontSize: 12 },
       });
 
+      // SECTION 8 — Learning gain (pre-test vs post-test) under the same filters.
+      if (learningSection) {
+        nextY = (doc.lastAutoTable?.finalY || nextY) + 12;
+        if (nextY > 250) {
+          doc.addPage();
+          addHeader();
+          nextY = bodyTop;
+        }
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.setTextColor(15);
+        doc.text("Learning Gain (Pre-test vs Post-test)", 14, nextY);
+        nextY += 6;
+        autoTable(doc, {
+          startY: nextY,
+          head: [learningSection.head],
+          // A withheld group prints the small-group text once, across the three score columns.
+          body:
+            learningSection.rows.length > 0
+              ? learningSection.rows.map((row) =>
+                  row[2] === TOO_FEW_TEXT
+                    ? [row[0], row[1], { content: TOO_FEW_TEXT, colSpan: 3, styles: { halign: "center" } }]
+                    : row
+                )
+              : [Array(learningSection.head.length).fill("—")],
+          headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
+          styles: { fontSize: 12 },
+        });
+        nextY = (doc.lastAutoTable?.finalY || nextY) + 5;
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(8);
+        doc.setTextColor(100);
+        doc.text(doc.splitTextToSize(learningSection.note || "", 180), 14, nextY);
+      }
+
       // SECTION 8 — Material Reach by Course (PHASE 32). Uses what is on
       // screen (the dashboard filters, IEC program and test-accounts
       // switch), fetching it if the screen has not loaded it yet.
@@ -2619,7 +3059,7 @@ export default function AnalyticsDashboard() {
 
       doc.addPage();
       addHeader();
-      nextY = 46;
+      nextY = bodyTop;
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
@@ -2637,6 +3077,9 @@ export default function AnalyticsDashboard() {
         selectedGender !== "all" && `Gender: ${selectedGender}`,
         selectedAge !== "all" && `Age: ${selectedAge}`,
         selectedAcademicYear !== "all" && `Academic year: ${selectedAcademicYear}`,
+        selectedGuidanceProgram !== ALL_FILTER && `Program: ${selectedProgramName || selectedGuidanceProgram}`,
+        selectedPwd !== ALL_FILTER && `PWD status: ${selectedPwd === "pwd" ? "PWD" : "Not PWD"}`,
+        selectedIp !== ALL_FILTER && `IP status: ${selectedIp === "ip" ? "IP" : "Not IP"}`,
       ].filter(Boolean) as string[];
       const reachProgramTitle =
         reachIecProgramId === "all"
@@ -2670,7 +3113,7 @@ export default function AnalyticsDashboard() {
           if (nextY + barHeight > 275) {
             doc.addPage();
             addHeader();
-            nextY = 46;
+            nextY = bodyTop;
           }
           doc.setFont("helvetica", "normal");
           doc.setFontSize(8);
@@ -2704,7 +3147,7 @@ export default function AnalyticsDashboard() {
         if (nextY > 250) {
           doc.addPage();
           addHeader();
-          nextY = 46;
+          nextY = bodyTop;
         }
         doc.setFont("helvetica", "bold");
         doc.setFontSize(12);
@@ -2737,12 +3180,12 @@ export default function AnalyticsDashboard() {
         if (nextY + reachNotes.length * 4 > 280) {
           doc.addPage();
           addHeader();
-          nextY = 46;
+          nextY = bodyTop;
         }
         doc.text(reachNotes, 14, nextY);
       }
 
-      doc.save(`OMSU_Guidance_Analytics_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+      doc.save(`${reportFileBase()}.pdf`);
     } finally {
       setGeneratingReport(false);
     }
@@ -2891,8 +3334,16 @@ export default function AnalyticsDashboard() {
   };
 
   const handleGenerateInsight = async (regenerate = false) => {
-    setInsightLoading(true);
     setInsightError(null);
+
+    // The small-group rule also covers what leaves for the AI service.
+    if (hasActiveFilters && isTooFew(totalStudents)) {
+      setInsight(null);
+      setInsightError(TOO_FEW_TEXT);
+      return;
+    }
+
+    setInsightLoading(true);
 
     try {
       const result = await fetchAnalyticsInsight(
@@ -2968,6 +3419,48 @@ export default function AnalyticsDashboard() {
 
             <button
               type="button"
+              onClick={exportReportExcel}
+              disabled={generatingExcel}
+              className={`h-12 px-5 rounded-2xl border-[1.5px] border-[#DDE1EE] bg-white text-[#1E1B4B] font-bold text-[15px] flex items-center gap-2 hover:border-[#A5B4FC] disabled:opacity-60 ${focusRing}`}
+            >
+              {generatingExcel ? (
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Download className="w-4 h-4" aria-hidden="true" />
+              )}
+              Export Excel
+            </button>
+
+            {selectedGuidanceProgram !== ALL_FILTER && (
+              <div
+                role="group"
+                aria-label="Export this program"
+                className="h-12 pl-4 pr-1.5 rounded-2xl bg-[#EEF0FA] flex items-center gap-2"
+              >
+                <span className="text-sm font-bold text-[#1E1B4B]">Export this program</span>
+                <button
+                  type="button"
+                  onClick={exportReportPDF}
+                  disabled={generatingReport}
+                  aria-label="Export this program as PDF"
+                  className={`h-10 px-3.5 rounded-xl bg-white text-[#4338CA] font-bold text-sm hover:bg-[#E0E7FF] disabled:opacity-60 ${focusRing}`}
+                >
+                  PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={exportReportExcel}
+                  disabled={generatingExcel}
+                  aria-label="Export this program as Excel"
+                  className={`h-10 px-3.5 rounded-xl bg-white text-[#4338CA] font-bold text-sm hover:bg-[#E0E7FF] disabled:opacity-60 ${focusRing}`}
+                >
+                  Excel
+                </button>
+              </div>
+            )}
+
+            <button
+              type="button"
               onClick={() => handleGenerateInsight(false)}
               disabled={insightLoading}
               className={`h-12 px-[22px] rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] flex items-center gap-2 disabled:opacity-60 ${focusRing}`}
@@ -2981,6 +3474,10 @@ export default function AnalyticsDashboard() {
             </button>
           </div>
         </div>
+
+        {exportError && (
+          <p role="alert" className="m-0 text-sm font-semibold text-[#BE123C]">{exportError}</p>
+        )}
 
         {/* =================================================
             AI INSIGHT — plain-language explanation of the whole
@@ -3115,7 +3612,7 @@ export default function AnalyticsDashboard() {
 
         <AnalyticsTabBar activeTab={activeTab} onChange={setActiveTab} />
 
-        {activeTab !== "learning" && (
+        {(
           <>
           {/* =================================================
               FILTERS
@@ -3125,7 +3622,7 @@ export default function AnalyticsDashboard() {
 
             <h2 className="sr-only">Analytics filters</h2>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
 
               <div className="flex flex-col gap-1.5 min-w-0">
               <span id="filter-campus" className="text-[13px] font-semibold text-[#334155]">Campus</span>
@@ -3311,22 +3808,89 @@ export default function AnalyticsDashboard() {
               </Select>
               </div>
 
+
+              <div className="flex flex-col gap-1.5 min-w-0">
+              <span id="filter-program" className="text-[13px] font-semibold text-[#334155]">Program</span>
+              <Select
+                value={selectedGuidanceProgram}
+                onValueChange={(value) => updateFilters({ program: value })}
+              >
+                <SelectTrigger aria-labelledby="filter-program" className="h-11 rounded-[14px] bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B]">
+                  <SelectValue placeholder="Program" />
+                </SelectTrigger>
+
+                <SelectContent className="max-h-80">
+                  <SelectItem value="all">
+                    All programs
+                  </SelectItem>
+
+                  {programFilterGroups.map((group) => (
+                    <SelectGroup key={group.service}>
+                      <SelectLabel>{group.service}</SelectLabel>
+                      {group.items.map((item) => (
+                        <SelectItem key={item.id} value={item.id}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ))}
+                </SelectContent>
+              </Select>
+              </div>
+
+              <div className="flex flex-col gap-1.5 min-w-0">
+              <span id="filter-pwd" className="text-[13px] font-semibold text-[#334155]">PWD status</span>
+              <Select
+                value={selectedPwd}
+                onValueChange={(value) => updateFilters({ pwd: value as AnalyticsFilters["pwd"] })}
+              >
+                <SelectTrigger aria-labelledby="filter-pwd" className="h-11 rounded-[14px] bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B]">
+                  <SelectValue placeholder="PWD status" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="pwd">PWD</SelectItem>
+                  <SelectItem value="not">Not PWD</SelectItem>
+                </SelectContent>
+              </Select>
+              </div>
+
+              <div className="flex flex-col gap-1.5 min-w-0">
+              <span id="filter-ip" className="text-[13px] font-semibold text-[#334155]">IP status</span>
+              <Select
+                value={selectedIp}
+                onValueChange={(value) => updateFilters({ ip: value as AnalyticsFilters["ip"] })}
+              >
+                <SelectTrigger aria-labelledby="filter-ip" className="h-11 rounded-[14px] bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm text-[#1E293B]">
+                  <SelectValue placeholder="IP status" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="ip">IP</SelectItem>
+                  <SelectItem value="not">Not IP</SelectItem>
+                </SelectContent>
+              </Select>
+              </div>
+
             </div>
+
+            {hasActiveFilters && (
+              <p className="m-0 text-[13px] text-[#5B6477]" role="status">
+                {describeFilters(filters, selectedProgramName)}
+                {selectedGuidanceProgram !== ALL_FILTER && <> · {PARTICIPANTS_DEFINITION}</>}
+              </p>
+            )}
 
             <div className="flex justify-end">
               <Button
                 variant="ghost"
-                onClick={() => {
-                  setSelectedCampus("all");
-                  setSelectedProgram("all");
-                  setSelectedYearLevel("all");
-                  setSelectedGender("all");
-                  setSelectedAge("all");
-                  setSelectedAcademicYear("all");
-                }}
-                className="h-11 px-3.5 rounded-xl font-bold text-sm text-[#4338CA] hover:bg-[#EEF0FA]"
+                onClick={clearFilters}
+                disabled={!hasActiveFilters}
+                className="h-11 px-3.5 rounded-xl font-bold text-sm text-[#4338CA] hover:bg-[#EEF0FA] disabled:opacity-50"
               >
-                Reset filters
+                Clear filters
               </Button>
             </div>
           </Card>
@@ -3355,8 +3919,9 @@ export default function AnalyticsDashboard() {
               value={totalGuidancePrograms}
               description="Programs in the system"
               icon={GraduationCap}
-              to="/admin?tab=programs"
+              to={selectedGuidanceProgram === ALL_FILTER ? "/admin?tab=programs" : undefined}
               ariaLabel={`View all ${totalGuidancePrograms} ${totalGuidancePrograms === 1 ? "program" : "programs"}`}
+              info="A program filter is on, so this is that one program. The programs list shows them all."
             />
 
             <StatCard
@@ -3364,7 +3929,7 @@ export default function AnalyticsDashboard() {
               value={totalSurveyResponses}
               description={`${activeSurveys} active survey(s)`}
               icon={BarChart3}
-              noteTo="/admin?tab=surveys&status=active"
+              noteTo={selectedGuidanceProgram === ALL_FILTER ? "/admin?tab=surveys&status=active" : undefined}
               noteAriaLabel={`View ${activeSurveys} published ${activeSurveys === 1 ? "survey" : "surveys"}`}
               info="Submitted answers, one per survey taken (narrowed by the filters above). No list shows responses one by one here, so only the active-survey count below opens a list."
             />
@@ -3455,11 +4020,11 @@ export default function AnalyticsDashboard() {
         {activeTab === "learning" && (
           <div className="space-y-6">
           {/* =================================================
-              LEARNING GAIN (pre-test vs post-test) — has its own
-              filters and data source (learning_gain_summary RPC).
+              LEARNING GAIN (pre-test vs post-test): its data comes from
+              the learning_gain_summary RPC, driven by the shared filter bar.
           ================================================= */}
 
-          <LearningGainSection />
+          <LearningGainSection filters={filters} />
 
           </div>
         )}
@@ -3484,9 +4049,11 @@ export default function AnalyticsDashboard() {
                 info="The average of every scored answer across all awareness checks, shown as a percentage. No list has a matching count."
                 title="Overall average score"
                 value={
-                  awarenessAnalytics.overall !== null
-                    ? `${awarenessAnalytics.overall}%`
-                    : "No data"
+                  awarenessAnalytics.overallTooFew
+                    ? TOO_FEW_TEXT
+                    : awarenessAnalytics.overall !== null
+                      ? `${awarenessAnalytics.overall}%`
+                      : "No data"
                 }
                 description="Across all knowledge assessments"
                 icon={Trophy}
@@ -3559,6 +4126,12 @@ export default function AnalyticsDashboard() {
                   </BarChart>
                 </ResponsiveContainer>
               )}
+
+              {programAwarenessAnalytics.some((p) => p.tooFew) && (
+                <p className="m-0 mt-3 text-[13px] font-semibold text-[#92400E]">
+                  {TOO_FEW_TEXT}: {programAwarenessAnalytics.filter((p) => p.tooFew).map((p) => p.name).join(", ")}
+                </p>
+              )}
             </Card>
 
             {/* DEMOGRAPHIC BREAKDOWNS */}
@@ -3597,14 +4170,18 @@ export default function AnalyticsDashboard() {
                                 ({row.count})
                               </span>
                             </span>
-                            <span className="text-xs font-black text-indigo-600">
-                              {row.average}%
-                            </span>
+                            {row.tooFew ? (
+                              <span className="text-xs font-bold text-[#92400E]">{TOO_FEW_TEXT}</span>
+                            ) : (
+                              <span className="text-xs font-black text-indigo-600">
+                                {row.average}%
+                              </span>
+                            )}
                           </div>
                           <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                             <div
                               className="h-full bg-indigo-600 rounded-full"
-                              style={{ width: `${row.average}%` }}
+                              style={{ width: `${row.tooFew ? 0 : row.average}%` }}
                             />
                           </div>
                         </div>
@@ -3644,7 +4221,9 @@ export default function AnalyticsDashboard() {
                           {row.programCount}
                         </td>
                         <td className="py-3 text-xs font-black">
-                          {row.averageScore !== null ? (
+                          {row.tooFew ? (
+                            <span className="text-[#92400E] font-bold">{TOO_FEW_TEXT}</span>
+                          ) : row.averageScore !== null ? (
                             <span className="text-indigo-600">{row.averageScore}%</span>
                           ) : (
                             <span className="text-slate-300 font-bold">No data</span>
@@ -3699,21 +4278,27 @@ export default function AnalyticsDashboard() {
                             {row.category}
                           </td>
                           <td className="py-3 pr-4 text-xs font-black">
-                            {row.openedAvg !== null ? (
+                            {row.openedTooFew ? (
+                              <span className="text-[#92400E] font-bold">{TOO_FEW_TEXT} <span className="text-slate-400 font-medium">({row.openedCount})</span></span>
+                            ) : row.openedAvg !== null ? (
                               <span className="text-indigo-600">{row.openedAvg}% <span className="text-slate-400 font-medium">({row.openedCount})</span></span>
                             ) : (
                               <span className="text-slate-300 font-bold">No data</span>
                             )}
                           </td>
                           <td className="py-3 pr-4 text-xs font-black">
-                            {row.notOpenedAvg !== null ? (
+                            {row.notOpenedTooFew ? (
+                              <span className="text-[#92400E] font-bold">{TOO_FEW_TEXT} <span className="text-slate-400 font-medium">({row.notOpenedCount})</span></span>
+                            ) : row.notOpenedAvg !== null ? (
                               <span className="text-slate-700">{row.notOpenedAvg}% <span className="text-slate-400 font-medium">({row.notOpenedCount})</span></span>
                             ) : (
                               <span className="text-slate-300 font-bold">No data</span>
                             )}
                           </td>
                           <td className="py-3 pr-4 text-xs font-black">
-                            {row.difference !== null ? (
+                            {row.openedTooFew || row.notOpenedTooFew ? (
+                              <span className="text-[#92400E] font-bold">{TOO_FEW_TEXT}</span>
+                            ) : row.difference !== null ? (
                               <span className={row.difference >= 0 ? "text-emerald-600" : "text-rose-500"}>
                                 {row.difference >= 0 ? "+" : ""}
                                 {row.difference}pp

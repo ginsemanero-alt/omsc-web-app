@@ -1,3 +1,5 @@
+import { ALL, AGE_GROUP_RANGES, type AnalyticsFilters } from './analyticsFilters';
+
 // Learning Gain (pre-test vs post-test) — shared constants and the
 // statistics the Analytics Dashboard's Learning Gain section needs.
 // The heavy aggregation (pairing, means, SD of differences) happens in
@@ -16,8 +18,9 @@ export const AGE_BRACKETS: { label: string; min: number; max: number | null }[] 
   { label: '23 and above', min: 23, max: null },
 ];
 
-// A group smaller than this still shows its numbers, with a
-// "small sample" badge.
+// Fewer paired students than this and the group's scores are not returned at
+// all (learning_gain_summary, PHASE 41): the page and exports show
+// "Too few to report" instead. See MIN_GROUP_SIZE in analyticsFilters.ts.
 export const SMALL_SAMPLE_N = 5;
 
 // Below this, the t-test result carries a caution: the paired t-test
@@ -51,6 +54,8 @@ export interface LearningGainRow {
   mean_gain: number | null;
   sd_diff: number | null;
   norm_gain: number | null;
+  // 1 to 4 paired students: the SQL withheld the scores above (they are null).
+  suppressed: boolean;
 }
 
 export interface LearningGainOptions {
@@ -79,6 +84,7 @@ export function emptyRow(dimension: LearningGainDimension, key: string): Learnin
     mean_gain: null,
     sd_diff: null,
     norm_gain: null,
+    suppressed: false,
   };
 }
 
@@ -210,4 +216,35 @@ const YEAR_LEVEL_LABELS: Record<string, string> = {
 
 export function yearLevelLabel(value: string): string {
   return YEAR_LEVEL_LABELS[value] || value;
+}
+
+// The parameters learning_gain_summary() takes, built from the dashboard's
+// shared filter bar (PHASE 41). Year levels are stored as "1".."5" in profiles
+// while the bar shows "1st Year"..., so the label is mapped back.
+const YEAR_LABEL_TO_RAW: Record<string, string> = {
+  '1st Year': '1',
+  '2nd Year': '2',
+  '3rd Year': '3',
+  '4th Year': '4',
+  '5th Year': '5',
+  'Not Specified': 'Not specified',
+};
+
+export function buildLearningGainParams(filters: AnalyticsFilters) {
+  const orNull = (value: string) => (value === ALL ? null : value);
+  const range = AGE_GROUP_RANGES[filters.age];
+  const year = Number(filters.academicYear);
+  return {
+    p_program_id: filters.program === ALL ? null : Number(filters.program),
+    p_campus: orNull(filters.campus),
+    p_course: orNull(filters.course),
+    p_year_level: filters.yearLevel === ALL ? null : YEAR_LABEL_TO_RAW[filters.yearLevel] || filters.yearLevel,
+    p_gender: orNull(filters.gender),
+    p_age_min: range ? range.min : null,
+    p_age_max: range ? range.max : null,
+    p_academic_year: filters.academicYear !== ALL && Number.isFinite(year) ? year : null,
+    p_pwd: filters.pwd === 'pwd' ? true : filters.pwd === 'not' ? false : null,
+    p_ip: filters.ip === 'ip' ? true : filters.ip === 'not' ? false : null,
+    p_age_brackets: AGE_BRACKETS,
+  };
 }
