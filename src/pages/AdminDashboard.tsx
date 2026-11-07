@@ -53,7 +53,7 @@ async function fetchContentSummary(): Promise<ContentSummary> {
   const [programsRes, materialsRes, surveysRes, linksRes] = await Promise.all([
     supabase
       .from('programs')
-      .select('id, title, date, date_display, time_range, status, program_entries(id)')
+      .select('id, title, date, end_date, date_display, time_range, status, program_entries(id)')
       .is('archived_at', null),
     supabase.from('materials').select('id, category').is('program_id', null).is('archived_at', null),
     supabase.from('surveys').select('id, title, status, program_id').eq('type', 'knowledge').is('archived_at', null),
@@ -166,17 +166,6 @@ function ContentManagement() {
           request(setOpenSurveyRequest, check.id);
         },
       });
-    }
-    for (const program of summary.programs) {
-      if (program.status === 'ongoing' && getEffectiveProgramStatus(program) === 'completed') {
-        attention.push({
-          key: `ended-${program.id}`,
-          title: `${program.title.trim()} is marked ongoing`,
-          detail: 'Its date has passed. Update its status if it has ended.',
-          action: 'Edit program',
-          onClick: () => openProgram(program.id),
-        });
-      }
     }
     for (const program of summary.programs.filter((p) => p.entryCount === 0)) {
       attention.push({

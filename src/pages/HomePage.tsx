@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { formatProgramDate } from "../lib/formatProgramDate";
-import { getEffectiveProgramStatus } from "../lib/programStatus";
+import { getEffectiveProgramStatus, isOffSchedule, programBadgeClass, programStatusLabel } from "../lib/programStatus";
 import { motionDelay, useRevealGroup } from "../lib/motion";
 import { ArrowRight, Calendar, Info, MapPin } from "lucide-react";
 import { SYSTEM_TITLE } from "../components/layout/SiteFooter";
@@ -18,6 +18,7 @@ interface Program {
   category: string;
   location: string;
   date: string;
+  end_date?: string | null;
   status: string;
   time_range?: string | null;
   image_url?: string;
@@ -48,9 +49,6 @@ const linkClass = `font-bold text-[#4338CA] hover:text-[#312E81] hover:underline
 
 const goToRegister = () => (window.location.href = "/login?mode=register");
 
-function statusLabel(status: string): string {
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
 
 // The hero entrance plays once per page load, not every time the student
 // comes back to Home within the app.
@@ -87,9 +85,11 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
           .select("*")
           .is("archived_at", null)
           .order("id", { ascending: false })
-          .limit(4);
+          .limit(16);
         if (error) throw error;
-        if (data) setPrograms(data);
+        // Postponed and Cancelled programs stay on the Programs page, with a
+        // badge, but are not "recent programs".
+        if (data) setPrograms(data.filter((p) => !isOffSchedule(getEffectiveProgramStatus(p))).slice(0, 4));
       } catch (err) {
         console.error("Error fetching programs:", err);
       } finally {
@@ -303,7 +303,6 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
             ) : (
               programs.map((program) => {
                 const effectiveStatus = getEffectiveProgramStatus(program);
-                const completed = effectiveStatus === "completed";
                 return (
                   <button
                     key={program.id}
@@ -326,11 +325,9 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
                         />
                       )}
                       <span
-                        className={`absolute top-3 left-3 lg:top-3.5 lg:left-3.5 px-3 py-1.5 rounded-full font-extrabold text-xs ${
-                          completed ? "bg-[#E2E8F0] text-[#1E293B]" : "bg-[#FBBF24] text-[#1E1B4B]"
-                        }`}
+                        className={`absolute top-3 left-3 lg:top-3.5 lg:left-3.5 px-3 py-1.5 rounded-full font-extrabold text-xs ${programBadgeClass(effectiveStatus)}`}
                       >
-                        {statusLabel(effectiveStatus)}
+                        {programStatusLabel(effectiveStatus)}
                       </span>
                     </div>
                     <div className="px-5 pt-[18px] pb-5 lg:px-[22px] lg:pt-[22px] lg:pb-6 flex flex-col gap-1.5 lg:gap-2.5 flex-grow">

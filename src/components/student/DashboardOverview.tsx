@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Calendar, Check, HeartHandshake, MapPin } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { campusVisibilityFilter } from '../../lib/campuses';
+import { getEffectiveProgramStatus, isOffSchedule } from '../../lib/programStatus';
 import { YEAR_LEVELS, normalizeYearLevel } from '../../lib/programs';
 import { useAuth } from '../../hooks/useAuth';
 import { formatComparison, formatPointChange as formatPoints, percentFrom } from '../../lib/assessment';
@@ -27,6 +28,11 @@ interface ProgramRow {
   title: string;
   image_url: string | null;
   created_at: string | null;
+  // for the automatic status (Postponed / Cancelled programs are left out of this list)
+  date?: string | null;
+  end_date?: string | null;
+  time_range?: string | null;
+  status?: string | null;
 }
 
 interface KnowledgeSurveyRow {
@@ -362,7 +368,7 @@ export default function DashboardOverview() {
         viewerCampus ? query.or(campusVisibilityFilter(viewerCampus)) : query;
 
       const [programRes, surveyRes, responseRes, notificationRes, materialData] = await Promise.all([
-        scoped(supabase.from('programs').select('id, title, image_url, created_at').is('archived_at', null)).order(
+        scoped(supabase.from('programs').select('id, title, image_url, created_at, date, end_date, time_range, status').is('archived_at', null)).order(
           'created_at',
           { ascending: false }
         ),
@@ -402,7 +408,9 @@ export default function DashboardOverview() {
 
       setProgress(
         buildProgress(
-          (programRes.data || []) as ProgramRow[],
+          ((programRes.data || []) as ProgramRow[]).filter(
+            (p) => !isOffSchedule(getEffectiveProgramStatus({ date: p.date ?? '', end_date: p.end_date, time_range: p.time_range, status: p.status }))
+          ),
           (surveyRes.data || []) as KnowledgeSurveyRow[],
           (responseRes.data || []) as ResponseRow[],
           materialData

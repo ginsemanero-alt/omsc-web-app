@@ -4478,3 +4478,34 @@ SELECT proname, pronargs
 -- GRANT EXECUTE ON FUNCTION material_reach_summary(text, text, text, text, integer, integer, integer, integer, boolean) TO authenticated;
 -- NOTIFY pgrst, 'reload schema';
 -- COMMIT;
+
+
+-- =========================================================
+-- PHASE 42: programs.end_date (optional last day of a multi-day program)
+-- =========================================================
+-- Additive and harmless. Run it BEFORE the client that reads/writes end_date
+-- is deployed. NULL = a single-day program (the program ends on `date`).
+-- `date_display` stays free display text only; it is never parsed for dates.
+-- programs.status has no CHECK constraint (checked 2026-11-07: 'postponed',
+-- 'cancelled' and any other text are accepted), so no constraint change is
+-- needed for the Postponed / Cancelled override.
+
+BEGIN;
+
+ALTER TABLE programs ADD COLUMN IF NOT EXISTS end_date date;
+
+COMMENT ON COLUMN programs.end_date IS
+  'Optional last day of a multi-day program (Asia/Manila calendar day). NULL = single-day, ends on programs.date.';
+
+COMMIT;
+
+-- CHECK (expect 1 row: end_date | date | YES):
+SELECT column_name, data_type, is_nullable
+  FROM information_schema.columns
+ WHERE table_schema = 'public' AND table_name = 'programs' AND column_name = 'end_date';
+
+-- ---------------------------------------------------------
+-- ROLLBACK of PHASE 42 (run only to undo it). Dropping the column deletes
+-- every end date that has been entered; the old client ignores the column.
+-- ---------------------------------------------------------
+-- ALTER TABLE programs DROP COLUMN IF EXISTS end_date;

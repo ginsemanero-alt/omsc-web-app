@@ -4,6 +4,7 @@ import { PRIVATE_MATERIAL_BUCKET } from '../../lib/materialAccess';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/use-toast';
 import { logActivity } from '../../lib/activityLog';
+import { NOTE_PUBLISHED } from '../../lib/activityLogView';
 import { deleteHostedVideoForMaterial } from '../../lib/videoHosting';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -110,7 +111,7 @@ export default function ArchiveScreen() {
       const { error } = await supabase.from(tableName(type)).update({ archived_at: null }).eq('id', row.id);
       if (error) throw error;
 
-      logActivity({ actorEmail: authUser?.email, actorName: userName, action: 'update', entityType: type, entityId: row.id, entityLabel: row.label, details: 'Restored from Archive' });
+      logActivity({ actorEmail: authUser?.email, actorName: userName, action: 'update', entityType: type, entityId: row.id, entityLabel: row.label, details: type === 'program' ? NOTE_PUBLISHED : 'Restored from Archive' });
 
       setRows((prev) => ({ ...prev, [type]: prev[type].filter((r) => r.id !== row.id) }));
       toast({ title: 'Restored', description: `"${row.label}" is back in its regular list.` });

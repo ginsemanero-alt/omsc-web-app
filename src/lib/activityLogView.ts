@@ -27,6 +27,9 @@ export interface ConsentRow {
 
 export type EventKind =
   | 'created'
+  | 'created_published'
+  | 'published'
+  | 'unpublished'
   | 'updated'
   | 'archived'
   | 'restored'
@@ -46,6 +49,12 @@ export const SELF_REGISTRATION = 'Student self-registration';
 export const NOTE_ARCHIVED = 'Archived';
 export const NOTE_RESTORED = 'Restored from Archive';
 export const NOTE_PERMANENT = 'Permanently deleted from Archive';
+// Programs have no draft state: a new program is visible to students at once,
+// an archived one is hidden, a restored one is visible again. New entries carry
+// these notes (old entries have none of them, so they keep their old wording).
+export const NOTE_CREATED_PUBLISHED = 'Created and published';
+export const NOTE_PUBLISHED = 'Published';
+export const NOTE_UNPUBLISHED = 'Unpublished';
 
 export function eventKind(row: Pick<LogRow, 'action' | 'entity_type' | 'details'>): EventKind {
   const { action, entity_type: type, details } = row;
@@ -54,8 +63,12 @@ export function eventKind(row: Pick<LogRow, 'action' | 'entity_type' | 'details'
   if (action === 'view') return 'opened_programs';
   if (action === 'create' && type === 'user' && details === SELF_REGISTRATION) return 'registered';
   if (type === 'about') return 'about';
-  if (action === 'create') return 'created';
-  if (action === 'update') return details === NOTE_RESTORED ? 'restored' : 'updated';
+  if (action === 'create') return type === 'program' && details === NOTE_CREATED_PUBLISHED ? 'created_published' : 'created';
+  if (action === 'update') {
+    if (type === 'program' && details === NOTE_PUBLISHED) return 'published';
+    return details === NOTE_RESTORED ? 'restored' : 'updated';
+  }
+  if (type === 'program' && details === NOTE_UNPUBLISHED) return 'unpublished';
   if (details === NOTE_ARCHIVED) return 'archived';
   if (details === NOTE_PERMANENT) return 'permanently_deleted';
   if (type === 'survey' && details?.startsWith('removed ')) return 'removed_response';
@@ -64,6 +77,9 @@ export function eventKind(row: Pick<LogRow, 'action' | 'entity_type' | 'details'
 
 export const VERB: Record<EventKind, string> = {
   created: 'created',
+  created_published: 'created and published',
+  published: 'published',
+  unpublished: 'unpublished',
   updated: 'updated',
   archived: 'archived',
   restored: 'restored',
@@ -96,6 +112,8 @@ export interface Option {
 export const ADMIN_ACTIONS: Option[] = [
   { value: 'all', label: 'All actions' },
   { value: 'created', label: 'Created' },
+  { value: 'published', label: 'Published' },
+  { value: 'unpublished', label: 'Unpublished' },
   { value: 'updated', label: 'Updated' },
   { value: 'archived', label: 'Archived' },
   { value: 'restored', label: 'Restored' },
@@ -154,7 +172,14 @@ export function actionConditions(tab: LogTab, action: string): string[] {
     case 'created':
       return ['action.eq.create'];
     case 'updated':
-      return ['action.eq.update', `or(details.is.null,details.neq."${NOTE_RESTORED}")`];
+      return [
+        'action.eq.update',
+        `or(details.is.null,and(details.neq."${NOTE_RESTORED}",details.neq."${NOTE_PUBLISHED}"))`,
+      ];
+    case 'published':
+      return ['action.eq.update', `details.eq."${NOTE_PUBLISHED}"`, 'entity_type.eq.program'];
+    case 'unpublished':
+      return ['action.eq.delete', `details.eq."${NOTE_UNPUBLISHED}"`, 'entity_type.eq.program'];
     case 'restored':
       return ['action.eq.update', `details.eq."${NOTE_RESTORED}"`];
     case 'archived':
@@ -166,7 +191,7 @@ export function actionConditions(tab: LogTab, action: string): string[] {
     case 'deleted':
       return [
         'action.eq.delete',
-        `or(details.is.null,and(details.neq."${NOTE_ARCHIVED}",details.neq."${NOTE_PERMANENT}",details.not.like."removed *"))`,
+        `or(details.is.null,and(details.neq."${NOTE_ARCHIVED}",details.neq."${NOTE_PERMANENT}",details.neq."${NOTE_UNPUBLISHED}",details.not.like."removed *"))`,
       ];
     default:
       return [];

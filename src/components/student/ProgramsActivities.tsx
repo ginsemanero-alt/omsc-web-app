@@ -227,6 +227,8 @@ const PROGRAM_STATUS_BADGE: Record<string, { label: string; className: string }>
   completed: { label: 'Completed', className: 'bg-[#E2E8F0] text-[#1E293B] dark:bg-slate-800 dark:text-slate-200' },
   ongoing: { label: 'Happening now', className: 'bg-[#D1FAE5] text-[#065F46] dark:bg-emerald-500/20 dark:text-emerald-200' },
   upcoming: { label: 'Upcoming', className: 'bg-[#FEF3C7] text-[#92400E] dark:bg-amber-500/20 dark:text-amber-200' },
+  postponed: { label: 'Postponed', className: 'bg-[#FFEDD5] text-[#9A3412] dark:bg-orange-500/20 dark:text-orange-200' },
+  cancelled: { label: 'Cancelled', className: 'bg-[#FFE4E6] text-[#9F1239] dark:bg-rose-500/20 dark:text-rose-200' },
 };
 
 const ASSESSMENT_BADGE: Record<AssessmentStatus, { label: string; className: string }> = {
@@ -1158,7 +1160,7 @@ export default function ProgramsActivities() {
                 <ZoomIn className="w-8 h-8 text-white opacity-0 group-hover/poster:opacity-100 transition-opacity" />
               </div>
               <div className={`absolute top-4 right-4 px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm
-                ${effectiveStatus === 'ongoing' ? 'bg-emerald-500 text-white animate-pulse' : effectiveStatus === 'completed' ? 'bg-slate-700 text-white' : 'bg-indigo-600 text-white'}`}>
+                ${effectiveStatus === 'ongoing' ? 'bg-emerald-500 text-white animate-pulse' : effectiveStatus === 'completed' ? 'bg-slate-700 text-white' : effectiveStatus === 'postponed' ? 'bg-orange-600 text-white' : effectiveStatus === 'cancelled' ? 'bg-rose-700 text-white' : 'bg-indigo-600 text-white'}`}>
                 {effectiveStatus}
               </div>
             </div>

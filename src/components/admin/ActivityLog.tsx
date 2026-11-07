@@ -50,6 +50,9 @@ const fieldClass = `w-full h-11 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[
 
 const KIND_STYLE: Record<EventKind, { className: string; Icon: typeof PlusCircle }> = {
   created: { className: 'bg-emerald-50 text-emerald-700', Icon: PlusCircle },
+  created_published: { className: 'bg-emerald-50 text-emerald-700', Icon: PlusCircle },
+  published: { className: 'bg-teal-50 text-teal-700', Icon: RotateCcw },
+  unpublished: { className: 'bg-amber-50 text-amber-700', Icon: Archive },
   updated: { className: 'bg-indigo-50 text-indigo-700', Icon: Pencil },
   archived: { className: 'bg-amber-50 text-amber-700', Icon: Archive },
   restored: { className: 'bg-teal-50 text-teal-700', Icon: RotateCcw },
@@ -94,7 +97,7 @@ function consentUser(row: ConsentRow) {
 // words ("Archived", "Restored from Archive"...) are not repeated.
 function visibleDetail(row: LogRow, kind: EventKind): string | null {
   if (!row.details) return null;
-  if (['archived', 'restored', 'permanently_deleted', 'registered'].includes(kind)) return null;
+  if (['archived', 'restored', 'permanently_deleted', 'registered', 'created_published', 'published', 'unpublished'].includes(kind)) return null;
   return row.details;
 }
 

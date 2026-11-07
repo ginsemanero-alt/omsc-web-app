@@ -5,7 +5,8 @@ import { logActivity } from '../../lib/activityLog';
 import { notifyStudents } from '../../lib/notifyStudents';
 import { formatProgramDate } from '../../lib/formatProgramDate';
 import { CAMPUSES, ALL_CAMPUSES_LABEL, campusLabel } from '../../lib/campuses';
-import { getEffectiveProgramStatus, compareProgramsForDisplay } from '../../lib/programStatus';
+import { getEffectiveProgramStatus, compareProgramsForDisplay, statusOverride, programStatusLabel } from '../../lib/programStatus';
+import { NOTE_CREATED_PUBLISHED, NOTE_UNPUBLISHED } from '../../lib/activityLogView';
 import { useUrlFilter } from '../../lib/useUrlFilter';
 import ProgramEntryTimeline from '../shared/ProgramEntryTimeline';
 import PhotoViewer, { collectProgramPhotos, viewerAt, type PhotoViewerState } from '../shared/PhotoViewer';
@@ -56,6 +57,8 @@ const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   upcoming: { label: 'Upcoming', className: 'bg-[#FEF3C7] text-[#92400E]' },
   ongoing: { label: 'Ongoing', className: 'bg-[#D1FAE5] text-[#065F46]' },
   completed: { label: 'Completed', className: 'bg-[#E2E8F0] text-[#1E293B]' },
+  postponed: { label: 'Postponed', className: 'bg-[#FFEDD5] text-[#9A3412]' },
+  cancelled: { label: 'Cancelled', className: 'bg-[#FFE4E6] text-[#9F1239]' },
 };
 
 const CHECK_BADGE: Record<string, { label: string; className: string }> = {
@@ -104,13 +107,15 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
   const [formData, setFormData] = useState({
     title: '',
     date: '',
+    end_date: '',
     date_display: '',
     duration_label: '',
     location: '',
     program_component: 'Group Guidance',
     guidance_service: 'Career Orientation',
     capacity: 0,
-    status: 'upcoming',
+    // 'auto' = worked out from the schedule; or 'postponed' / 'cancelled' by hand.
+    status: 'auto',
     image_url: '',
     content: '',
     campus: ''
@@ -190,7 +195,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
 
   const isDateOccupied = programs.some(p =>
     p.date === formData.date &&
-    getEffectiveProgramStatus(p) !== 'completed' &&
+    !['completed', 'postponed', 'cancelled'].includes(getEffectiveProgramStatus(p)) &&
     p.id !== editingId
   );
 
@@ -344,13 +349,14 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
       setFormData({
         title: program.title || '',
         date: program.date || '',
+        end_date: program.end_date || '',
         date_display: program.date_display || '',
         duration_label: program.duration_label || '',
         location: program.location || '',
         program_component: program.program_component || 'Group Guidance',
         guidance_service: program.guidance_service || 'Career Orientation',
         capacity: program.capacity || 0,
-        status: program.status || 'upcoming',
+        status: statusOverride(program.status) ?? 'auto',
         image_url: program.image_url || '',
         content: program.content || '',
         campus: program.campus || ''
@@ -375,9 +381,9 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
     } else {
       setEditingId(null);
       setFormData({
-        title: '', date: '', date_display: '', duration_label: '', location: '',
+        title: '', date: '', end_date: '', date_display: '', duration_label: '', location: '',
         program_component: 'Group Guidance', guidance_service: 'Career Orientation',
-        capacity: 0, status: 'upcoming', image_url: '', content: '', campus: ''
+        capacity: 0, status: 'auto', image_url: '', content: '', campus: ''
       });
       setCoverPhotos([]);
       setEntries([]);
@@ -392,6 +398,15 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
   };
 
   const handleSave = async () => {
+    if (formData.end_date && formData.date && formData.end_date < formData.date) {
+      toast({
+        variant: "destructive",
+        title: "Check the last day",
+        description: "The last day can't be before the first day. Fix it or clear it for a one-day program.",
+      });
+      return;
+    }
+
     // An entry typed into the entry form but never "Add entry"-ed used to
     // be silently dropped on save. Include it instead — or stop if it
     // can't be (no label) rather than lose it.
@@ -453,13 +468,16 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
       const payload = {
         title: formData.title,
         date: formData.date,
+        end_date: formData.end_date || null,
         date_display: formData.date_display.trim() || null,
         duration_label: formData.duration_label.trim() || null,
         location: formData.location,
         program_component: formData.program_component,
         guidance_service: formData.guidance_service,
         capacity: Number(formData.capacity),
-        status: formData.status,
+        // Automatic is stored as 'upcoming' (the value older pages understand);
+        // it is never read as a status, the schedule decides.
+        status: formData.status === 'postponed' || formData.status === 'cancelled' ? formData.status : 'upcoming',
         image_url: finalImageUrl,
         gallery_urls: finalGalleryUrls.length > 0 ? finalGalleryUrls : null,
         content: formData.content,
@@ -484,7 +502,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
         // step below fails, pressing save again updates it instead of
         // creating a duplicate.
         setEditingId(currentProgramId);
-        logActivity({ actorEmail: user?.email, actorName: userName, action: 'create', entityType: 'program', entityId: currentProgramId, entityLabel: payload.title });
+        logActivity({ actorEmail: user?.email, actorName: userName, action: 'create', entityType: 'program', entityId: currentProgramId, entityLabel: payload.title, details: NOTE_CREATED_PUBLISHED });
       }
 
       if (currentProgramId) await saveMaterialLinks(currentProgramId);
@@ -785,7 +803,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
       // remove a program now.
       const { error } = await supabase.from('programs').update({ archived_at: new Date().toISOString() }).eq('id', deleteTargetId);
       if (error) throw error;
-      logActivity({ actorEmail: user?.email, actorName: userName, action: 'delete', entityType: 'program', entityId: deleteTargetId, entityLabel: deleteTargetTitle, details: 'Archived' });
+      logActivity({ actorEmail: user?.email, actorName: userName, action: 'delete', entityType: 'program', entityId: deleteTargetId, entityLabel: deleteTargetTitle, details: NOTE_UNPUBLISHED });
 
       toast({ title: "Archived", description: "Moved to Archive. Restore or permanently delete it from there." });
       setIsDeleteOpen(false);
@@ -843,6 +861,8 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
             <option value="ongoing">Ongoing</option>
             <option value="upcoming">Upcoming</option>
             <option value="completed">Completed</option>
+            <option value="postponed">Postponed</option>
+            <option value="cancelled">Cancelled</option>
           </select>
         </div>
       </div>
@@ -1148,6 +1168,9 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
                 <Label className={`text-[13px] font-semibold ml-1 ${isDateOccupied ? 'text-rose-500' : 'text-slate-400'}`}>Target calendar date</Label>
                 <Input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} className={`rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-3 text-xs text-slate-700 transition-all focus-visible:ring-2 focus-visible:ring-[#A5B4FC] ${isDateOccupied ? 'ring-2 ring-rose-500 bg-rose-50/60' : ''}`} />
                 {isDateOccupied && <p className="text-[13px] text-rose-500 font-semibold flex items-center gap-1 ml-1 animate-bounce"><AlertCircle className="w-3 h-3 shrink-0" /> Date occupied</p>}
+                <Label className="text-[13px] font-semibold ml-1 text-slate-400 block pt-1">Last day (optional, for multi-day programs)</Label>
+                <Input type="date" value={formData.end_date} min={formData.date || undefined} onChange={(e) => setFormData({...formData, end_date: e.target.value})} className="rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-3 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-[#A5B4FC]" />
+                <p className="m-0 ml-1 text-xs text-slate-400">Leave empty for a one-day program. The program counts as ongoing from the first day's start to the last day's end.</p>
                 <Label className="text-[13px] font-semibold ml-1 text-slate-400 block pt-1">Display date (optional)</Label>
                 <Input value={formData.date_display} onChange={(e) => setFormData({...formData, date_display: e.target.value})} placeholder="e.g. February 18-19, 2026" className="rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] h-12 font-bold px-3 text-xs text-slate-700 focus-visible:ring-2 focus-visible:ring-[#A5B4FC]" />
                 <Label className="text-[13px] font-semibold ml-1 text-slate-400 block pt-1">Duration label (optional)</Label>
@@ -1212,12 +1235,17 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-[13px] font-semibold ml-1 text-slate-400">Runtime status track</Label>
+              <Label className="text-[13px] font-semibold ml-1 text-slate-400">Status</Label>
               <select value={formData.status} onChange={(e) => setFormData({...formData, status: e.target.value})} className="w-full h-12 rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] px-4 font-bold text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100">
-                <option value="upcoming">Upcoming</option>
-                <option value="ongoing">Ongoing</option>
-                <option value="completed">Completed</option>
+                <option value="auto">Automatic (from the schedule)</option>
+                <option value="postponed">Postponed</option>
+                <option value="cancelled">Cancelled</option>
               </select>
+              {formData.status === 'auto' && formData.date && (
+                <p className="m-0 ml-1 text-xs text-slate-400">
+                  Right now this shows as <strong>{programStatusLabel(getEffectiveProgramStatus({ date: formData.date, end_date: formData.end_date, time_range: `${formatTo12h(startTime)} - ${formatTo12h(endTime)}`, status: 'upcoming' }))}</strong> (Philippine time).
+                </p>
+              )}
             </div>
 
             {/* LINKED IEC MATERIALS (PHASE 29): IEC library materials only,

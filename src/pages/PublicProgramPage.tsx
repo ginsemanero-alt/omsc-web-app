@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Calendar, Clock, Loader2, MapPin } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { formatProgramDate } from "../lib/formatProgramDate";
-import { getEffectiveProgramStatus } from "../lib/programStatus";
+import { getEffectiveProgramStatus, programBadgeClass, programStatusLabel } from "../lib/programStatus";
 import { useAuth } from "../hooks/useAuth";
 import { signInUrlFor } from "../lib/returnTo";
 import type { MaterialPreview } from "../lib/materialPreview";
@@ -140,8 +140,8 @@ export default function PublicProgramPage() {
         {/* ================= HEADER ================= */}
         <section className="rounded-[40px] lg:rounded-[3.5rem] bg-[#1E1B4B] text-white overflow-hidden grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px]">
           <div className="px-[22px] py-9 sm:px-10 lg:px-[72px] lg:py-16 flex flex-col gap-4">
-            <span className="self-start px-3 py-1.5 rounded-full bg-[#FBBF24] text-[#1E1B4B] font-extrabold text-xs">
-              {status.charAt(0).toUpperCase() + status.slice(1)}
+            <span className={`self-start px-3 py-1.5 rounded-full font-extrabold text-xs ${programBadgeClass(status)}`}>
+              {programStatusLabel(status)}
             </span>
             <h1 className="m-0 font-bricolage font-extrabold text-[34px] sm:text-5xl lg:text-[52px] leading-[1.05] tracking-[-0.02em] break-words">
               {program.title}

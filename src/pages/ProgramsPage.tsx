@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowRight, Calendar, ChevronDown, Loader2, MapPin, Search } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { formatProgramDate } from "../lib/formatProgramDate";
-import { getEffectiveProgramStatus, compareProgramsForDisplay } from "../lib/programStatus";
+import { getEffectiveProgramStatus, compareProgramsForDisplay, programBadgeClass, programStatusLabel } from "../lib/programStatus";
 import { usePagination } from "../hooks/usePagination";
 import { useAuth } from "../hooks/useAuth";
 import SitePagination from "../components/shared/SitePagination";
@@ -41,6 +41,7 @@ interface Program {
   description: string;
   location: string;
   date: string;
+  end_date?: string | null;
   participants?: number;
   status: string;
   guidance_service?: string;
@@ -50,9 +51,6 @@ interface Program {
   date_display?: string;
 }
 
-function statusLabel(status: string): string {
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
 
 const ProgramsPage = () => {
   const navigate = useNavigate();
@@ -95,6 +93,7 @@ const ProgramsPage = () => {
             program_component: p.program_component || "",
             image_url: p.image_url || "",
             time_range: p.time_range || "",
+            end_date: p.end_date || null,
             date_display: p.date_display || "",
           }));
 
@@ -331,7 +330,6 @@ const ProgramsPage = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-5">
                 {pagedPrograms.map((program) => {
                   const effectiveStatus = getEffectiveProgramStatus(program);
-                  const completed = effectiveStatus === "completed";
                   const preTestOpen = preTestProgramIds.has(program.id);
 
                   return (
@@ -353,11 +351,9 @@ const ProgramsPage = () => {
                           />
                         )}
                         <span
-                          className={`absolute top-3.5 left-3.5 px-3 py-1.5 rounded-full font-extrabold text-xs ${
-                            completed ? "bg-[#E2E8F0] text-[#1E293B]" : "bg-[#FBBF24] text-[#1E1B4B]"
-                          }`}
+                          className={`absolute top-3.5 left-3.5 px-3 py-1.5 rounded-full font-extrabold text-xs ${programBadgeClass(effectiveStatus)}`}
                         >
-                          {statusLabel(effectiveStatus)}
+                          {programStatusLabel(effectiveStatus)}
                         </span>
                       </div>
 
