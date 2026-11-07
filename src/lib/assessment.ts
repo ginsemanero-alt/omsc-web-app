@@ -35,5 +35,5 @@ export function formatComparison(
   tr: Translate = plain
 ): string | null {
   if (prePct === null || prePct === undefined || postPct === null || postPct === undefined) return null;
-  return tr('Pre-test {pre}% → Post-test {post}% ({change})', { pre: prePct, post: postPct, change: formatPointChange(postPct - prePct, tr) });
+  return tr('Pre-test {pre}% → post-test {post}% ({change})', { pre: prePct, post: postPct, change: formatPointChange(postPct - prePct, tr) });
 }

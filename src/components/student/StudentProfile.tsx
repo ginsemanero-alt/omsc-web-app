@@ -67,7 +67,7 @@ export default function StudentProfile() {
       console.error('Error fetching profile:', error.message);
       toast({
         variant: "destructive",
-        title: t('Error Loading Profile'),
+        title: t('Error loading profile'),
         description: error.message
       });
     } finally {
@@ -95,7 +95,7 @@ export default function StudentProfile() {
 
     if (!fullName || !program || !yearLevel || !gender || !age) {
       toast({
-        title: t('Validation Warning'),
+        title: t('Validation warning'),
         description: t('Mangyaring kumpletuhin ang lahat ng kinakailangang impormasyon.'),
         variant: "destructive"
       });
@@ -158,7 +158,7 @@ export default function StudentProfile() {
             {t('Student')} <span className="text-indigo-600">{t('Profile')}</span>
           </h1>
           <p className="text-slate-400 font-bold uppercase text-[9px] md:text-[10px] tracking-widest mt-2 flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" /> {t('Demographics & Academic Profile Setup')}
+            <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" /> {t('Demographics & academic profile setup')}
           </p>
         </div>
       </div>
@@ -183,7 +183,7 @@ export default function StudentProfile() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                    {t('Email Address')}
+                    {t('Email address')}
                   </Label>
                   <Input 
                     type="email" 
@@ -195,7 +195,7 @@ export default function StudentProfile() {
 
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                    {t('Full Name')}
+                    {t('Full name')}
                   </Label>
                   <Input 
                     type="text" 
@@ -213,7 +213,7 @@ export default function StudentProfile() {
                   </Label>
                   <Select value={program} onValueChange={setProgram} required>
                     <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold px-4 text-xs">
-                      <SelectValue placeholder={t('Select Course')} />
+                      <SelectValue placeholder={t('Select course')} />
                     </SelectTrigger>
                     {/* Same list and spellings as registration (lib/programs.ts),
                         for the student's own campus. A saved value that isn't
@@ -232,11 +232,11 @@ export default function StudentProfile() {
 
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                    {t('Year Level')}
+                    {t('Year level')}
                   </Label>
                   <Select value={yearLevel} onValueChange={setYearLevel} required>
                     <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold px-4 text-xs">
-                      <SelectValue placeholder={t('Select Year Level')} />
+                      <SelectValue placeholder={t('Select year level')} />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl border-none shadow-2xl bg-white dark:bg-slate-900">
                       {YEAR_LEVELS.map((level) => (
@@ -253,7 +253,7 @@ export default function StudentProfile() {
               <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
                 <User className="w-5 h-5 text-indigo-600" />
                 <h2 className="text-lg font-black uppercase tracking-tight text-slate-800 dark:text-slate-100">
-                  {t('Demographics & Diversity')}
+                  {t('Demographics & diversity')}
                 </h2>
               </div>
 
@@ -264,7 +264,7 @@ export default function StudentProfile() {
                   </Label>
                   <Select value={gender} onValueChange={setGender} required>
                     <SelectTrigger className="h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold px-4 text-xs">
-                      <SelectValue placeholder={t('Select Gender')} />
+                      <SelectValue placeholder={t('Select gender')} />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl border-none shadow-2xl bg-white dark:bg-slate-900">
                       <SelectItem value="Male">{t('Male')}</SelectItem>
@@ -335,7 +335,7 @@ export default function StudentProfile() {
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
                 <>
-                  <Save className="w-4 h-4" /> {t('Save & Update Profile')}
+                  <Save className="w-4 h-4" /> {t('Save & update profile')}
                 </>
               )}
             </Button>

@@ -120,8 +120,8 @@ function rpcErrorMessage(error: any, fallback: string): string {
 }
 
 const ATTEMPT_LABEL: Record<AttemptType, string> = {
-  pre: 'Pre-Test',
-  post: 'Post-Test',
+  pre: 'Pre-test',
+  post: 'Post-test',
 };
 
 interface SurveyResult {
@@ -322,7 +322,7 @@ export default function QuizzesSurveys() {
         return {
           id: response.id,
           survey_id: response.survey_id,
-          title: survey?.title || t('Guidance Assessment Response'),
+          title: survey?.title || t('Guidance assessment response'),
           category: survey?.category || null,
           created_at: response.created_at,
           score: response.score,
@@ -428,7 +428,7 @@ export default function QuizzesSurveys() {
       setSurveysLoadFailed(true);
 
       toast({
-        title: t('Unable to Load Assessments'),
+        title: t('Unable to load assessments'),
         description:
           error?.message ? serverMessage(error.message) : t('Failed to load available assessments.'),
         variant: 'destructive',
@@ -548,7 +548,7 @@ export default function QuizzesSurveys() {
 
     if (error || !data) {
       toast({
-        title: t('Unable to Open Assessment'),
+        title: t('Unable to open assessment'),
         description: serverMessage(rpcErrorMessage(error, t('Please try again.'))),
         variant: 'destructive',
       });
@@ -655,7 +655,7 @@ export default function QuizzesSurveys() {
 
     if (!hasAnswer(currentQuestion)) {
       toast({
-        title: t('Please Answer This Question'),
+        title: t('Please answer this question'),
         description:
           t('Review the question and choose or enter your response before continuing.'),
         variant: 'destructive',
@@ -711,7 +711,7 @@ export default function QuizzesSurveys() {
 
     if (unansweredQuestions.length > 0) {
       toast({
-        title: t('Incomplete Assessment'),
+        title: t('Incomplete assessment'),
         description:
           t('Please complete all required questions before submitting.'),
         variant: 'destructive',
@@ -733,7 +733,7 @@ export default function QuizzesSurveys() {
 
     if (!dbUserId) {
       toast({
-        title: t('Session Not Ready'),
+        title: t('Session not ready'),
         description: t('Please wait a moment and try again.'),
         variant: 'destructive',
       });
@@ -794,10 +794,10 @@ export default function QuizzesSurveys() {
         setScoreSummary(summary);
       } else {
         toast({
-          title: attempt ? t('{attempt} Submitted', { attempt: ATTEMPT_LABEL[attempt] }) : t('Assessment Submitted'),
+          title: attempt ? (attempt === 'pre' ? t('Pre-test submitted') : t('Post-test submitted')) : t('Assessment submitted'),
           description:
             attempt === 'pre'
-              ? t('Read the program\'s IEC materials, then come back for the Post-Test.')
+              ? t('Read the program\'s IEC materials, then come back for the post-test.')
               : t('Your response has been successfully recorded. Thank you for participating!'),
         });
 
@@ -809,7 +809,7 @@ export default function QuizzesSurveys() {
       console.error('Submission Error:', error);
 
       toast({
-        title: t('Submission Failed'),
+        title: t('Submission failed'),
         description: serverMessage(rpcErrorMessage(error, t('We were unable to submit your response. Please try again.'))),
         variant: 'destructive',
       });
@@ -1180,7 +1180,7 @@ export default function QuizzesSurveys() {
           <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
 
           <p className="mt-4 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
-            {t('Loading Assessments')}
+            {t('Loading assessments')}
           </p>
         </div>
       </div>
@@ -1198,7 +1198,7 @@ export default function QuizzesSurveys() {
       <div className="mb-8 sm:mb-10">
         <div className="flex flex-col gap-2">
           <p className="text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] text-indigo-600">
-            {t('Student Portal')}
+            {t('Student portal')}
           </p>
 
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 dark:text-white tracking-tight">
@@ -1222,7 +1222,7 @@ export default function QuizzesSurveys() {
               : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
           }`}
         >
-          {t('Available Assessments')}
+          {t('Available assessments')}
         </button>
         <button
           type="button"
@@ -1233,7 +1233,7 @@ export default function QuizzesSurveys() {
               : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
           }`}
         >
-          {t('My Results ({count})', { count: results.length })}
+          {t('My results ({count})', { count: results.length })}
         </button>
       </div>
 
@@ -1244,7 +1244,7 @@ export default function QuizzesSurveys() {
             <div className="flex flex-col items-center text-center">
               <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
               <p className="mt-4 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
-                {t('Loading Your Results')}
+                {t('Loading your results')}
               </p>
             </div>
           </div>
@@ -1260,14 +1260,14 @@ export default function QuizzesSurveys() {
               onClick={fetchMyResults}
               className="mt-5 h-11 px-8 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
             >
-              {t('Try Again')}
+              {t('Try again')}
             </Button>
           </div>
         ) : results.length === 0 ? (
           <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 dark:bg-slate-800 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 px-6">
             <FileCheck2 className="w-12 h-12 text-slate-300 mb-4" />
             <h2 className="text-lg sm:text-xl font-black text-slate-700 dark:text-slate-200">
-              {t('No Completed Assessments Yet')}
+              {t('No completed assessments yet')}
             </h2>
             <p className="text-sm text-slate-400 mt-2 max-w-md">
               {t('Once you complete an assessment, your results will appear here.')}
@@ -1413,7 +1413,7 @@ export default function QuizzesSurveys() {
                 onClick={fetchActiveSurveys}
                 className="mt-5 h-11 px-8 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
               >
-                {t('Try Again')}
+                {t('Try again')}
               </Button>
             </div>
           ) : surveys.length === 0 ? (
@@ -1421,7 +1421,7 @@ export default function QuizzesSurveys() {
               <ClipboardList className="w-12 h-12 text-slate-300 mb-4" />
 
               <h2 className="text-lg sm:text-xl font-black text-slate-700 dark:text-slate-200">
-                {t('No Active Assessments')}
+                {t('No active assessments')}
               </h2>
 
               <p className="text-sm text-slate-400 mt-2 max-w-md">
@@ -1481,8 +1481,8 @@ export default function QuizzesSurveys() {
                           ? t('Completed')
                           : survey.next_attempt === 'post'
                             ? survey.post_test_lock
-                              ? t('Post-Test Locked')
-                              : t('Post-Test Ready')
+                              ? t('Post-test locked')
+                              : t('Post-test ready')
                             : t('Available')}
                       </span>
 
@@ -1542,12 +1542,12 @@ export default function QuizzesSurveys() {
                     {survey.post_test_lock && <Lock className="w-4 h-4 mr-2" aria-hidden="true" />}
                     {String(startingSurveyId) === String(survey.id) && <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />}
                     {survey.is_completed
-                      ? t('Already Submitted')
+                      ? t('Already submitted')
                       : survey.next_attempt === 'pre'
-                        ? t('Start Pre-Test')
+                        ? t('Start pre-test')
                         : survey.next_attempt === 'post'
-                          ? t('Take Post-Test')
-                          : t('Start Assessment')}
+                          ? t('Take post-test')
+                          : t('Start assessment')}
                   </Button>
 
                   {survey.post_test_lock && (
@@ -1665,8 +1665,8 @@ export default function QuizzesSurveys() {
 
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-2">
                   {activeSurvey?.next_attempt
-                    ? t('{attempt} · Before You Begin', { attempt: ATTEMPT_LABEL[activeSurvey.next_attempt] })
-                    : t('Before You Begin')}
+                    ? (activeSurvey.next_attempt === 'pre' ? t('Pre-test · Before you begin') : t('Post-test · Before you begin'))
+                    : t('Before you begin')}
                 </p>
 
                 <h3 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-tight">
@@ -1717,7 +1717,7 @@ export default function QuizzesSurveys() {
                     tracking-widest
                   "
                 >
-                  {t('Begin Assessment')}
+                  {t('Begin assessment')}
                   <ChevronRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
@@ -1802,8 +1802,8 @@ export default function QuizzesSurveys() {
                     "
                   >
                     {currentQuestionIndex === totalQuestions - 1
-                      ? t('Review Answers')
-                      : t('Next Question')}
+                      ? t('Review answers')
+                      : t('Next question')}
 
                     <ChevronRight className="w-4 h-4 ml-2" />
                   </Button>
@@ -1822,11 +1822,11 @@ export default function QuizzesSurveys() {
                   </div>
 
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">
-                    {t('Final Review')}
+                    {t('Final review')}
                   </p>
 
                   <h3 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white">
-                    {t('Review Your Answers')}
+                    {t('Review your answers')}
                   </h3>
 
                   <p className="mt-3 text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
@@ -1939,7 +1939,7 @@ export default function QuizzesSurveys() {
                     "
                   >
                     <ChevronLeft className="w-4 h-4 mr-2" />
-                    {t('Back to Questions')}
+                    {t('Back to questions')}
                   </Button>
 
                   <Button
@@ -1960,7 +1960,7 @@ export default function QuizzesSurveys() {
                     "
                   >
                     <Send className="w-4 h-4 mr-2" />
-                    {t('Submit Assessment')}
+                    {t('Submit assessment')}
                   </Button>
                 </div>
               </div>
@@ -1995,7 +1995,7 @@ export default function QuizzesSurveys() {
                       </div>
 
                       <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-2">
-                        {submittedAttempt ? t('{attempt} Complete', { attempt: ATTEMPT_LABEL[submittedAttempt] }) : t('Assessment Complete')}
+                        {submittedAttempt ? (submittedAttempt === 'pre' ? t('Pre-test complete') : t('Post-test complete')) : t('Assessment complete')}
                       </p>
 
                       <h3 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">
@@ -2030,10 +2030,10 @@ export default function QuizzesSurveys() {
                 {submittedAttempt === 'pre' && (
                   <div className="mt-8 p-5 sm:p-6 rounded-2xl bg-indigo-50 border border-indigo-100">
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">
-                      {t('Next Step')}
+                      {t('Next step')}
                     </p>
                     <p className="mt-2 text-sm sm:text-base font-semibold text-slate-700 leading-relaxed">
-                      {t('Read the program\'s IEC materials, then return to Assessment to take the Post-Test.')}
+                      {t('Read the program\'s IEC materials, then return to Assessment to take the post-test.')}
                     </p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <Button
@@ -2042,7 +2042,7 @@ export default function QuizzesSurveys() {
                         className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
                       >
                         <BookOpen className="w-3.5 h-3.5" />
-                        {t('IEC Materials')}
+                        {t('IEC materials')}
                         <ArrowRight className="w-3.5 h-3.5" />
                       </Button>
                       <Button
@@ -2100,7 +2100,7 @@ export default function QuizzesSurveys() {
             </div>
 
             <h3 className="mt-5 text-xl sm:text-2xl font-black text-slate-900 dark:text-white text-center">
-              {t('Submit Your Response?')}
+              {t('Submit your response?')}
             </h3>
 
             <p className="mt-3 text-sm text-slate-500 dark:text-slate-400 text-center leading-relaxed">
@@ -2132,7 +2132,7 @@ export default function QuizzesSurveys() {
                 "
               >
                 <RotateCcw className="w-4 h-4 mr-2" />
-                {t('Review Again')}
+                {t('Review again')}
               </Button>
 
               <Button
@@ -2155,7 +2155,7 @@ export default function QuizzesSurveys() {
                 ) : (
                   <>
                     <Send className="w-4 h-4 mr-2" />
-                    {t('Yes, Submit')}
+                    {t('Yes, submit')}
                   </>
                 )}
               </Button>

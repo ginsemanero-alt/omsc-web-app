@@ -301,7 +301,7 @@ export default function IECMaterials() {
           </h1>
           <p className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-2">
             <Calendar className="w-4 h-4 text-indigo-400" />
-            {t('Guidance Resources Library')}
+            {t('Guidance resources library')}
           </p>
         </div>
 
@@ -321,7 +321,7 @@ export default function IECMaterials() {
             onChange={(e) => setSelectedCategory(e.target.value)}
             className="h-12 px-4 bg-slate-50 dark:bg-slate-800 dark:text-white border-none rounded-2xl font-bold text-sm text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/20"
           >
-            <option value="All">{t('All IEC Categories')}</option>
+            <option value="All">{t('All IEC categories')}</option>
             {IEC_CATEGORIES.map((category) => (
               <option key={category} value={category}>{category}</option>
             ))}
@@ -355,7 +355,7 @@ export default function IECMaterials() {
               onClick={fetchMaterials}
               className="h-11 px-8 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
             >
-              {t('Try Again')}
+              {t('Try again')}
             </Button>
           </div>
         ) : (
@@ -445,7 +445,7 @@ export default function IECMaterials() {
                       <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">{item.description}</p>
                     )}
                     <Button onClick={() => handlePreview(item)} className="bg-red-600 hover:bg-red-700 h-12 px-8 rounded-2xl font-black uppercase text-xs shadow-lg shadow-red-100 text-white">
-                      {t('Watch Now')}
+                      {t('Watch now')}
                     </Button>
                   </div>
                 </Card>
@@ -501,7 +501,7 @@ export default function IECMaterials() {
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 h-11 px-6 bg-slate-900 hover:bg-indigo-600 rounded-xl font-black uppercase text-xs text-white transition-colors"
                       >
-                        {t('Open Resource')} <ExternalLink className="w-3.5 h-3.5" />
+                        {t('Open resource')} <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     </div>
                   </div>
@@ -520,7 +520,7 @@ export default function IECMaterials() {
           <DialogHeader className="p-6 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex flex-row items-center justify-between shrink-0">
             <div>
               <DialogTitle className="font-black uppercase tracking-tighter text-xl text-slate-900 dark:text-white">{previewItem?.title}</DialogTitle>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">{t('Material Preview Mode')}</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">{t('Material preview mode')}</p>
             </div>
           </DialogHeader>
           
@@ -538,7 +538,7 @@ export default function IECMaterials() {
                 src={getYouTubeEmbedUrl(previewItem.file_url)}
                 className="w-full aspect-video max-w-4xl rounded-2xl shadow-2xl border-none"
                 allowFullScreen
-                title={t('YouTube Video')}
+                title={t('YouTube video')}
               />
             ) : previewItem?.type === 'Video' && previewItem?.file_url ? (
               // Self-hosted upload, not YouTube — native <video> controls
@@ -587,7 +587,7 @@ export default function IECMaterials() {
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 h-12 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-xs"
                 >
-                  {t('Open in New Tab')} <ExternalLink className="w-4 h-4" />
+                  {t('Open in new tab')} <ExternalLink className="w-4 h-4" />
                 </a>
               </div>
             ) : (
@@ -611,7 +611,7 @@ export default function IECMaterials() {
               !previewItem?.file_url?.includes('youtube') &&
               !previewItem?.file_url?.includes('youtu.be') && (
               <Button onClick={() => { downloadFile(previewItem.file_url, previewItem.title); incrementDownloadCount(previewItem.id); logMaterialView(previewItem); }} className="bg-indigo-600 rounded-xl font-black uppercase text-[10px] px-6 text-white">
-                {t('Download Resource')}
+                {t('Download resource')}
               </Button>
             )}
           </div>

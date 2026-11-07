@@ -544,7 +544,7 @@ export default function ProgramsActivities() {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
-        <p className="text-slate-500 font-bold text-[10px] uppercase tracking-widest">{t('Syncing Cloud Data...')}</p>
+        <p className="text-slate-500 font-bold text-[10px] uppercase tracking-widest">{t('Syncing cloud data...')}</p>
       </div>
     );
   }
@@ -1125,10 +1125,10 @@ export default function ProgramsActivities() {
         </div>
         <Select value={guidanceServiceFilter} onValueChange={setGuidanceServiceFilter}>
           <SelectTrigger className="w-full sm:w-56 h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold text-slate-600 dark:text-slate-300 uppercase text-[10px] tracking-widest">
-            <SelectValue placeholder={t('Guidance Service')} />
+            <SelectValue placeholder={t('Guidance service')} />
           </SelectTrigger>
           <SelectContent className="rounded-xl border-none shadow-xl bg-white dark:bg-slate-900">
-            <SelectItem value="all">{t('All Guidance Services')}</SelectItem>
+            <SelectItem value="all">{t('All guidance services')}</SelectItem>
             {GUIDANCE_SERVICES.map((service) => (
               <SelectItem key={service} value={service}>{service}</SelectItem>
             ))}
@@ -1136,10 +1136,10 @@ export default function ProgramsActivities() {
         </Select>
         <Select value={programComponentFilter} onValueChange={setProgramComponentFilter}>
           <SelectTrigger className="w-full sm:w-56 h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold text-slate-600 dark:text-slate-300 uppercase text-[10px] tracking-widest">
-            <SelectValue placeholder={t('Program Component')} />
+            <SelectValue placeholder={t('Program component')} />
           </SelectTrigger>
           <SelectContent className="rounded-xl border-none shadow-xl bg-white dark:bg-slate-900">
-            <SelectItem value="all">{t('All Program Components')}</SelectItem>
+            <SelectItem value="all">{t('All program components')}</SelectItem>
             {PROGRAM_COMPONENTS.map((component) => (
               <SelectItem key={component} value={component}>{component}</SelectItem>
             ))}
@@ -1207,7 +1207,7 @@ export default function ProgramsActivities() {
               </div>
               <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-50/70 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100/30 dark:border-slate-700/30">
                 <Clock className="w-4 h-4 text-indigo-500 shrink-0" />
-                <span className="truncate">{program.time_range || t('All Day Schedule')}</span>
+                <span className="truncate">{program.time_range || t('All day schedule')}</span>
               </div>
               <div className="flex items-center gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-50/70 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100/30 dark:border-slate-700/30 sm:col-span-2">
                 <MapPin className="w-4 h-4 text-indigo-500 shrink-0" />
@@ -1221,7 +1221,7 @@ export default function ProgramsActivities() {
                 className="w-full border-t border-dashed rounded-none pt-4 justify-between text-indigo-600 hover:text-indigo-700 hover:bg-transparent px-0 font-black text-[9px] md:text-[10px] uppercase tracking-widest transition-colors"
                 onClick={() => openProgram(program.id)}
               >
-                {t('View Details')}
+                {t('View details')}
                 <ChevronRight className="w-4 h-4" />
               </Button>
             </div>

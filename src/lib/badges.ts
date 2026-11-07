@@ -33,7 +33,7 @@ export interface BadgeDefinition {
 export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     id: 'first_step',
-    title: 'First Step',
+    title: 'First step',
     description: 'You took a pre-test.',
     howToEarn: "Take a program's pre-test.",
     kind: 'participation',
@@ -47,21 +47,21 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     id: 'program_complete',
-    title: 'Program Complete',
+    title: 'Program complete',
     description: 'You finished the pre-test, all the materials and the post-test of a program.',
     howToEarn: "Finish a program's pre-test, all of its materials, and its post-test.",
     kind: 'completion',
   },
   {
     id: 'knowledge_check_passed',
-    title: 'Awareness Check Passed',
+    title: 'Awareness check passed',
     description: 'You scored {pct}% or higher on a post-test.', // {pct} = PASS_THRESHOLD_PCT, filled in where it is shown
     howToEarn: 'Score {pct}% or higher on a post-test.',
     kind: 'completion',
   },
   {
     id: 'committed_learner',
-    title: 'Committed Learner',
+    title: 'Committed learner',
     description: 'You completed 3 programs.',
     howToEarn: 'Complete 3 programs.',
     kind: 'completion',

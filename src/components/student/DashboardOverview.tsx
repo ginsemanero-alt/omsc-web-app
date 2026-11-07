@@ -504,7 +504,7 @@ export default function DashboardOverview() {
   const improvements = progress.map(improvementPoints).filter((n): n is number => n !== null);
   const bestImprovement = improvements.length > 0 ? Math.max(...improvements) : null;
   // Steps done on the program that is furthest along (pre-test, all materials
-  // viewed, post-test), for the "Program Complete" badge's progress line.
+  // viewed, post-test), for the "Program complete" badge's progress line.
   const programSteps =
     progress.length === 0
       ? null
