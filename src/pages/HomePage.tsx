@@ -57,6 +57,9 @@ let heroEntrancePlayed = false;
 const HomePage = ({ onNavigate }: HomePageProps) => {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // A failed fetch is not "no programs": it gets its own message and a retry.
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [playEntrance] = useState(() => !heroEntrancePlayed);
 
   useEffect(() => {
@@ -80,6 +83,7 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
   useEffect(() => {
     const fetchPrograms = async () => {
       try {
+        setLoadError(false);
         const { data, error } = await supabase
           .from("programs")
           .select("*")
@@ -92,12 +96,13 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
         if (data) setPrograms(data.filter((p) => !isOffSchedule(getEffectiveProgramStatus(p))).slice(0, 4));
       } catch (err) {
         console.error("Error fetching programs:", err);
+        setLoadError(true);
       } finally {
         setIsLoading(false);
       }
     };
     fetchPrograms();
-  }, []);
+  }, [reloadKey]);
 
   // Hero collage: the 3 most recent programs (newest first, from the
   // same fetch as Recent programs).
@@ -296,6 +301,17 @@ const HomePage = ({ onNavigate }: HomePageProps) => {
                   </div>
                 </div>
               ))
+            ) : loadError ? (
+              <div role="alert" className="sm:col-span-2 lg:col-span-4 p-6 rounded-[28px] bg-white text-[15px] text-[#5B6477] flex flex-col sm:flex-row sm:items-center gap-3">
+                <p className="m-0 flex-1">We couldn't load the programs. Check your internet connection, then try again.</p>
+                <button
+                  type="button"
+                  onClick={() => setReloadKey((k) => k + 1)}
+                  className={`h-11 px-5 rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] transition-colors shrink-0 ${focusRing}`}
+                >
+                  Try again
+                </button>
+              </div>
             ) : programs.length === 0 ? (
               <p className="sm:col-span-2 lg:col-span-4 m-0 p-6 rounded-[28px] bg-white text-[15px] text-[#5B6477]">
                 No programs have been posted yet. Check back soon.

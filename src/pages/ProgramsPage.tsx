@@ -58,6 +58,9 @@ const ProgramsPage = () => {
 
   const [programs, setPrograms] = useState<Program[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // A failed fetch is not "no programs": it gets its own message and a retry.
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   // ?service=Counseling+Services (from the About page) pre-selects a service chip;
   // anything that is not one of the six services means "all".
@@ -71,6 +74,7 @@ const ProgramsPage = () => {
     const fetchPrograms = async () => {
       try {
         setIsLoading(true);
+        setLoadError(false);
 
         const { data: sbPrograms, error } = await supabase
           .from("programs")
@@ -100,16 +104,18 @@ const ProgramsPage = () => {
           setPrograms(mappedPrograms);
         } else if (error) {
           console.error("Error fetching programs from Supabase:", error.message);
+          setLoadError(true);
         }
       } catch (err) {
         console.error("Error fetching programs:", err);
+        setLoadError(true);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchPrograms();
-  }, []);
+  }, [reloadKey]);
 
   const filteredPrograms = programs
     .filter((p) => {
@@ -294,6 +300,20 @@ const ProgramsPage = () => {
                   </div>
                 ))}
               </div>
+            </div>
+          ) : loadError ? (
+            <div role="alert" className="rounded-[2rem] bg-white px-6 py-14 lg:py-20 text-center flex flex-col items-center gap-3">
+              <p className="m-0 font-bricolage font-extrabold text-2xl text-[#1E1B4B]">We couldn't load the programs</p>
+              <p className="m-0 text-[15px] text-[#5B6477] max-w-md">
+                Check your internet connection, then try again. The programs are still there.
+              </p>
+              <button
+                type="button"
+                onClick={() => setReloadKey((k) => k + 1)}
+                className={`mt-2 h-11 px-5 rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] transition-colors ${focusRing}`}
+              >
+                Try again
+              </button>
             </div>
           ) : filteredPrograms.length === 0 ? (
             <div className="rounded-[2rem] bg-white px-6 py-14 lg:py-20 text-center flex flex-col items-center gap-3">

@@ -83,6 +83,8 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
   const [linkedMaterialIds, setLinkedMaterialIds] = useState<number[]>([]);
   const [materialSearch, setMaterialSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  // A failed fetch is not "no programs yet".
+  const [loadFailed, setLoadFailed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   // ?status=ongoing from a dashboard card; matches the effective status the card counts.
   const [statusFilter, setStatusFilter] = useUrlFilter('status', 'all');
@@ -201,6 +203,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
 
   const fetchPrograms = async () => {
     setLoading(true);
+    setLoadFailed(false);
     try {
       const { data, error } = await supabase
         .from('programs')
@@ -245,6 +248,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
       setIecMaterials((materialRes.data || []) as IecMaterialOption[]);
       onChanged?.();
     } catch (err: any) {
+      setLoadFailed(true);
       toast({ variant: "destructive", title: "Fetch Error", description: err.message });
     } finally {
       setLoading(false);
@@ -1033,9 +1037,16 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
         </ul>
 
         {pagedPrograms.length === 0 && (
-          <p className="m-0 px-6 py-10 text-center text-[15px] text-[#5B6477]">
-            {loading ? 'Loading programs...' : searchQuery || statusFilter !== 'all' ? 'No programs match your search or filter.' : 'No programs yet.'}
-          </p>
+          <div className="px-6 py-10 text-center text-[15px] text-[#5B6477] flex flex-col items-center gap-3" role={loadFailed && !loading ? 'alert' : undefined}>
+            <p className="m-0">
+              {loading ? 'Loading programs...' : loadFailed ? "The programs couldn't be loaded. This is not an empty list." : searchQuery || statusFilter !== 'all' ? 'No programs match your search or filter.' : 'No programs yet.'}
+            </p>
+            {loadFailed && !loading && (
+              <button type="button" onClick={() => fetchPrograms()} className={`h-11 px-5 rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] ${focusRing}`}>
+                Try again
+              </button>
+            )}
+          </div>
         )}
       </div>
 

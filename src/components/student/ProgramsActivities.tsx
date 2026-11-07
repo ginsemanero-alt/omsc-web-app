@@ -301,6 +301,8 @@ export default function ProgramsActivities() {
   const [programComponentFilter, setProgramComponentFilter] = useState('all');
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
+  // A failed fetch is not "no programs": it gets its own message and a retry.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [photoViewer, setPhotoViewer] = useState<PhotoViewerState | null>(null);
   const [previewHandout, setPreviewHandout] = useState<PreviewFile | null>(null);
   const [materialData, setMaterialData] = useState<MaterialProgressData | null>(null);
@@ -371,6 +373,7 @@ export default function ProgramsActivities() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setLoadFailed(false);
     try {
       let query = supabase
         .from('programs')
@@ -386,6 +389,7 @@ export default function ProgramsActivities() {
       if (programsData) setPrograms(programsData);
     } catch (err: any) {
       console.error('Error fetching data:', err);
+      setLoadFailed(true);
       toast({
         variant: "destructive",
         title: "SYNC ERROR",
@@ -1135,6 +1139,16 @@ export default function ProgramsActivities() {
           </SelectContent>
         </Select>
       </div>
+
+      {loadFailed && (
+        <div role="alert" className="rounded-3xl bg-white dark:bg-slate-900 px-6 py-10 text-center flex flex-col items-center gap-3 border border-slate-100 dark:border-slate-800">
+          <p className="m-0 font-bold text-slate-800 dark:text-slate-100">We couldn't load the programs.</p>
+          <p className="m-0 text-sm text-slate-500 dark:text-slate-400">Check your internet connection, then try again.</p>
+          <button type="button" onClick={() => fetchData()} className={`min-h-[44px] px-5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm ${focusRing}`}>
+            Try again
+          </button>
+        </div>
+      )}
 
       {/* RENDER CARDS GRID LOOP */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
