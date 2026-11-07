@@ -31,6 +31,7 @@ import {
   Check,
   Lock,
 } from 'lucide-react';
+import { useT } from '../../i18n';
 
 interface Question {
   id: string | number;
@@ -148,6 +149,7 @@ interface ScoreSummary {
 }
 
 export default function QuizzesSurveys() {
+  const { t, tr } = useT();
   const navigate = useNavigate();
   const { dbUserId } = useAuth();
 
@@ -228,8 +230,8 @@ export default function QuizzesSurveys() {
         setView('results');
       } else {
         toast({
-          title: 'Assessment not available',
-          description: 'It may be closed or not open yet. Here are the assessments you can take now.',
+          title: t('Assessment not available'),
+          description: t('It may be closed or not open yet. Here are the assessments you can take now.'),
         });
       }
     }
@@ -320,7 +322,7 @@ export default function QuizzesSurveys() {
         return {
           id: response.id,
           survey_id: response.survey_id,
-          title: survey?.title || 'Guidance Assessment Response',
+          title: survey?.title || t('Guidance Assessment Response'),
           category: survey?.category || null,
           created_at: response.created_at,
           score: response.score,
@@ -426,9 +428,9 @@ export default function QuizzesSurveys() {
       setSurveysLoadFailed(true);
 
       toast({
-        title: 'Unable to Load Assessments',
+        title: t('Unable to Load Assessments'),
         description:
-          error?.message || 'Failed to load available assessments.',
+          error?.message || t('Failed to load available assessments.'),
         variant: 'destructive',
       });
     } finally {
@@ -460,7 +462,8 @@ export default function QuizzesSurveys() {
     if (!pre || !post) return null;
     return formatComparison(
       pre.percentage ?? percentFrom(pre.score, pre.total_scored),
-      post.percentage ?? percentFrom(post.score, post.total_scored)
+      post.percentage ?? percentFrom(post.score, post.total_scored),
+      tr
     );
   };
 
@@ -512,7 +515,7 @@ export default function QuizzesSurveys() {
     const review = await loadReview(surveyId);
     setReviewLoadingId(null);
     if (!review) {
-      toast({ title: 'Review unavailable', description: 'Please try again in a moment.', variant: 'destructive' });
+      toast({ title: t('Review unavailable'), description: t('Please try again in a moment.'), variant: 'destructive' });
       return;
     }
     setOpenReviewId(key);
@@ -535,7 +538,7 @@ export default function QuizzesSurveys() {
   const handleStartSurvey = async (survey: Survey) => {
     if (survey.is_completed || startingSurveyId !== null) return;
     if (survey.post_test_lock) {
-      toast({ title: 'Post-test locked', description: survey.post_test_lock });
+      toast({ title: t('Post-test locked'), description: survey.post_test_lock });
       return;
     }
 
@@ -545,15 +548,15 @@ export default function QuizzesSurveys() {
 
     if (error || !data) {
       toast({
-        title: 'Unable to Open Assessment',
-        description: rpcErrorMessage(error, 'Please try again.'),
+        title: t('Unable to Open Assessment'),
+        description: rpcErrorMessage(error, t('Please try again.')),
         variant: 'destructive',
       });
       fetchActiveSurveys();
       return;
     }
     if (data.post_test_lock) {
-      toast({ title: 'Post-test locked', description: data.post_test_lock });
+      toast({ title: t('Post-test locked'), description: data.post_test_lock });
       fetchActiveSurveys();
       return;
     }
@@ -652,9 +655,9 @@ export default function QuizzesSurveys() {
 
     if (!hasAnswer(currentQuestion)) {
       toast({
-        title: 'Please Answer This Question',
+        title: t('Please Answer This Question'),
         description:
-          'Review the question and choose or enter your response before continuing.',
+          t('Review the question and choose or enter your response before continuing.'),
         variant: 'destructive',
       });
 
@@ -708,9 +711,9 @@ export default function QuizzesSurveys() {
 
     if (unansweredQuestions.length > 0) {
       toast({
-        title: 'Incomplete Assessment',
+        title: t('Incomplete Assessment'),
         description:
-          'Please complete all required questions before submitting.',
+          t('Please complete all required questions before submitting.'),
         variant: 'destructive',
       });
 
@@ -730,8 +733,8 @@ export default function QuizzesSurveys() {
 
     if (!dbUserId) {
       toast({
-        title: 'Session Not Ready',
-        description: 'Please wait a moment and try again.',
+        title: t('Session Not Ready'),
+        description: t('Please wait a moment and try again.'),
         variant: 'destructive',
       });
       return;
@@ -791,11 +794,11 @@ export default function QuizzesSurveys() {
         setScoreSummary(summary);
       } else {
         toast({
-          title: attempt ? `${ATTEMPT_LABEL[attempt]} Submitted` : 'Assessment Submitted',
+          title: attempt ? t('{attempt} Submitted', { attempt: ATTEMPT_LABEL[attempt] }) : t('Assessment Submitted'),
           description:
             attempt === 'pre'
-              ? 'Read the program\'s IEC materials, then come back for the Post-Test.'
-              : 'Your response has been successfully recorded. Thank you for participating!',
+              ? t('Read the program\'s IEC materials, then come back for the Post-Test.')
+              : t('Your response has been successfully recorded. Thank you for participating!'),
         });
 
         setActiveSurveyId(null);
@@ -806,8 +809,8 @@ export default function QuizzesSurveys() {
       console.error('Submission Error:', error);
 
       toast({
-        title: 'Submission Failed',
-        description: rpcErrorMessage(error, 'We were unable to submit your response. Please try again.'),
+        title: t('Submission Failed'),
+        description: rpcErrorMessage(error, t('We were unable to submit your response. Please try again.')),
         variant: 'destructive',
       });
       // e.g. the post-test turned out to be locked: refresh the cards.
@@ -856,7 +859,7 @@ export default function QuizzesSurveys() {
                 </p>
 
                 <p className="m-0 mt-2 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-                  <span className="font-black uppercase text-[9px] tracking-wider text-slate-400 mr-1.5">Your answer</span>
+                  <span className="font-black uppercase text-[9px] tracking-wider text-slate-400 mr-1.5">{t('Your answer')}</span>
                   {answerText(item.student_answer)}
                 </p>
 
@@ -866,7 +869,7 @@ export default function QuizzesSurveys() {
                       status === 'correct' ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'
                     }`}
                   >
-                    {status === 'correct' ? 'Correct' : 'Incorrect'}
+                    {status === 'correct' ? t('Correct') : t('Incorrect')}
                   </p>
                 )}
 
@@ -1008,10 +1011,10 @@ export default function QuizzesSurveys() {
 
           <div className="flex justify-between mt-3 px-1">
             <span className="text-[10px] sm:text-xs font-bold text-slate-400">
-              Lowest
+              {t('Lowest')}
             </span>
             <span className="text-[10px] sm:text-xs font-bold text-slate-400">
-              Highest
+              {t('Highest')}
             </span>
           </div>
         </div>
@@ -1092,13 +1095,13 @@ export default function QuizzesSurveys() {
 
           {question.allow_other && (
             <div className="space-y-2">
-              {checkRow(otherChecked, 'Other', toggleOther, '__other__')}
+              {checkRow(otherChecked, t('Other'), toggleOther, '__other__')}
               {otherChecked && (
                 <input
                   type="text"
                   value={otherText}
                   onChange={(event) => setOtherText(event.target.value)}
-                  placeholder="Please specify..."
+                  placeholder={t('Please specify...')}
                   className="
                     w-full h-12 px-4 rounded-2xl bg-slate-50 dark:bg-slate-800
                     border border-slate-200 dark:border-slate-700
@@ -1123,7 +1126,7 @@ export default function QuizzesSurveys() {
           onChange={(event) =>
             updateAnswer(question.id, event.target.value)
           }
-          placeholder="Write your response here..."
+          placeholder={t('Write your response here...')}
           className="
             w-full min-h-[160px] sm:min-h-[190px]
             rounded-2xl bg-slate-50 dark:bg-slate-800
@@ -1149,7 +1152,7 @@ export default function QuizzesSurveys() {
         onChange={(event) =>
           updateAnswer(question.id, event.target.value)
         }
-        placeholder="Write your response here..."
+        placeholder={t('Write your response here...')}
         className="
           w-full min-h-[160px]
           rounded-2xl bg-slate-50 dark:bg-slate-800
@@ -1177,7 +1180,7 @@ export default function QuizzesSurveys() {
           <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
 
           <p className="mt-4 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
-            Loading Assessments
+            {t('Loading Assessments')}
           </p>
         </div>
       </div>
@@ -1195,16 +1198,15 @@ export default function QuizzesSurveys() {
       <div className="mb-8 sm:mb-10">
         <div className="flex flex-col gap-2">
           <p className="text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] text-indigo-600">
-            Student Portal
+            {t('Student Portal')}
           </p>
 
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 dark:text-white tracking-tight">
-            Assessment
+            {t('Assessment')}
           </h1>
 
           <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
-            Take part in guidance assessments to help us
-            understand student awareness and experiences.
+            {t('Take part in guidance assessments to help us understand student awareness and experiences.')}
           </p>
         </div>
       </div>
@@ -1220,7 +1222,7 @@ export default function QuizzesSurveys() {
               : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
           }`}
         >
-          Available Assessments
+          {t('Available Assessments')}
         </button>
         <button
           type="button"
@@ -1231,7 +1233,7 @@ export default function QuizzesSurveys() {
               : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
           }`}
         >
-          My Results ({results.length})
+          {t('My Results ({count})', { count: results.length })}
         </button>
       </div>
 
@@ -1242,33 +1244,33 @@ export default function QuizzesSurveys() {
             <div className="flex flex-col items-center text-center">
               <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
               <p className="mt-4 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
-                Loading Your Results
+                {t('Loading Your Results')}
               </p>
             </div>
           </div>
         ) : resultsLoadFailed ? (
           <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 dark:bg-slate-800 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 px-6">
             <h2 className="text-lg sm:text-xl font-black text-slate-700 dark:text-slate-200">
-              Couldn't load your results
+              {t('Couldn\'t load your results')}
             </h2>
             <p className="text-sm text-slate-400 mt-2 max-w-md">
-              Check your internet connection and try again.
+              {t('Check your internet connection and try again.')}
             </p>
             <Button
               onClick={fetchMyResults}
               className="mt-5 h-11 px-8 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
             >
-              Try Again
+              {t('Try Again')}
             </Button>
           </div>
         ) : results.length === 0 ? (
           <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 dark:bg-slate-800 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 px-6">
             <FileCheck2 className="w-12 h-12 text-slate-300 mb-4" />
             <h2 className="text-lg sm:text-xl font-black text-slate-700 dark:text-slate-200">
-              No Completed Assessments Yet
+              {t('No Completed Assessments Yet')}
             </h2>
             <p className="text-sm text-slate-400 mt-2 max-w-md">
-              Once you complete an assessment, your results will appear here.
+              {t('Once you complete an assessment, your results will appear here.')}
             </p>
           </div>
         ) : (
@@ -1328,11 +1330,11 @@ export default function QuizzesSurveys() {
                       {result.percentage}%
                     </p>
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                      {result.score}/{result.total_scored} Correct
+                      {result.score}/{result.total_scored} {t('Correct')}
                     </p>
                     {result.attempt_type === 'pre' && (
                       <p className="mt-1 max-w-[12rem] text-xs text-slate-500 dark:text-slate-400">
-                        {PRE_TEST_PRIVACY_NOTE}
+                        {tr(PRE_TEST_PRIVACY_NOTE)}
                       </p>
                     )}
                     {result.attempt_type === 'post' && preTestComparison(result.survey_id) && (
@@ -1348,14 +1350,14 @@ export default function QuizzesSurveys() {
                         className="mt-1 min-h-[44px] px-2 inline-flex items-center gap-1.5 rounded-lg text-sm font-bold text-indigo-700 dark:text-indigo-300 hover:underline focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
                       >
                         {reviewLoadingId === String(result.survey_id) && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
-                        {openReviewId === String(result.survey_id) ? 'Hide review' : 'Review answers'}
+                        {openReviewId === String(result.survey_id) ? t('Hide review') : t('Review answers')}
                       </button>
                     )}
                   </div>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-wider shrink-0">
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    Submitted
+                    {t('Submitted')}
                   </span>
                 )}
               </Card>
@@ -1365,10 +1367,10 @@ export default function QuizzesSurveys() {
               {result.attempt_type === 'post' && openReviewId === String(result.survey_id) && reviews[openReviewId] && (() => {
                 const review = reviews[openReviewId];
                 const wrong = review.post.items.filter((item) => item.is_correct === false).length;
-                const comparison = formatComparison(review.comparison?.pre_pct, review.comparison?.post_pct);
+                const comparison = formatComparison(review.comparison?.pre_pct, review.comparison?.post_pct, tr);
                 return (
                   <section
-                    aria-label={`Review of ${result.title}`}
+                    aria-label={t('Review of {title}', { title: result.title })}
                     className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800"
                   >
                     {comparison && (
@@ -1376,12 +1378,14 @@ export default function QuizzesSurveys() {
                     )}
                     <p className="m-0 text-sm font-semibold text-slate-600 dark:text-slate-300">
                       {review.post.items_withheld || review.post.items.length === 0
-                        ? "Question-by-question results aren't shown for this assessment."
+                        ? t('Question-by-question results aren\'t shown for this assessment.')
                         : wrong === 0
-                        ? 'You answered every post-test question correctly.'
-                        : `${wrong} post-test ${wrong === 1 ? 'question' : 'questions'} to review. Each links to where you can learn more.`}
+                        ? t('You answered every post-test question correctly.')
+                        : (wrong === 1
+                          ? t('{wrong} post-test question to review. Each links to where you can learn more.', { wrong })
+                          : t('{wrong} post-test questions to review. Each links to where you can learn more.', { wrong }))}
                     </p>
-                    <p className="m-0 mt-1 text-xs text-slate-500 dark:text-slate-400">{PRE_TEST_PRIVACY_NOTE}</p>
+                    <p className="m-0 mt-1 text-xs text-slate-500 dark:text-slate-400">{tr(PRE_TEST_PRIVACY_NOTE)}</p>
                     {renderReviewItems(review.post.items)}
                   </section>
                 );
@@ -1398,18 +1402,18 @@ export default function QuizzesSurveys() {
           {surveysLoadFailed ? (
             <div className="flex flex-col items-center justify-center text-center py-20 sm:py-28 bg-slate-50 dark:bg-slate-800 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700 px-6">
               <h2 className="text-lg sm:text-xl font-black text-slate-700 dark:text-slate-200">
-                Couldn't load assessments
+                {t('Couldn\'t load assessments')}
               </h2>
 
               <p className="text-sm text-slate-400 mt-2 max-w-md">
-                Check your internet connection and try again.
+                {t('Check your internet connection and try again.')}
               </p>
 
               <Button
                 onClick={fetchActiveSurveys}
                 className="mt-5 h-11 px-8 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
               >
-                Try Again
+                {t('Try Again')}
               </Button>
             </div>
           ) : surveys.length === 0 ? (
@@ -1417,12 +1421,11 @@ export default function QuizzesSurveys() {
               <ClipboardList className="w-12 h-12 text-slate-300 mb-4" />
 
               <h2 className="text-lg sm:text-xl font-black text-slate-700 dark:text-slate-200">
-                No Active Assessments
+                {t('No Active Assessments')}
               </h2>
 
               <p className="text-sm text-slate-400 mt-2 max-w-md">
-                There are currently no active assessments available.
-                Please check again later.
+                {t('There are currently no active assessments available. Please check again later.')}
               </p>
             </div>
           ) : (
@@ -1475,12 +1478,12 @@ export default function QuizzesSurveys() {
                         )}
 
                         {survey.is_completed
-                          ? 'Completed'
+                          ? t('Completed')
                           : survey.next_attempt === 'post'
                             ? survey.post_test_lock
-                              ? 'Post-Test Locked'
-                              : 'Post-Test Ready'
-                            : 'Available'}
+                              ? t('Post-Test Locked')
+                              : t('Post-Test Ready')
+                            : t('Available')}
                       </span>
 
                       <span
@@ -1495,7 +1498,7 @@ export default function QuizzesSurveys() {
                           }
                         `}
                       >
-                        {survey.type === 'knowledge' ? 'Scored' : 'Opinion'}
+                        {survey.type === 'knowledge' ? t('Scored') : t('Opinion')}
                       </span>
                     </div>
                   </div>
@@ -1506,17 +1509,16 @@ export default function QuizzesSurveys() {
 
                   <p className="mt-3 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                     {survey.description ||
-                      'Please complete this assessment based on your own knowledge and experience.'}
+                      t('Please complete this assessment based on your own knowledge and experience.')}
                   </p>
 
                   <div className="mt-6 flex items-center gap-2 text-xs text-slate-400 font-semibold">
                     <ClipboardList className="w-4 h-4" />
 
                     <span>
-                      {questionCountForAttempt(survey)} question
-                      {questionCountForAttempt(survey) !== 1
-                        ? 's'
-                        : ''}
+                      {questionCountForAttempt(survey) === 1
+                        ? t('{n} question', { n: 1 })
+                        : t('{n} questions', { n: questionCountForAttempt(survey) })}
                     </span>
                   </div>
 
@@ -1540,12 +1542,12 @@ export default function QuizzesSurveys() {
                     {survey.post_test_lock && <Lock className="w-4 h-4 mr-2" aria-hidden="true" />}
                     {String(startingSurveyId) === String(survey.id) && <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />}
                     {survey.is_completed
-                      ? 'Already Submitted'
+                      ? t('Already Submitted')
                       : survey.next_attempt === 'pre'
-                        ? 'Start Pre-Test'
+                        ? t('Start Pre-Test')
                         : survey.next_attempt === 'post'
-                          ? 'Take Post-Test'
-                          : 'Start Assessment'}
+                          ? t('Take Post-Test')
+                          : t('Start Assessment')}
                   </Button>
 
                   {survey.post_test_lock && (
@@ -1562,7 +1564,7 @@ export default function QuizzesSurveys() {
                           onClick={() => navigate(`/student/programs?program=${survey.program_id}`)}
                           className="min-h-[44px] px-1 text-sm font-bold text-indigo-700 dark:text-indigo-300 hover:underline rounded-lg focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC] text-left"
                         >
-                          Open the materials
+                          {t('Open the materials')}
                         </button>
                       )}
                     </div>
@@ -1596,7 +1598,7 @@ export default function QuizzesSurveys() {
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">
-                  Assessment
+                  {t('Assessment')}
                 </p>
 
                 <h2 className="mt-1 text-lg sm:text-xl lg:text-2xl font-black text-slate-900 dark:text-white truncate">
@@ -1619,7 +1621,7 @@ export default function QuizzesSurveys() {
                   transition-colors
                   shrink-0
                 "
-                aria-label="Close assessment"
+                aria-label={t('Close assessment')}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1630,8 +1632,7 @@ export default function QuizzesSurveys() {
               <div className="mt-6">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Question {currentQuestionIndex + 1} of{' '}
-                    {totalQuestions}
+                    {t('Question {n} of {total}', { n: currentQuestionIndex + 1, total: totalQuestions })}
                   </span>
 
                   <span className="text-[10px] sm:text-xs font-black text-indigo-600">
@@ -1664,37 +1665,33 @@ export default function QuizzesSurveys() {
 
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-2">
                   {activeSurvey?.next_attempt
-                    ? `${ATTEMPT_LABEL[activeSurvey.next_attempt]} · Before You Begin`
-                    : 'Before You Begin'}
+                    ? t('{attempt} · Before You Begin', { attempt: ATTEMPT_LABEL[activeSurvey.next_attempt] })
+                    : t('Before You Begin')}
                 </p>
 
                 <h3 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white leading-tight">
-                  Please answer carefully.
+                  {t('Please answer carefully.')}
                 </h3>
 
                 <p className="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Answer each question based on your own knowledge,
-                  understanding, and experience. Take a moment to review
-                  your response before moving to the next question.
+                  {t('Answer each question based on your own knowledge, understanding, and experience. Take a moment to review your response before moving to the next question.')}
                 </p>
 
                 <div className="mt-6 space-y-3">
                   <InstructionItem>
-                    Read each question carefully before answering.
+                    {t('Read each question carefully before answering.')}
                   </InstructionItem>
 
                   <InstructionItem>
-                    Choose the response that best represents your
-                    understanding or experience.
+                    {t('Choose the response that best represents your understanding or experience.')}
                   </InstructionItem>
 
                   <InstructionItem>
-                    Review your answer before continuing.
+                    {t('Review your answer before continuing.')}
                   </InstructionItem>
 
                   <InstructionItem>
-                    You will have an opportunity to review all your
-                    answers before final submission.
+                    {t('You will have an opportunity to review all your answers before final submission.')}
                   </InstructionItem>
                 </div>
 
@@ -1703,9 +1700,7 @@ export default function QuizzesSurveys() {
                     <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
 
                     <p className="text-xs sm:text-sm text-amber-800 leading-relaxed">
-                      <strong>Reminder:</strong> Please provide your
-                      honest response. For knowledge-based questions,
-                      select the answer that you believe is correct.
+                      <strong>{t('Reminder:')}</strong> {t('Please provide your honest response. For knowledge-based questions, select the answer that you believe is correct.')}
                     </p>
                   </div>
                 </div>
@@ -1722,7 +1717,7 @@ export default function QuizzesSurveys() {
                     tracking-widest
                   "
                 >
-                  Begin Assessment
+                  {t('Begin Assessment')}
                   <ChevronRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
@@ -1751,7 +1746,7 @@ export default function QuizzesSurveys() {
 
                   <div className="min-w-0 flex-1">
                     <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">
-                      Question {currentQuestionIndex + 1}
+                      {t('Question')} {currentQuestionIndex + 1}
                     </p>
 
                     <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 dark:text-white leading-tight">
@@ -1768,8 +1763,7 @@ export default function QuizzesSurveys() {
                   <Eye className="w-4 h-4" />
 
                   <span>
-                    Review your answer before moving to the next
-                    question.
+                    {t('Review your answer before moving to the next question.')}
                   </span>
                 </div>
 
@@ -1790,7 +1784,7 @@ export default function QuizzesSurveys() {
                     "
                   >
                     <ChevronLeft className="w-4 h-4 mr-2" />
-                    Previous
+                    {t('Previous')}
                   </Button>
 
                   <Button
@@ -1808,8 +1802,8 @@ export default function QuizzesSurveys() {
                     "
                   >
                     {currentQuestionIndex === totalQuestions - 1
-                      ? 'Review Answers'
-                      : 'Next Question'}
+                      ? t('Review Answers')
+                      : t('Next Question')}
 
                     <ChevronRight className="w-4 h-4 ml-2" />
                   </Button>
@@ -1828,16 +1822,15 @@ export default function QuizzesSurveys() {
                   </div>
 
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">
-                    Final Review
+                    {t('Final Review')}
                   </p>
 
                   <h3 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-white">
-                    Review Your Answers
+                    {t('Review Your Answers')}
                   </h3>
 
                   <p className="mt-3 text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Please review your responses carefully before
-                    submitting. You can still edit any answer.
+                    {t('Please review your responses carefully before submitting. You can still edit any answer.')}
                   </p>
                 </div>
 
@@ -1881,13 +1874,13 @@ export default function QuizzesSurveys() {
                                   if (Array.isArray(answer)) {
                                     return answer.length > 0
                                       ? answer.join(', ')
-                                      : 'No answer provided';
+                                      : t('No answer provided');
                                   }
                                   return answer !== undefined &&
                                     answer !== null &&
                                     String(answer).trim() !== ''
                                     ? String(answer)
-                                    : 'No answer provided';
+                                    : t('No answer provided');
                                 })()}
                               </p>
                             </div>
@@ -1905,7 +1898,7 @@ export default function QuizzesSurveys() {
                               shrink-0
                             "
                           >
-                            Edit
+                            {t('Edit')}
                           </button>
                         </div>
                       </div>
@@ -1919,13 +1912,11 @@ export default function QuizzesSurveys() {
 
                     <div>
                       <p className="text-sm font-black text-amber-900">
-                        Before you submit
+                        {t('Before you submit')}
                       </p>
 
                       <p className="mt-1 text-xs sm:text-sm text-amber-800 leading-relaxed">
-                        Make sure your answers accurately represent your
-                        own understanding or experience. Once submitted,
-                        your answers cannot be changed.
+                        {t('Make sure your answers accurately represent your own understanding or experience. Once submitted, your answers cannot be changed.')}
                       </p>
                     </div>
                   </div>
@@ -1948,7 +1939,7 @@ export default function QuizzesSurveys() {
                     "
                   >
                     <ChevronLeft className="w-4 h-4 mr-2" />
-                    Back to Questions
+                    {t('Back to Questions')}
                   </Button>
 
                   <Button
@@ -1969,7 +1960,7 @@ export default function QuizzesSurveys() {
                     "
                   >
                     <Send className="w-4 h-4 mr-2" />
-                    Submit Assessment
+                    {t('Submit Assessment')}
                   </Button>
                 </div>
               </div>
@@ -1987,7 +1978,7 @@ export default function QuizzesSurveys() {
                   const passed = !isPre && isPassingPct(scoreSummary.percentage);
                   const wrongCount = scoreSummary.items.filter((item) => item.is_correct === false).length;
                   const comparison = !isPre && scoreSummary.comparison
-                    ? formatComparison(scoreSummary.comparison.pre_pct, scoreSummary.comparison.post_pct)
+                    ? formatComparison(scoreSummary.comparison.pre_pct, scoreSummary.comparison.post_pct, tr)
                     : null;
                   return (
                     <div className="text-center max-w-xl mx-auto">
@@ -2004,15 +1995,15 @@ export default function QuizzesSurveys() {
                       </div>
 
                       <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-2">
-                        {submittedAttempt ? `${ATTEMPT_LABEL[submittedAttempt]} Complete` : 'Assessment Complete'}
+                        {submittedAttempt ? t('{attempt} Complete', { attempt: ATTEMPT_LABEL[submittedAttempt] }) : t('Assessment Complete')}
                       </p>
 
                       <h3 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">
-                        {scoreSummary.correct} / {scoreSummary.total} Correct
+                        {scoreSummary.correct} / {scoreSummary.total} {t('Correct')}
                       </h3>
 
                       <p className="mt-2 text-lg sm:text-xl font-black text-indigo-600">
-                        {scoreSummary.percentage}% Score
+                        {scoreSummary.percentage}{t('% Score')}
                       </p>
 
                       {comparison && (
@@ -2023,12 +2014,12 @@ export default function QuizzesSurveys() {
 
                       <p className="mt-4 text-sm sm:text-base text-slate-500 dark:text-slate-400 leading-relaxed">
                         {isPre
-                          ? PRE_TEST_PRIVACY_NOTE
+                          ? tr(PRE_TEST_PRIVACY_NOTE)
                           : scoreSummary.itemsWithheld || scoreSummary.items.length === 0
-                            ? "Question-by-question results aren't shown for this assessment."
+                            ? t('Question-by-question results aren\'t shown for this assessment.')
                             : wrongCount === 0
-                              ? 'Perfect score! You answered every knowledge question correctly.'
-                              : "Here's what to review — each missed item below links to where you can learn more."}
+                              ? t('Perfect score! You answered every knowledge question correctly.')
+                              : t('Here\'s what to review — each missed item below links to where you can learn more.')}
                       </p>
                     </div>
                   );
@@ -2039,10 +2030,10 @@ export default function QuizzesSurveys() {
                 {submittedAttempt === 'pre' && (
                   <div className="mt-8 p-5 sm:p-6 rounded-2xl bg-indigo-50 border border-indigo-100">
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">
-                      Next Step
+                      {t('Next Step')}
                     </p>
                     <p className="mt-2 text-sm sm:text-base font-semibold text-slate-700 leading-relaxed">
-                      Read the program's IEC materials, then return to Assessment to take the Post-Test.
+                      {t('Read the program\'s IEC materials, then return to Assessment to take the Post-Test.')}
                     </p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <Button
@@ -2051,7 +2042,7 @@ export default function QuizzesSurveys() {
                         className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
                       >
                         <BookOpen className="w-3.5 h-3.5" />
-                        IEC Materials
+                        {t('IEC Materials')}
                         <ArrowRight className="w-3.5 h-3.5" />
                       </Button>
                       <Button
@@ -2060,7 +2051,7 @@ export default function QuizzesSurveys() {
                         className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
                       >
                         <Calendar className="w-3.5 h-3.5" />
-                        Programs
+                        {t('Programs')}
                         <ArrowRight className="w-3.5 h-3.5" />
                       </Button>
                     </div>
@@ -2073,7 +2064,7 @@ export default function QuizzesSurveys() {
                   onClick={handleCloseSurvey}
                   className="mt-8 w-full h-12 sm:h-14 rounded-2xl bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] sm:text-xs tracking-widest"
                 >
-                  Done
+                  {t('Done')}
                 </Button>
               </div>
             )}
@@ -2109,21 +2100,19 @@ export default function QuizzesSurveys() {
             </div>
 
             <h3 className="mt-5 text-xl sm:text-2xl font-black text-slate-900 dark:text-white text-center">
-              Submit Your Response?
+              {t('Submit Your Response?')}
             </h3>
 
             <p className="mt-3 text-sm text-slate-500 dark:text-slate-400 text-center leading-relaxed">
-              You have reviewed your answers. Are you sure you want to
-              submit this assessment?
+              {t('You have reviewed your answers. Are you sure you want to submit this assessment?')}
             </p>
 
             <div className="mt-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800">
               <p className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">
                 <strong className="text-slate-700 dark:text-slate-200">
-                  Please note:
+                  {t('Please note:')}
                 </strong>{' '}
-                After submission, your responses can no longer be
-                changed.
+                {t('After submission, your responses can no longer be changed.')}
               </p>
             </div>
 
@@ -2143,7 +2132,7 @@ export default function QuizzesSurveys() {
                 "
               >
                 <RotateCcw className="w-4 h-4 mr-2" />
-                Review Again
+                {t('Review Again')}
               </Button>
 
               <Button
@@ -2166,7 +2155,7 @@ export default function QuizzesSurveys() {
                 ) : (
                   <>
                     <Send className="w-4 h-4 mr-2" />
-                    Yes, Submit
+                    {t('Yes, Submit')}
                   </>
                 )}
               </Button>
