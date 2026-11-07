@@ -233,7 +233,7 @@ export const tl = {
   'Pre-test': 'Pre-test',
   'Pre-test · Before you begin': 'Pre-test · Bago ka magsimula',
   'Pre-test {pre}, post-test {post}': 'Pre-test {pre}, post-test {post}',
-  'Pre-test {pre}% → post-test {post}% ({change})': 'Pre-test {pre}% → post-test {post}% ({change})',
+  'Pre-test {pre}% → Post-test {post}% ({change})': 'Pre-test {pre}% → Post-test {post}% ({change})',
   'Pre-test and post-test scores': 'Mga score sa pre-test at post-test',
   'Pre-test coming soon': 'Malapit na ang pre-test',
   'Pre-test complete': 'Tapos na ang pre-test',
