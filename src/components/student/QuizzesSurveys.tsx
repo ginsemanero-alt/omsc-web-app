@@ -149,7 +149,7 @@ interface ScoreSummary {
 }
 
 export default function QuizzesSurveys() {
-  const { t, tr } = useT();
+  const { t, tr, serverMessage } = useT();
   const navigate = useNavigate();
   const { dbUserId } = useAuth();
 
@@ -417,7 +417,7 @@ export default function QuizzesSurveys() {
               : null;
 
           const post_test_lock =
-            next_attempt === 'post' ? postTestLockFor(materialData, survey.program_id, materialLoadFailed) : null;
+            next_attempt === 'post' ? postTestLockFor(materialData, survey.program_id, materialLoadFailed, tr) : null;
 
           return { ...survey, is_completed: next_attempt === null, next_attempt, post_test_lock };
         }) || [];
@@ -430,7 +430,7 @@ export default function QuizzesSurveys() {
       toast({
         title: t('Unable to Load Assessments'),
         description:
-          error?.message || t('Failed to load available assessments.'),
+          error?.message ? serverMessage(error.message) : t('Failed to load available assessments.'),
         variant: 'destructive',
       });
     } finally {
@@ -549,14 +549,14 @@ export default function QuizzesSurveys() {
     if (error || !data) {
       toast({
         title: t('Unable to Open Assessment'),
-        description: rpcErrorMessage(error, t('Please try again.')),
+        description: serverMessage(rpcErrorMessage(error, t('Please try again.'))),
         variant: 'destructive',
       });
       fetchActiveSurveys();
       return;
     }
     if (data.post_test_lock) {
-      toast({ title: t('Post-test locked'), description: data.post_test_lock });
+      toast({ title: t('Post-test locked'), description: serverMessage(data.post_test_lock) });
       fetchActiveSurveys();
       return;
     }
@@ -810,7 +810,7 @@ export default function QuizzesSurveys() {
 
       toast({
         title: t('Submission Failed'),
-        description: rpcErrorMessage(error, t('We were unable to submit your response. Please try again.')),
+        description: serverMessage(rpcErrorMessage(error, t('We were unable to submit your response. Please try again.'))),
         variant: 'destructive',
       });
       // e.g. the post-test turned out to be locked: refresh the cards.

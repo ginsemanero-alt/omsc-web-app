@@ -18,7 +18,8 @@ import { useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import type { tl as TagalogStrings } from './tl';
-import { fill, type Vars } from './fill';
+import { fill, plain, type Vars } from './fill';
+import { translateServerMessage } from './serverMessages';
 
 export type Language = 'en' | 'tl';
 export type MessageKey = keyof typeof TagalogStrings;
@@ -53,6 +54,8 @@ interface LanguageContextValue {
   setLanguage: (language: Language) => void;
   t: (key: MessageKey, vars?: Vars) => string;
   tr: (text: string, vars?: Vars) => string;
+  // a message the database sent to the student, in their language (unknown ones stay as they came)
+  serverMessage: (message: string) => string;
 }
 
 const identity = (text: string, vars?: Vars) => fill(text, vars);
@@ -63,6 +66,7 @@ const LanguageContext = createContext<LanguageContextValue>({
   setLanguage: () => {},
   t: identity,
   tr: identity,
+  serverMessage: (message) => translateServerMessage(message, plain, 'en'),
 });
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
@@ -138,7 +142,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<LanguageContextValue>(
-    () => ({ chosen, language, setLanguage, t: translate, tr: translate }),
+    () => ({
+      chosen,
+      language,
+      setLanguage,
+      t: translate,
+      tr: translate,
+      serverMessage: (message: string) => translateServerMessage(message, translate, language),
+    }),
     [chosen, language, setLanguage, translate]
   );
 

@@ -50,6 +50,7 @@ export const tl = {
   'Assessment': 'Assessment',
   'Assessment Complete': 'Tapos na ang Assessment',
   'Assessment not available': 'Hindi available ang assessment', // REVIEW
+  'Assessment not found.': 'Hindi nahanap ang assessment.', // REVIEW
   'Assessment Submitted': 'Naisumite ang Assessment',
   'Audio': 'Audio',
   'Available': 'Available',
@@ -225,6 +226,7 @@ export const tl = {
   'Post-test': 'Post-test',
   'Post-test locked': 'Naka-lock ang post-test',
   'Post-Test Locked': 'Naka-lock ang Post-Test',
+  'Post-test locked:': 'Naka-lock pa ang post-test:', // REVIEW
   'Post-test open': 'Bukas na ang post-test',
   'Post-Test Ready': 'Handa na ang Post-Test',
   'Post-test submitted': 'Naisumite ang post-test',
@@ -293,6 +295,9 @@ export const tl = {
   'Session Not Ready': 'Hindi Pa Handa ang Session', // REVIEW
   'Showing {start}–{end} of {total}': 'Ipinapakita ang {start}–{end} sa {total}',
   'Sign in to view': 'Mag-sign in para makita',
+  'Sign in with a student account to submit.': 'Mag-sign in gamit ang student account para makapag-submit.', // REVIEW
+  'Sign in with a student account to take assessments.': 'Mag-sign in gamit ang student account para makakuha ng assessment.', // REVIEW
+  'Sign in with a student account.': 'Mag-sign in gamit ang student account.', // REVIEW
   'Sign out': 'Mag-sign out',
   'Sign Out?': 'Mag-sign out?', // REVIEW
   'Start Assessment': 'Simulan ang Assessment',
@@ -317,8 +322,11 @@ export const tl = {
   'Take Post-Test': 'Kunin ang Post-Test',
   'Take pre-test': 'Kunin ang pre-test',
   'Take the pre-test before you read the materials.': 'Kunin ang pre-test bago mo basahin ang materials.',
+  'The review opens after you submit the post-test.': 'Bubukas ang pagsusuri pagkatapos mong i-submit ang post-test.', // REVIEW
   'Then take the post-test in Assessment.': 'Pagkatapos, kunin ang post-test sa Assessment.',
   'There are currently no active assessments available. Please check again later.': 'Wala pang aktibong assessment ngayon. Bumalik ulit mamaya.',
+  'There was a problem submitting your answers. Refresh the page and try again.': 'May problema sa pag-submit ng sagot mo. I-refresh ang page at subukan ulit.', // REVIEW
+  'This assessment is not open.': 'Hindi bukas ang assessment na ito.', // REVIEW
   'This PDF couldn\'t be previewed here — often a temporary connection issue. You can try again, or open it directly.': 'Hindi na-preview ang PDF na ito — kadalasan ay pansamantalang problema sa koneksyon. Puwede mong subukan ulit, o buksan ito nang direkta.', // REVIEW
   'Try again': 'Subukan ulit',
   'Try Again': 'Subukan Ulit',
@@ -330,8 +338,8 @@ export const tl = {
   'Validation Warning': 'Paalala sa Pagpuno ng Form', // REVIEW
   'Video': 'Video',
   'Videos': 'Mga Video',
-  'View {n} more material to unlock': 'Buksan ang {n} pang material para ma-unlock',
-  'View {n} more materials to unlock': 'Buksan ang {n} pang materials para ma-unlock',
+  'View {n} more material to unlock': 'Naka-lock pa ang post-test: Buksan pa ang {n} material para ma-unlock.', // REVIEW
+  'View {n} more materials to unlock': 'Naka-lock pa ang post-test: Buksan pa ang {n} material para ma-unlock.', // REVIEW
   'View Details': 'Tingnan ang Detalye',
   'View materials': 'Tingnan ang materials',
   'Viewed': 'Nabuksan na',
@@ -347,6 +355,7 @@ export const tl = {
   'You answered every post-test question correctly.': 'Tama ang lahat ng sagot mo sa post-test.',
   'You completed 3 programs.': 'Natapos mo ang 3 programa.',
   'You finished the pre-test, all the materials and the post-test of a program.': 'Natapos mo ang pre-test, lahat ng materials, at post-test ng isang programa.',
+  'You have already submitted this assessment.': 'Naisumite mo na ang assessment na ito.', // REVIEW
   'You have been signed out. Come back soon!': 'Naka-sign out ka na. Balik ka agad!', // REVIEW
   'You have reviewed your answers. Are you sure you want to submit this assessment?': 'Nasuri mo na ang mga sagot mo. Sigurado ka bang isusumite na ang assessment na ito?', // REVIEW
   'You opened every IEC material of a program.': 'Binuksan mo ang bawat IEC material ng isang programa.',
