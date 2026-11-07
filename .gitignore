@@ -41,3 +41,4 @@ admin-design-reference/
 
 # One-time material migration backups (full originals): never commit
 scripts/_material-backup*/
+i18n-review/
