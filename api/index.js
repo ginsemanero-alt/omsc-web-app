@@ -83,6 +83,13 @@ const registerEmailLimiter = rateLimit({
     legacyHeaders: false,
     keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${(req.body?.email || '').trim().toLowerCase()}`,
     handler: rateLimitHandler,
+    // A request the server refused for what was typed (a weak password, a
+    // missing field, an email or ID already in use: all 400) creates nothing
+    // and sends nothing, so it must not use up the student's 5 tries. Only a
+    // request that passed validation counts (including one that then failed
+    // on the server, a 5xx). The per-IP limiter below still counts everything.
+    skipFailedRequests: true,
+    requestWasSuccessful: (req, res) => res.statusCode < 400 || res.statusCode >= 500,
 });
 
 const registerIpLimiter = rateLimit({
