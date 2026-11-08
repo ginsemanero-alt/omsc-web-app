@@ -393,6 +393,24 @@ app.get('/api/health', (req, res) => {
 // step: bumping one without the other blocks registration.
 const CURRENT_CONSENT_VERSION = '2026-10';
 
+// The password rule the registration and set-password screens show: at least
+// 8 characters with an uppercase letter, a lowercase letter and a number (no
+// symbol required). Enforced here so a direct call to the API cannot skip the
+// screen. It is applied only when a password is SET (registration); signing in
+// never checks it, so accounts created with a shorter password still work.
+const PASSWORD_RULE_MESSAGE = 'Password must be at least 8 characters and contain uppercase, lowercase, and a number.';
+function passwordProblem(password) {
+    if (typeof password !== 'string'
+        || password.length < 8
+        || password.length > 128
+        || !/[A-Z]/.test(password)
+        || !/[a-z]/.test(password)
+        || !/[0-9]/.test(password)) {
+        return PASSWORD_RULE_MESSAGE;
+    }
+    return null;
+}
+
 app.post('/api/register', registerIpLimiter, registerEmailLimiter, async (req, res) => {
     const {
         studentId, name, email, password, campus,
@@ -406,6 +424,11 @@ app.post('/api/register', registerIpLimiter, registerEmailLimiter, async (req, r
         return res.status(400).json({
             message: "Please read and agree to the Data Privacy Notice before registering."
         });
+    }
+
+    const passwordError = passwordProblem(password);
+    if (passwordError) {
+        return res.status(400).json({ message: passwordError });
     }
 
     const cleanEmail = email?.trim().toLowerCase();
