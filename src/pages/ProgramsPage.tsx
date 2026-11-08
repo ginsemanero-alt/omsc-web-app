@@ -20,13 +20,6 @@ const GUIDANCE_SERVICES = [
   "Counseling Services",
 ];
 
-const PROGRAM_COMPONENTS = [
-  "Group Guidance",
-  "Individual Student Planning",
-  "Responsive Services",
-  "System Support",
-];
-
 // A signed-in student's "View program" opens that program in the student
 // area; a visitor sees the public program page (previews only) first.
 const STUDENT_PROGRAMS_PATH = "/student/programs";
@@ -45,7 +38,6 @@ interface Program {
   participants?: number;
   status: string;
   guidance_service?: string;
-  program_component?: string;
   image_url?: string;
   time_range?: string;
   date_display?: string;
@@ -66,7 +58,6 @@ const ProgramsPage = () => {
   // anything that is not one of the six services means "all".
   const [serviceParam, setGuidanceServiceFilter] = useUrlFilter("service", "all");
   const guidanceServiceFilter = GUIDANCE_SERVICES.includes(serviceParam) ? serviceParam : "all";
-  const [programComponentFilter, setProgramComponentFilter] = useState("all");
   // Programs that have an active knowledge assessment (pre-test open).
   const [preTestProgramIds, setPreTestProgramIds] = useState<Set<number>>(new Set());
 
@@ -94,7 +85,6 @@ const ProgramsPage = () => {
             participants: p.participants || p.max_slots || 0,
             status: p.status || "upcoming",
             guidance_service: p.guidance_service || "",
-            program_component: p.program_component || "",
             image_url: p.image_url || "",
             time_range: p.time_range || "",
             end_date: p.end_date || null,
@@ -124,9 +114,7 @@ const ProgramsPage = () => {
         p.location?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesGuidanceService =
         guidanceServiceFilter === "all" || p.guidance_service === guidanceServiceFilter;
-      const matchesProgramComponent =
-        programComponentFilter === "all" || p.program_component === programComponentFilter;
-      return matchesSearch && matchesGuidanceService && matchesProgramComponent;
+      return matchesSearch && matchesGuidanceService;
     })
     .sort(compareProgramsForDisplay);
 
@@ -139,7 +127,7 @@ const ProgramsPage = () => {
 
   useEffect(() => {
     setProgramsPage(1);
-  }, [searchTerm, guidanceServiceFilter, programComponentFilter]);
+  }, [searchTerm, guidanceServiceFilter]);
 
   // Pre-test badge: ONE query for every program on the current page —
   // which of them have an active knowledge assessment.
@@ -233,28 +221,6 @@ const ProgramsPage = () => {
                 />
               </div>
 
-              <div className="relative md:w-[280px] shrink-0">
-                <label htmlFor="program-component" className="sr-only">
-                  Program component
-                </label>
-                <select
-                  id="program-component"
-                  value={programComponentFilter}
-                  onChange={(e) => setProgramComponentFilter(e.target.value)}
-                  className="w-full h-[52px] appearance-none pl-[18px] pr-11 rounded-2xl border-[1.5px] border-[#DDE1EE] bg-white text-[15px] font-semibold text-[#1E293B] outline-none cursor-pointer focus:outline-[3px] focus:outline-offset-2 focus:outline-[#A5B4FC]"
-                >
-                  <option value="all">All program components</option>
-                  {PROGRAM_COMPONENTS.map((component) => (
-                    <option key={component} value={component}>
-                      {component}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  className="absolute right-4 top-[17px] w-[18px] h-[18px] text-[#1E293B] pointer-events-none"
-                  aria-hidden="true"
-                />
-              </div>
             </div>
 
             <div role="group" aria-label="Filter by guidance service" className="flex flex-wrap gap-2">
@@ -330,7 +296,6 @@ const ProgramsPage = () => {
                   onClick={() => {
                     setSearchTerm("");
                     setGuidanceServiceFilter("all");
-                    setProgramComponentFilter("all");
                   }}
                   className={`mt-2 h-11 px-5 rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-[15px] transition-colors ${focusRing}`}
                 >

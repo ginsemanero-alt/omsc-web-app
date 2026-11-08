@@ -123,7 +123,6 @@ interface GuidanceProgram {
   status?: string | null;
   created_at?: string | null;
   guidance_service?: string | null;
-  program_component?: string | null;
 }
 
 const GUIDANCE_SERVICES = [
@@ -212,7 +211,6 @@ interface Material {
   description?: string | null;
 
   program_id?: string | number | null;
-  program_component?: string | null;
 
   tags?: string[] | null;
 }

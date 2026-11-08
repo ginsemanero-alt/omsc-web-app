@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { ArrowRight, Clock, Expand, Facebook, Mail, MapPin, Phone, PhoneCall, ShieldCheck, Siren } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import {
-  COMPONENTS,
   DEFAULT_OBJECTIVES,
   EMERGENCY,
   FALLBACK_CONTENT,
@@ -213,22 +212,6 @@ const AboutPage: React.FC = () => {
               ))}
             </ul>
           </div>
-        </section>
-
-        {/* ================= FOUR PROGRAM COMPONENTS ================= */}
-        <section className={`${sectionPad} flex flex-col gap-4`}>
-          <h2 className="m-0 px-2 sm:px-0 font-bold text-lg text-[#1E1B4B]">The four program components</h2>
-          <ul className="m-0 p-0 list-none grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {COMPONENTS.map((c) => (
-              <li key={c.title} className="rounded-[28px] bg-white p-6 flex flex-col gap-2.5">
-                <div className="flex items-center gap-2.5">
-                  <span className={`w-3 h-3 rounded-full shrink-0 ${c.dot}`} aria-hidden="true" />
-                  <span className="font-bold text-[17px] leading-[1.3] text-[#1E1B4B]">{c.title}</span>
-                </div>
-                <p className="m-0 text-[15px] leading-[1.55] text-[#5B6477]">{c.desc}</p>
-              </li>
-            ))}
-          </ul>
         </section>
 
         {/* ================= QUALITY POLICY OBJECTIVES ================= */}

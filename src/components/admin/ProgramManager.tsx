@@ -113,7 +113,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
     date_display: '',
     duration_label: '',
     location: '',
-    program_component: 'Group Guidance',
     guidance_service: 'Career Orientation',
     capacity: 0,
     // 'auto' = worked out from the schedule; or 'postponed' / 'cancelled' by hand.
@@ -357,7 +356,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
         date_display: program.date_display || '',
         duration_label: program.duration_label || '',
         location: program.location || '',
-        program_component: program.program_component || 'Group Guidance',
         guidance_service: program.guidance_service || 'Career Orientation',
         capacity: program.capacity || 0,
         status: statusOverride(program.status) ?? 'auto',
@@ -386,7 +384,7 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
       setEditingId(null);
       setFormData({
         title: '', date: '', end_date: '', date_display: '', duration_label: '', location: '',
-        program_component: 'Group Guidance', guidance_service: 'Career Orientation',
+        guidance_service: 'Career Orientation',
         capacity: 0, status: 'auto', image_url: '', content: '', campus: ''
       });
       setCoverPhotos([]);
@@ -476,7 +474,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
         date_display: formData.date_display.trim() || null,
         duration_label: formData.duration_label.trim() || null,
         location: formData.location,
-        program_component: formData.program_component,
         guidance_service: formData.guidance_service,
         capacity: Number(formData.capacity),
         // Automatic is stored as 'upcoming' (the value older pages understand);
@@ -1200,16 +1197,6 @@ export default function ProgramManagement({ newRequest, editRequest, onChanged }
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-[13px] font-semibold ml-1 text-slate-400">Program component</Label>
-                <select value={formData.program_component} onChange={(e) => setFormData({...formData, program_component: e.target.value})} className="w-full h-12 rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] px-4 font-bold text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100">
-                  <option value="Group Guidance">Group Guidance</option>
-                  <option value="Individual Student Planning">Individual Student Planning</option>
-                  <option value="Responsive Services">Responsive Services</option>
-                  <option value="System Support">System Support</option>
-                </select>
-              </div>
-
               <div className="space-y-1.5">
                 <Label className="text-[13px] font-semibold ml-1 text-slate-400">Guidance service</Label>
                 <select value={formData.guidance_service} onChange={(e) => setFormData({...formData, guidance_service: e.target.value})} className="w-full h-12 rounded-xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] px-4 font-bold text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-100">

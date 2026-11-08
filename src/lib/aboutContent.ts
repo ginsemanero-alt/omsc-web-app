@@ -186,29 +186,6 @@ export const SERVICES = [
   },
 ];
 
-export const COMPONENTS = [
-  {
-    title: 'Group Guidance',
-    desc: 'Structured group and classroom presentations aimed at collective proactive student growth.',
-    dot: 'bg-[#4F46E5]',
-  },
-  {
-    title: 'Individual Student Planning',
-    desc: 'Student appraisal, educational and career planning, and assistance with course selection and placement.',
-    dot: 'bg-[#7C3AED]',
-  },
-  {
-    title: 'Responsive Services',
-    desc: 'Individual and small-group counseling, peer support, crisis response, and referral to other professionals.',
-    dot: 'bg-[#F472B6]',
-  },
-  {
-    title: 'System Support',
-    desc: 'Program management, staff development, community outreach, and research and evaluation.',
-    dot: 'bg-[#FBBF24]',
-  },
-];
-
 export const SYSTEM_STEPS = [
   { title: 'Read the materials', desc: 'Open the information materials that come with each guidance program.' },
   { title: 'Take the awareness check', desc: 'Answer a short pre-test before the program and a post-test after you finish the materials.' },

@@ -79,19 +79,11 @@ import {
 
 type MaterialType = 'PDF' | 'Image' | 'Video' | 'Audio' | 'Link';
 
-const PROGRAM_COMPONENTS = [
-  'Group Guidance',
-  'Individual Student Planning',
-  'Responsive Services',
-  'System Support',
-] as const;
-
 interface Material {
   id: number;
   title: string;
   type: MaterialType;
   category: string;
-  program_component?: string | null;
   tags?: string[] | null;
   description?: string | null;
   image_url?: string | null;
@@ -117,7 +109,6 @@ interface FormData {
   title: string;
   type: MaterialType;
   category: string;
-  program_component: string;
   tags: string;
   description: string;
   file_url: string;
@@ -128,7 +119,6 @@ const DEFAULT_FORM: FormData = {
   title: '',
   type: 'Image',
   category: IEC_CATEGORIES[0],
-  program_component: PROGRAM_COMPONENTS[0],
   tags: '',
   description: '',
   file_url: '',
@@ -157,7 +147,6 @@ export default function IECMaterials({ uploadRequest, editRequest, onChanged }: 
   const [selectedCategory, setSelectedCategory] = useUrlFilter('category', 'All');
   const highlightMissing = selectedCategory === 'missing';
   const categoryStripRef = useRef<HTMLElement>(null);
-  const [selectedComponent, setSelectedComponent] = useState('All');
   const [selectedTag, setSelectedTag] = useState('All');
 
   // Preview
@@ -300,7 +289,6 @@ export default function IECMaterials({ uploadRequest, editRequest, onChanged }: 
         category: IEC_CATEGORIES.includes(material.category as any)
           ? material.category
           : IEC_CATEGORIES[0],
-        program_component: material.program_component || PROGRAM_COMPONENTS[0],
         tags: (material.tags || []).join(', '),
         description: material.description || '',
         file_url:
@@ -765,7 +753,6 @@ export default function IECMaterials({ uploadRequest, editRequest, onChanged }: 
         title: formData.title.trim(),
         type: formData.type,
         category: formData.category,
-        program_component: formData.program_component,
         tags: normalizedTags,
         description: formData.description.trim(),
         image_url: finalImageUrl || null,
@@ -1080,7 +1067,6 @@ export default function IECMaterials({ uploadRequest, editRequest, onChanged }: 
       material.title,
       material.description || '',
       material.category,
-      material.program_component || '',
       ...(material.tags || []),
     ]
       .join(' ')
@@ -1090,13 +1076,10 @@ export default function IECMaterials({ uploadRequest, editRequest, onChanged }: 
       !normalizedSearch || searchableText.includes(normalizedSearch);
     const matchesCategory =
       selectedCategory === 'All' || highlightMissing || material.category === selectedCategory;
-    const matchesComponent =
-      selectedComponent === 'All' ||
-      material.program_component === selectedComponent;
     const matchesTag =
       selectedTag === 'All' || (material.tags || []).includes(selectedTag);
 
-    return matchesSearch && matchesCategory && matchesComponent && matchesTag;
+    return matchesSearch && matchesCategory && matchesTag;
   });
 
   const infographics = filteredData.filter(
@@ -1130,7 +1113,7 @@ export default function IECMaterials({ uploadRequest, editRequest, onChanged }: 
   useEffect(() => {
     setInfographicsPage(1);
     setVideosPage(1);
-  }, [normalizedSearch, selectedCategory, selectedComponent, selectedTag]);
+  }, [normalizedSearch, selectedCategory, selectedTag]);
 
   // =========================================================
   // RENDER
@@ -1170,7 +1153,7 @@ export default function IECMaterials({ uploadRequest, editRequest, onChanged }: 
     <div className="flex flex-col gap-5 font-figtree text-[#1E293B]">
 
       {/* SEARCH AND FILTERS (Upload material lives in the Content page header) */}
-      <div className="bg-white rounded-[28px] p-4 md:p-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="bg-white rounded-[28px] p-4 md:p-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#6B7285] pointer-events-none" aria-hidden="true" />
           <label htmlFor="material-search" className="sr-only">Search materials</label>
@@ -1189,14 +1172,6 @@ export default function IECMaterials({ uploadRequest, editRequest, onChanged }: 
           <option value="All">All IEC categories</option>
           {IEC_CATEGORIES.map((category) => (
             <option key={category} value={category}>{category}</option>
-          ))}
-        </select>
-
-        <label className="sr-only" htmlFor="material-component">Program component</label>
-        <select id="material-component" value={selectedComponent} onChange={(event) => setSelectedComponent(event.target.value)} className="w-full h-12 px-4 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm font-semibold text-[#1E293B] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]">
-          <option value="All">All program components</option>
-          {PROGRAM_COMPONENTS.map((component) => (
-            <option key={component} value={component}>{component}</option>
           ))}
         </select>
 
@@ -1629,26 +1604,6 @@ export default function IECMaterials({ uploadRequest, editRequest, onChanged }: 
                   {IEC_CATEGORIES.map((category) => (
                     <option key={category} value={category}>
                       {category}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="field-label">
-                  Program Component
-                </Label>
-
-                <select
-                  value={formData.program_component}
-                  onChange={(event) =>
-                    setFormData({ ...formData, program_component: event.target.value })
-                  }
-                  className="w-full h-12 px-4 rounded-2xl bg-[#F5F6FB] border-[1.5px] border-[#DDE1EE] text-sm font-semibold text-[#1E293B] focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
-                >
-                  {PROGRAM_COMPONENTS.map((component) => (
-                    <option key={component} value={component}>
-                      {component}
                     </option>
                   ))}
                 </select>
@@ -2358,12 +2313,6 @@ function MaterialCategory({
 function MaterialMeta({ item }: { item: Material }) {
   return (
     <div className="mt-2 space-y-1.5">
-      {item.program_component && (
-        <p className="text-[13px] font-bold text-slate-400">
-          {item.program_component}
-        </p>
-      )}
-
       <p className="text-[13px] font-bold text-slate-400">
         {campusLabel(item.campus)}
       </p>

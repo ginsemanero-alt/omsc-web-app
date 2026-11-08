@@ -49,13 +49,6 @@ const GUIDANCE_SERVICES = [
   'Counseling Services',
 ];
 
-const PROGRAM_COMPONENTS = [
-  'Group Guidance',
-  'Individual Student Planning',
-  'Responsive Services',
-  'System Support',
-];
-
 interface Program {
   id: number;
   title: string;
@@ -64,7 +57,6 @@ interface Program {
   location: string;
   category: string;
   guidance_service: string;
-  program_component: string;
   capacity: number;
   registered: number;
   status: string;
@@ -305,7 +297,6 @@ export default function ProgramsActivities() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [guidanceServiceFilter, setGuidanceServiceFilter] = useState('all');
-  const [programComponentFilter, setProgramComponentFilter] = useState('all');
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   // A failed fetch is not "no programs": it gets its own message and a retry.
@@ -515,9 +506,7 @@ export default function ProgramsActivities() {
       const matchesSearch = p.title?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesGuidanceService =
         guidanceServiceFilter === 'all' || p.guidance_service === guidanceServiceFilter;
-      const matchesProgramComponent =
-        programComponentFilter === 'all' || p.program_component === programComponentFilter;
-      return matchesSearch && matchesGuidanceService && matchesProgramComponent;
+      return matchesSearch && matchesGuidanceService;
     })
     .sort(compareProgramsForDisplay);
 
@@ -530,7 +519,7 @@ export default function ProgramsActivities() {
 
   useEffect(() => {
     setProgramsPage(1);
-  }, [searchQuery, guidanceServiceFilter, programComponentFilter]);
+  }, [searchQuery, guidanceServiceFilter]);
 
   const selectedProgram = programParam ? programs.find((p) => String(p.id) === programParam) || null : null;
   const programNotFound = !loading && !!programParam && !selectedProgram;
@@ -639,10 +628,8 @@ export default function ProgramsActivities() {
                   <span>{whenWhere}</span>
                 </p>
               )}
-              {(program.guidance_service || program.program_component) && (
-                <p className="m-0 text-sm font-semibold text-[#4338CA] dark:text-indigo-300">
-                  {[program.guidance_service, program.program_component].filter(Boolean).join(', ')}
-                </p>
+              {program.guidance_service && (
+                <p className="m-0 text-sm font-semibold text-[#4338CA] dark:text-indigo-300">{program.guidance_service}</p>
               )}
               {program.content && (
                 <div className="pt-1">
@@ -1134,17 +1121,6 @@ export default function ProgramsActivities() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={programComponentFilter} onValueChange={setProgramComponentFilter}>
-          <SelectTrigger className="w-full sm:w-56 h-12 bg-slate-50 dark:bg-slate-800 border-none rounded-xl font-bold text-slate-600 dark:text-slate-300 uppercase text-[10px] tracking-widest">
-            <SelectValue placeholder={t('Program component')} />
-          </SelectTrigger>
-          <SelectContent className="rounded-xl border-none shadow-xl bg-white dark:bg-slate-900">
-            <SelectItem value="all">{t('All program components')}</SelectItem>
-            {PROGRAM_COMPONENTS.map((component) => (
-              <SelectItem key={component} value={component}>{component}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       {loadFailed && (
@@ -1190,9 +1166,6 @@ export default function ProgramsActivities() {
               <div className="flex flex-wrap gap-2">
                 <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase tracking-widest rounded-md inline-block">
                   {program.guidance_service || t('General Guidance')}
-                </span>
-                <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-widest rounded-md inline-block">
-                  {program.program_component || t('General')}
                 </span>
               </div>
               <h3 className="text-xl md:text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight uppercase leading-tight max-w-[85%]">

@@ -31,7 +31,6 @@ interface ProgramRow {
   status?: string | null;
   image_url?: string | null;
   guidance_service?: string | null;
-  program_component?: string | null;
 }
 
 export default function PublicProgramPage() {
@@ -146,11 +145,7 @@ export default function PublicProgramPage() {
             <h1 className="m-0 font-bricolage font-extrabold text-[34px] sm:text-5xl lg:text-[52px] leading-[1.05] tracking-[-0.02em] break-words">
               {program.title}
             </h1>
-            {(program.guidance_service || program.program_component) && (
-              <p className="m-0 text-base text-[#C7C9F2]">
-                {[program.guidance_service, program.program_component].filter(Boolean).join(" · ")}
-              </p>
-            )}
+            {program.guidance_service && <p className="m-0 text-base text-[#C7C9F2]">{program.guidance_service}</p>}
             <ul className="m-0 p-0 list-none flex flex-col gap-2 text-[15px] text-[#E0E1F8]">
               <li className="flex items-center gap-2.5">
                 <Calendar className="w-4 h-4 shrink-0" aria-hidden="true" /> {when}
