@@ -8,6 +8,7 @@ import AnalyticsDashboard from '../components/admin/AnalyticsDashboard';
 import UserManagement from '../components/admin/UserManagement';
 import ActivityLog from '../components/admin/ActivityLog';
 import ArchiveScreen from '../components/admin/ArchiveScreen';
+import PrivacySettings from '../components/admin/PrivacySettings';
 import AboutContentManager from '../components/admin/AboutContentManager';
 import { useToast } from '../hooks/use-toast';
 import { supabase } from '../lib/supabase';
@@ -386,6 +387,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     { label: 'Activity Log', path: '/admin/activity-log', icon: 'History' },
     { label: 'Archive', path: '/admin/archive', icon: 'Archive' },
     { label: 'About Page', path: '/admin/about', icon: 'Info' },
+    { label: 'Privacy & Retention', path: '/admin/privacy', icon: 'ShieldCheck' },
   ];
 
   const handleLogoutWithToast = () => {
@@ -430,6 +432,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             <Route path="/activity-log" element={<ActivityLog />} />
             <Route path="/archive" element={<ArchiveScreen />} />
             <Route path="/about" element={<AboutContentManager />} />
+            <Route path="/privacy" element={<PrivacySettings />} />
             <Route path="*" element={<Navigate to="/admin" replace />} />
           </Routes>
         </div>

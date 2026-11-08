@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs'; // ← bcryptjs, hindi bcrypt (mas stable sa Verc
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { Resend } from 'resend';
 import crypto from 'crypto';
+import { createRetention, registerRetentionRoutes } from './retention.js';
 
 
 const app = express();
@@ -116,6 +117,16 @@ const createStaffLimiter = rateLimit({
 const deleteUserLimiter = rateLimit({
     windowMs: 60 * 60 * 1000,
     limit: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
+});
+
+// Privacy & Retention settings, the confirmation counts and "Anonymize now".
+// Admin-session-gated; the cap only blunts a runaway or compromised token.
+const retentionAdminLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 200,
     standardHeaders: true,
     legacyHeaders: false,
     handler: rateLimitHandler,
@@ -937,13 +948,29 @@ app.post('/api/admin/delete-user', deleteUserLimiter, async (req, res) => {
 
         const { data: targetUser, error: targetError } = await supabase
             .from('users')
-            .select('id, name, email, role')
+            .select('id, name, email, role, is_test_account')
             .eq('id', userId)
             .maybeSingle();
 
         if (targetError) throw targetError;
         if (!targetUser) {
             return res.status(404).json({ message: "User not found" });
+        }
+        // A real student whose answers or material views feed the analytics is
+        // anonymized, not deleted. Checked BEFORE anything is removed (the
+        // database refuses the delete too, but only after the profile is gone).
+        if (targetUser.role === 'student' && targetUser.is_test_account !== true) {
+            const [{ count: answered }, { count: viewed }] = await Promise.all([
+                supabase.from('survey_responses').select('id', { count: 'exact', head: true }).eq('user_id', targetUser.id),
+                supabase.from('material_views').select('material_id', { count: 'exact', head: true }).eq('user_id', targetUser.id),
+            ]);
+            const used = (answered || 0) + (viewed || 0);
+            if (used > 0) {
+                return res.status(409).json({
+                    code: 'has_analytics_data',
+                    message: `This student has ${used} responses used in analytics. Anonymize instead.`,
+                });
+            }
         }
         // Administrator accounts are never removed from here: deactivating one
         // keeps its history in the Activity Log, deleting it would not.
@@ -1772,6 +1799,13 @@ app.get('/api/admin/video-usage', videoAdminLimiter, async (req, res) => {
         console.error('video-usage error:', error.message);
         res.status(500).json({ message: 'Usage is not available right now.' });
     }
+});
+
+// Archive retention (PHASE 50): settings, "anonymize now" and the daily cleanup.
+registerRetentionRoutes(app, {
+    retention: createRetention({ supabase, findAuthUserByEmail, cldDestroy, cldReady: cldConfigured }),
+    requireActiveAdmin,
+    limiter: retentionAdminLimiter,
 });
 
 export default app;

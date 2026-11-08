@@ -6,6 +6,7 @@ import { useToast } from '../../hooks/use-toast';
 import { logActivity } from '../../lib/activityLog';
 import { NOTE_PUBLISHED } from '../../lib/activityLogView';
 import { deleteHostedVideoForMaterial } from '../../lib/videoHosting';
+import { adminPost, fetchRetentionSettings, formatDay, removalInfo, type RetentionSettings } from '../../lib/retention';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
@@ -15,6 +16,7 @@ import {
   FileStack,
   ClipboardList,
   Users,
+  UserX,
   RotateCcw,
   Trash2,
   AlertCircle,
@@ -36,6 +38,17 @@ interface ArchivedRow {
   // A video hosted on Cloudinary (PHASE 37); deleted there before the row goes.
   video_public_id?: string | null;
   image_url?: string | null;
+  // A handout belongs to a program and goes with it.
+  program_id?: number | null;
+  // Retention and delete protection (PHASE 50).
+  role?: string | null;
+  anonymized_at?: string | null;
+  // Responses (surveys) or responses + material views (students) used in
+  // analytics. Test accounts are not counted: they can always be deleted.
+  analyticsCount?: number;
+  // Every response of a survey, test accounts included: a survey with any
+  // response is never removed automatically.
+  totalResponses?: number;
 }
 
 const SECTIONS: { type: EntityType; title: string; icon: typeof FileStack }[] = [
@@ -59,15 +72,24 @@ export default function ArchiveScreen() {
 
   const [confirmTarget, setConfirmTarget] = useState<{ type: EntityType; row: ArchivedRow } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [anonymizeTarget, setAnonymizeTarget] = useState<ArchivedRow | null>(null);
+  const [isAnonymizing, setIsAnonymizing] = useState(false);
+  const [settings, setSettings] = useState<RetentionSettings | null>(null);
 
   const fetchArchived = async () => {
     setLoading(true);
     try {
+      try {
+        setSettings(await fetchRetentionSettings());
+      } catch {
+        setSettings(null); // dates are simply not shown
+      }
+
       const [programsRes, materialsRes, surveysRes, usersRes] = await Promise.all([
         supabase.from('programs').select('id, title, archived_at').not('archived_at', 'is', null),
-        supabase.from('materials').select('id, title, archived_at, file_url, file_path, thumb_path, video_public_id, image_url').not('archived_at', 'is', null),
+        supabase.from('materials').select('id, title, archived_at, file_url, file_path, thumb_path, video_public_id, image_url, program_id').not('archived_at', 'is', null),
         supabase.from('surveys').select('id, title, archived_at').not('archived_at', 'is', null),
-        supabase.from('users').select('id, name, email, archived_at').not('archived_at', 'is', null),
+        supabase.from('users').select('id, name, email, role, is_test_account, archived_at, anonymized_at').not('archived_at', 'is', null),
       ]);
 
       if (programsRes.error) throw programsRes.error;
@@ -78,18 +100,43 @@ export default function ArchiveScreen() {
       const sortByArchivedDesc = (a: ArchivedRow, b: ArchivedRow) =>
         new Date(b.archived_at).getTime() - new Date(a.archived_at).getTime();
 
+      // How much analytics data hangs off each archived survey / real student.
+      // Test accounts are exempt everywhere, so they are not counted.
+      const surveyCounts = new Map<string, { real: number; total: number }>();
+      await Promise.all(
+        (surveysRes.data || []).map(async (s: any) => {
+          const [real, total] = await Promise.all([
+            supabase.from('survey_responses').select('id, users!inner(is_test_account)', { count: 'exact', head: true }).eq('survey_id', s.id).eq('users.is_test_account', false),
+            supabase.from('survey_responses').select('id', { count: 'exact', head: true }).eq('survey_id', s.id),
+          ]);
+          surveyCounts.set(s.id, { real: real.count || 0, total: total.count || 0 });
+        })
+      );
+      const studentCounts = new Map<number, number>();
+      await Promise.all(
+        (usersRes.data || [])
+          .filter((u: any) => u.role === 'student' && u.is_test_account !== true)
+          .map(async (u: any) => {
+            const [answered, viewed] = await Promise.all([
+              supabase.from('survey_responses').select('id', { count: 'exact', head: true }).eq('user_id', u.id),
+              supabase.from('material_views').select('material_id', { count: 'exact', head: true }).eq('user_id', u.id),
+            ]);
+            studentCounts.set(u.id, (answered.count || 0) + (viewed.count || 0));
+          })
+      );
+
       setRows({
         program: (programsRes.data || [])
           .map((p: any) => ({ id: p.id, label: p.title, archived_at: p.archived_at }))
           .sort(sortByArchivedDesc),
         material: (materialsRes.data || [])
-          .map((m: any) => ({ id: m.id, label: m.title, archived_at: m.archived_at, file_url: m.file_url, file_path: m.file_path, thumb_path: m.thumb_path, video_public_id: m.video_public_id, image_url: m.image_url }))
+          .map((m: any) => ({ id: m.id, label: m.title, archived_at: m.archived_at, file_url: m.file_url, file_path: m.file_path, thumb_path: m.thumb_path, video_public_id: m.video_public_id, image_url: m.image_url, program_id: m.program_id }))
           .sort(sortByArchivedDesc),
         survey: (surveysRes.data || [])
-          .map((s: any) => ({ id: s.id, label: s.title, archived_at: s.archived_at }))
+          .map((s: any) => ({ id: s.id, label: s.title, archived_at: s.archived_at, analyticsCount: surveyCounts.get(s.id)?.real || 0, totalResponses: surveyCounts.get(s.id)?.total || 0 }))
           .sort(sortByArchivedDesc),
         user: (usersRes.data || [])
-          .map((u: any) => ({ id: u.id, label: u.name || u.email, archived_at: u.archived_at }))
+          .map((u: any) => ({ id: u.id, label: u.name || u.email, archived_at: u.archived_at, role: u.role, anonymized_at: u.anonymized_at, analyticsCount: studentCounts.get(u.id) || 0 }))
           .sort(sortByArchivedDesc),
       });
     } catch (err: any) {
@@ -229,6 +276,37 @@ export default function ArchiveScreen() {
     }
   };
 
+  const handleAnonymize = async () => {
+    if (!anonymizeTarget) return;
+    try {
+      setIsAnonymizing(true);
+      await adminPost('/api/admin/anonymize-student', { userId: anonymizeTarget.id });
+      toast({ title: 'Anonymized', description: 'The student can no longer be identified. Their answers still count in the statistics.' });
+      setAnonymizeTarget(null);
+      await fetchArchived();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Anonymize Error', description: err.message });
+    } finally {
+      setIsAnonymizing(false);
+    }
+  };
+
+  // "Archived on …" plus when it will be removed, or why it will not be.
+  const retentionLine = (type: EntityType, row: ArchivedRow): { text: string; soon: boolean } => {
+    const archivedOn = `Archived on ${formatDay(row.archived_at)}`;
+    if (type === 'user' && row.anonymized_at) return { text: `${archivedOn} · Anonymized`, soon: false };
+    if (!settings) return { text: archivedOn, soon: false };
+    const days = type === 'user' ? settings.archived_students_days : settings.archived_content_days;
+    const manual = { text: `${archivedOn} · Kept until removed manually`, soon: false };
+    if (type === 'user' && row.role !== 'student') return manual;
+    if (type === 'material' && row.program_id != null) return manual;
+    if (type === 'survey' && (row.totalResponses || 0) > 0) return { text: `${archivedOn} · Kept: has responses`, soon: false };
+    const info = removalInfo(row.archived_at, days);
+    if (!info) return manual;
+    const verb = type === 'user' ? 'anonymized' : 'removed';
+    return { text: `${archivedOn} · Will be ${verb} on ${formatDay(info.removeOn)}`, soon: info.soon };
+  };
+
   const totalArchived = SECTIONS.reduce((sum, s) => sum + rows[s.type].length, 0);
 
   return (
@@ -265,40 +343,97 @@ export default function ArchiveScreen() {
               </h2>
 
               <div className="space-y-2">
-                {sectionRows.map((row) => (
-                  <Card key={row.id} className="p-4 rounded-2xl border-none shadow-sm bg-white flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="font-bold text-slate-800 text-sm truncate">{row.label}</p>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
-                        Archived {new Date(row.archived_at).toLocaleString('en-US', {
-                          month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
-                        })}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleRestore(type, row)}
-                        className="h-9 rounded-xl font-black uppercase text-[10px]"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Restore
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => setConfirmTarget({ type, row })}
-                        className="h-9 rounded-xl font-black uppercase text-[10px] bg-rose-600 hover:bg-rose-700 text-white"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete Permanently
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
+                {sectionRows.map((row) => {
+                  const line = retentionLine(type, row);
+                  const anonymized = type === 'user' && !!row.anonymized_at;
+                  const blockedSurvey = type === 'survey' && (row.analyticsCount || 0) > 0;
+                  const blockedStudent = type === 'user' && row.role === 'student' && !anonymized && (row.analyticsCount || 0) > 0;
+                  const canAnonymize = type === 'user' && row.role === 'student' && !anonymized;
+                  return (
+                    <Card key={row.id} className="p-4 rounded-2xl border-none shadow-sm bg-white flex flex-wrap items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-800 text-sm truncate">{row.label}</p>
+                        <p className={`text-[11px] font-bold mt-0.5 ${line.soon ? 'text-amber-600' : 'text-slate-400'}`}>
+                          {line.text}
+                          {line.soon && ' · Removal is within 7 days. Restore it to cancel.'}
+                        </p>
+                        {blockedSurvey && (
+                          <p className="text-[11px] text-slate-500 font-medium mt-1">
+                            This survey has {row.analyticsCount} responses used in analytics. It can be archived, not deleted.
+                          </p>
+                        )}
+                        {blockedStudent && (
+                          <p className="text-[11px] text-slate-500 font-medium mt-1">
+                            This student has {row.analyticsCount} responses used in analytics. Anonymize instead.
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {!anonymized && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRestore(type, row)}
+                            className="h-9 rounded-xl font-black uppercase text-[10px]"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Restore
+                          </Button>
+                        )}
+                        {canAnonymize && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setAnonymizeTarget(row)}
+                            className="h-9 rounded-xl font-black uppercase text-[10px] border-indigo-200 text-indigo-700"
+                          >
+                            <UserX className="w-3.5 h-3.5 mr-1.5" /> Anonymize now
+                          </Button>
+                        )}
+                        {!anonymized && !blockedSurvey && !blockedStudent && (
+                          <Button
+                            size="sm"
+                            onClick={() => setConfirmTarget({ type, row })}
+                            className="h-9 rounded-xl font-black uppercase text-[10px] bg-rose-600 hover:bg-rose-700 text-white"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete Permanently
+                          </Button>
+                        )}
+                        {anonymized && (
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Anonymized</span>
+                        )}
+                      </div>
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           );
         })
       )}
+
+      {/* ANONYMIZE CONFIRM */}
+      <Dialog open={!!anonymizeTarget} onOpenChange={(open) => !open && !isAnonymizing && setAnonymizeTarget(null)}>
+        <DialogContent className="max-w-md bg-white rounded-[2rem] p-6 border-none shadow-2xl font-sans text-center">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black text-slate-900 uppercase tracking-tight text-center">
+              Anonymize this student?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-3 text-slate-500 text-xs font-medium leading-relaxed px-2">
+            <span className="font-bold text-slate-800">"{anonymizeTarget?.label}"</span> will lose their name, email, student ID and
+            contact details for good, and can no longer sign in. Their answers stay in the combined statistics, with no name attached.
+            This cannot be undone.
+          </div>
+          <div className="grid grid-cols-2 gap-3 mt-6">
+            <Button variant="ghost" disabled={isAnonymizing} onClick={() => setAnonymizeTarget(null)} className="h-12 rounded-xl font-black uppercase text-[10px] tracking-wider text-slate-500 bg-slate-50 hover:bg-slate-100">
+              Cancel
+            </Button>
+            <Button onClick={handleAnonymize} disabled={isAnonymizing} className="h-12 rounded-xl font-black uppercase text-[10px] tracking-wider bg-indigo-600 hover:bg-indigo-700 text-white shadow-md">
+              {isAnonymizing ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Anonymize'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* PERMANENT DELETE CONFIRM */}
       <Dialog open={!!confirmTarget} onOpenChange={(open) => !open && setConfirmTarget(null)}>

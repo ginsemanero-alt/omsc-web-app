@@ -700,7 +700,9 @@ export default function AnalyticsDashboard() {
         // their historical responses still count (that table isn't
         // touched by archiving), but they shouldn't resolve to a live
         // student identity here.
-        supabase.from("users").select("id, student_id, email, is_test_account").is("archived_at", null),
+        // Anonymized students are archived too, but their answers and
+        // demographics must keep counting (PHASE 50), so they stay in.
+        supabase.from("users").select("id, student_id, email, is_test_account").or("archived_at.is.null,anonymized_at.not.is.null"),
 
         // Material Exposure panel — every recorded "opened a material"
         // event. Scoped to action='view'/entity_type='material' only

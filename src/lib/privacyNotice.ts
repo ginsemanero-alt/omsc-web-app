@@ -60,7 +60,49 @@ export interface NoticeSection {
   items?: string[];
 }
 
-export const NOTICE_SECTIONS: NoticeSection[] = [
+// What the Guidance Office configured under Privacy & Retention (read through
+// the public get_privacy_settings() function). Every field may be empty.
+export interface PublicPrivacySettings {
+  archived_content_days: number | null;
+  archived_students_days: number | null;
+  dpo_name: string | null;
+  dpo_email: string | null;
+  retention_updated_at: string | null;
+}
+
+// The notice text. A period or a name appears ONLY when it was configured;
+// otherwise the original wording is used. Nothing is ever guessed.
+export function buildNoticeSections(settings: PublicPrivacySettings | null): NoticeSection[] {
+  const studentDays = settings?.archived_students_days || null;
+  const dpoName = (settings?.dpo_name || DPO_NAME).trim();
+  const dpoEmail = (settings?.dpo_email || DPO_EMAIL).trim();
+
+  const retentionParagraphs = studentDays
+    ? [
+        `When a student account is archived, it is anonymized after ${studentDays} days: the name, email, student ID and contact details are removed and cannot be recovered. Combined statistics that carry no names are kept.`,
+        RETENTION_FALLBACK,
+      ]
+    : [RETENTION_PERIOD.trim() ? `We keep your information ${RETENTION_PERIOD.trim()}.` : RETENTION_FALLBACK];
+
+  return STATIC_SECTIONS.map((section) => {
+    if (section.id === 'retention') return { ...section, paragraphs: retentionParagraphs };
+    if (section.id === 'contact') {
+      return {
+        ...section,
+        items: [
+          `Guidance Office: ${GUIDANCE_OFFICE_EMAIL}`,
+          // Only what has actually been confirmed; nothing is shown for a missing value.
+          ...(dpoName || dpoEmail
+            ? [`University Data Protection Officer: ${[dpoName, dpoEmail].filter(Boolean).join(', ')}`]
+            : []),
+        ],
+      };
+    }
+    return section;
+  });
+}
+
+const STATIC_SECTIONS: NoticeSection[] = [
   {
     id: 'who',
     title: 'Who collects your data',
@@ -141,6 +183,9 @@ export const NOTICE_SECTIONS: NoticeSection[] = [
     ],
   },
 ];
+
+// The notice as written in this file, before any saved settings are applied.
+export const NOTICE_SECTIONS: NoticeSection[] = buildNoticeSections(null);
 
 // Wording of the one required checkbox, on both consent screens.
 export const CONSENT_CHECKBOX_LABEL =

@@ -18,6 +18,7 @@ import {
   AlertCircle,
   Archive,
   Info,
+  ShieldCheck,
   Bell,
   User,
   PanelLeftClose,
@@ -83,6 +84,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   History,
   Archive,
   Info,
+  ShieldCheck,
 };
 
 interface TopNavBarProps {

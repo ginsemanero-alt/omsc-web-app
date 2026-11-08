@@ -16,7 +16,7 @@ import { supabase } from './supabase';
 // logout, or page view.
 
 export type ActivityAction = 'create' | 'update' | 'delete' | 'login' | 'logout' | 'view';
-export type ActivityEntityType = 'program' | 'material' | 'survey' | 'user' | 'about';
+export type ActivityEntityType = 'program' | 'material' | 'survey' | 'user' | 'about' | 'retention';
 
 interface LogActivityParams {
   actorEmail: string | null | undefined;

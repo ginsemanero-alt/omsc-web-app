@@ -11,6 +11,9 @@
       "config": { "distDir": "dist" }
     }
   ],
+  "crons": [
+    { "path": "/api/cron/retention", "schedule": "0 19 * * *" }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",

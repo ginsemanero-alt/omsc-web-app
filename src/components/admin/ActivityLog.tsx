@@ -68,6 +68,8 @@ const KIND_STYLE: Record<EventKind, { className: string; Icon: typeof PlusCircle
   reactivated: { className: 'bg-teal-50 text-teal-700', Icon: RotateCcw },
   opened_programs: { className: 'bg-slate-100 text-slate-600', Icon: Calendar },
   consent: { className: 'bg-emerald-50 text-emerald-700', Icon: ShieldCheck },
+  retention_settings: { className: 'bg-indigo-50 text-indigo-700', Icon: ShieldCheck },
+  retention_run: { className: 'bg-rose-50 text-rose-700', Icon: Trash2 },
 };
 
 // One line of the feed, from either source (activity_logs or consent_log).
@@ -234,7 +236,7 @@ export default function ActivityLog() {
           user: new Set(),
         };
         rows.forEach((row) => {
-          if (row.entity_id && row.entity_type !== 'about') {
+          if (row.entity_id && row.entity_type !== 'about' && row.entity_type !== 'retention') {
             const ok = row.entity_type === 'survey' ? UUID_ID.test(row.entity_id) : BIGINT_ID.test(row.entity_id);
             if (ok) ids[row.entity_type].add(row.entity_id);
           }
@@ -286,7 +288,7 @@ export default function ActivityLog() {
           kind,
           actorName: row.actor_name || row.actor_email,
           actorEmail: row.actor_email,
-          entityType: row.entity_type,
+          entityType: row.entity_type === 'retention' ? undefined : row.entity_type,
           entityId: row.entity_id,
           entityLabel: row.entity_label,
           detail: visibleDetail(row, kind),

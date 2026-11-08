@@ -1,4 +1,5 @@
-import { NOTICE_SECTIONS } from "../../lib/privacyNotice";
+import { buildNoticeSections } from "../../lib/privacyNotice";
+import { usePrivacySettings } from "../../hooks/usePrivacySettings";
 import { withRaLinks } from "./Ra10173Link";
 
 // The Data Privacy Notice text (src/lib/privacyNotice.ts), rendered the
@@ -13,10 +14,16 @@ interface Props {
 
 export default function PrivacyNoticeBody({ headingLevel = "h2" }: Props) {
   const Heading = headingLevel;
+  const settings = usePrivacySettings();
+  const sections = buildNoticeSections(settings);
+  // Taken from when the retention settings were last saved; not shown until then.
+  const lastUpdated = settings?.retention_updated_at
+    ? new Date(settings.retention_updated_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+    : null;
 
   return (
     <div className="flex flex-col gap-5 font-figtree text-[#1E293B]">
-      {NOTICE_SECTIONS.map((section, index) => (
+      {sections.map((section, index) => (
         <section key={section.id} aria-labelledby={`notice-${section.id}`}>
           <Heading
             id={`notice-${section.id}`}
@@ -40,6 +47,7 @@ export default function PrivacyNoticeBody({ headingLevel = "h2" }: Props) {
 
         </section>
       ))}
+      {lastUpdated && <p className="m-0 text-xs text-[#64748B]">Last updated: {lastUpdated}</p>}
     </div>
   );
 }

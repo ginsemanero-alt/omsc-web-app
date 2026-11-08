@@ -4973,7 +4973,12 @@ BEGIN
   anon_sid   := 'ANON-' || u.id;
   anon_email := 'anon-' || u.id || '@anonymized.invalid';
 
-  SELECT coalesce(array_agg(id), '{}') INTO prof_ids FROM profiles WHERE student_id = u.student_id;
+  -- the profile is found by student ID AND by the sign-in account of the same email,
+  -- so a missing or mismatched student ID still gets the profile cleared
+  SELECT coalesce(array_agg(DISTINCT id), '{}') INTO prof_ids
+    FROM profiles
+   WHERE (coalesce(u.student_id, '') <> '' AND student_id = u.student_id)
+      OR id IN (SELECT a.id FROM auth.users a WHERE lower(a.email) = lower(u.email));
 
   UPDATE profiles
      SET full_name = 'Anonymized student', student_id = anon_sid,

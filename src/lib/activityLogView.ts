@@ -44,7 +44,9 @@ export type EventKind =
   | 'deactivated'
   | 'reactivated'
   | 'opened_programs'
-  | 'consent';
+  | 'consent'
+  | 'retention_settings'
+  | 'retention_run';
 
 // The exact notes the app writes into `details`. An archive is stored as a
 // 'delete' with this note, so the page tells the three apart by it.
@@ -70,6 +72,7 @@ export function eventKind(row: Pick<LogRow, 'action' | 'entity_type' | 'details'
   if (action === 'view') return 'opened_programs';
   if (action === 'create' && type === 'user' && details === SELF_REGISTRATION) return 'registered';
   if (type === 'about') return 'about';
+  if (type === 'retention') return action === 'update' ? 'retention_settings' : 'retention_run';
   if (type === 'user' && action === 'create' && details === NOTE_INVITED) return 'invited_admin';
   if (type === 'user' && action === 'update' && details === NOTE_DEACTIVATED) return 'deactivated';
   if (type === 'user' && action === 'update' && details === NOTE_REACTIVATED) return 'reactivated';
@@ -105,6 +108,8 @@ export const VERB: Record<EventKind, string> = {
   reactivated: 'reactivated',
   opened_programs: 'opened the Programs page',
   consent: 'agreed to the privacy notice',
+  retention_settings: 'changed the privacy and retention settings',
+  retention_run: 'ran the automatic cleanup',
 };
 
 export const NOUN: Record<ActivityEntityType, string> = {
@@ -113,6 +118,7 @@ export const NOUN: Record<ActivityEntityType, string> = {
   survey: 'survey',
   user: 'user account',
   about: 'About page',
+  retention: '',
 };
 
 // ----- Filters ---------------------------------------------------------
@@ -135,6 +141,8 @@ export const ADMIN_ACTIONS: Option[] = [
   { value: 'restored', label: 'Restored' },
   { value: 'permanently_deleted', label: 'Permanently deleted' },
   { value: 'removed_response', label: 'Removed a survey response' },
+  { value: 'retention_settings', label: 'Changed privacy and retention settings' },
+  { value: 'retention_run', label: 'Automatic cleanup' },
   { value: 'deleted', label: 'Deleted (before the Archive)' },
 ];
 
@@ -154,6 +162,7 @@ export const ADMIN_TYPES: Option[] = [
   { value: 'survey', label: 'Surveys' },
   { value: 'user', label: 'User accounts' },
   { value: 'about', label: 'About page' },
+  { value: 'retention', label: 'Privacy and retention' },
 ];
 
 export const RANGES: Option[] = [
@@ -185,6 +194,10 @@ export function actionConditions(tab: LogTab, action: string): string[] {
     return [];
   }
   switch (action) {
+    case 'retention_settings':
+      return ['action.eq.update', 'entity_type.eq.retention'];
+    case 'retention_run':
+      return ['action.eq.delete', 'entity_type.eq.retention'];
     case 'created':
       return ['action.eq.create', `or(details.is.null,details.neq."${NOTE_INVITED}")`];
     case 'invited_admin':
@@ -196,6 +209,7 @@ export function actionConditions(tab: LogTab, action: string): string[] {
     case 'updated':
       return [
         'action.eq.update',
+        'entity_type.neq.retention',
         `or(details.is.null,and(details.neq."${NOTE_RESTORED}",details.neq."${NOTE_PUBLISHED}",details.neq."${NOTE_DEACTIVATED}",details.neq."${NOTE_REACTIVATED}"))`,
       ];
     case 'published':
@@ -213,6 +227,7 @@ export function actionConditions(tab: LogTab, action: string): string[] {
     case 'deleted':
       return [
         'action.eq.delete',
+        'entity_type.neq.retention',
         `or(details.is.null,and(details.neq."${NOTE_ARCHIVED}",details.neq."${NOTE_PERMANENT}",details.neq."${NOTE_UNPUBLISHED}",details.not.like."removed *"))`,
       ];
     default:
