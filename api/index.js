@@ -572,6 +572,66 @@ const NOTE_REACTIVATED = 'Reactivated';
 const LAST_ADMIN_MESSAGE = 'You cannot deactivate the last active administrator.';
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// How long a set-password link works. This is Supabase's "Email OTP expiration"
+// (Authentication > Email), which is 3600 seconds (1 hour). It is the single
+// setting the invitation email reads; if the Supabase value is ever changed,
+// set AUTH_LINK_EXPIRY_SECONDS to match so the email never states a wrong time.
+const AUTH_LINK_EXPIRY_SECONDS = Number(process.env.AUTH_LINK_EXPIRY_SECONDS) > 0
+    ? Number(process.env.AUTH_LINK_EXPIRY_SECONDS)
+    : 3600;
+
+function plainDuration(totalSeconds) {
+    const unit = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
+    if (totalSeconds % 3600 === 0) return unit(totalSeconds / 3600, 'hour');
+    if (totalSeconds % 60 === 0) return unit(totalSeconds / 60, 'minute');
+    return unit(totalSeconds, 'second');
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (ch) => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
+    ));
+}
+
+// The administrator invitation: its own email, separate from Forgot password.
+// Sent with Resend; the link is the same secure Supabase recovery link.
+async function sendAdminInviteEmail({ to, name, inviterName, link }) {
+    if (!resend) return { error: new Error('Email sending is not configured.') };
+    const expiry = plainDuration(AUTH_LINK_EXPIRY_SECONDS);
+    const subject = "You've been invited as an administrator — OMSU Guidance";
+    const safeName = escapeHtml(name);
+    const safeInviter = escapeHtml(inviterName);
+    const safeLink = escapeHtml(link);
+    const html = `
+        <div style="font-family: Arial, Helvetica, sans-serif; max-width: 520px; margin: 0 auto; color: #1e293b; line-height: 1.6;">
+            <h2 style="color: #4f46e5; margin-bottom: 4px;">You've been invited as an administrator</h2>
+            <p>Hello ${safeName},</p>
+            <p><strong>${safeInviter}</strong> invited you to be an administrator of <strong>OMSU Guidance</strong>, the Guidance and Testing Center administrator portal. You will use it to manage programs, materials and surveys.</p>
+            <p>To start, set your password:</p>
+            <p style="margin: 24px 0;">
+                <a href="${safeLink}" style="display:inline-block;background:#4f46e5;color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:bold;">Set your password</a>
+            </p>
+            <p style="color:#475569;">This link expires in ${expiry}. If it has expired, open the sign-in page and choose "Forgot password" to get a new one.</p>
+            <p style="color:#475569;font-size:13px;">If the button does not work, copy this link into your browser:<br><span style="word-break:break-all;">${safeLink}</span></p>
+            <p style="color:#94a3b8;font-size:12px;border-top:1px solid #e2e8f0;padding-top:12px;margin-top:24px;">If you weren't expecting this, ignore this email. No account changes happen until you set a password.</p>
+        </div>
+    `;
+    const text = [
+        "You've been invited as an administrator",
+        '',
+        'Hello ' + name + ',',
+        '',
+        inviterName + ' invited you to be an administrator of OMSU Guidance, the Guidance and Testing Center administrator portal.',
+        '',
+        'Set your password: ' + link,
+        '',
+        'This link expires in ' + expiry + '.',
+        '',
+        "If you weren't expecting this, ignore this email.",
+    ].join('\n');
+    return resend.emails.send({ from: RESEND_FROM, to, subject, html, text });
+}
+
 // Verifies the bearer token and that the caller is an active administrator.
 // Sends the error response itself and returns null when the caller is not.
 async function requireActiveAdmin(req, res, forbiddenMessage) {
@@ -693,9 +753,23 @@ app.post('/api/admin/invite-admin', createStaffLimiter, async (req, res) => {
         const siteUrl = (origin && allowedOrigins.includes(origin)
             ? origin
             : (process.env.SITE_URL || 'https://www.webguidance.online')).replace(/\/$/, '');
-        const { error: mailError } = await supabaseAnon.auth.resetPasswordForEmail(cleanEmail, {
-            redirectTo: siteUrl + '/reset-password',
+        // The same secure recovery link Forgot password uses, but sent in the
+        // invitation email below instead of the "reset password" email.
+        const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+            type: 'recovery',
+            email: cleanEmail,
+            options: { redirectTo: siteUrl + '/reset-password' },
         });
+        let mailError = linkError || (linkData?.properties?.action_link ? null : new Error('No link was generated.'));
+        if (!mailError) {
+            const sent = await sendAdminInviteEmail({
+                to: cleanEmail,
+                name: cleanName,
+                inviterName: caller.record.name || caller.record.email,
+                link: linkData.properties.action_link,
+            });
+            mailError = sent?.error || null;
+        }
         if (mailError) {
             // An account nobody can sign in to is worse than none: undo it.
             await supabase.from('users').delete().eq('id', created.id);
