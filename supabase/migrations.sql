@@ -4548,3 +4548,164 @@ SELECT 'constraint', conname, pg_get_constraintdef(oid)
 -- ---------------------------------------------------------
 -- ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_language_check;
 -- ALTER TABLE profiles DROP COLUMN IF EXISTS language;
+
+
+-- =========================================================
+-- PHASE 44: close the role hole (a signed-in user could edit their own `users` row)
+-- =========================================================
+-- Before this phase the UPDATE policy on `users` only checked "is it your own row",
+-- with no limit on columns, so a student could set their own role to 'admin'.
+-- This phase:
+--   1. is_admin() now also requires status = 'active' and archived_at IS NULL.
+--   2. users_guard: a BROWSER session (database role authenticated / anon) can change
+--      only status, campus, is_test_account, archived_at - and only if it is an admin.
+--      A student can change no column of `users` at all. role, email, student_id, password,
+--      consent_*, created_at, id can only be changed by the server (service key), by a
+--      SECURITY DEFINER function (e.g. record_my_consent) or in the SQL editor.
+--   3. users_keep_one_admin: the last active administrator cannot be deleted, archived,
+--      deactivated or demoted, whoever asks (including the server and the SQL editor).
+--   4. profiles_guard: id, student_id and user_role of a profile cannot be changed from the
+--      browser (they are how a student's rows are tied together; the profile fields a
+--      student may edit - name, program, year level, gender, age, PWD, IP - are unchanged).
+-- No data is changed. Run it once, as one script.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION is_admin() RETURNS boolean
+LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1
+      FROM users
+     WHERE email = (auth.jwt() ->> 'email')
+       AND role = 'admin'
+       AND status = 'active'
+       AND archived_at IS NULL
+  );
+$$;
+
+-- SECURITY INVOKER on purpose: current_user is the role that runs the UPDATE. A browser
+-- session is 'authenticated'; the service key is 'service_role'; the SQL editor and
+-- SECURITY DEFINER functions run as their owner. Only the first is limited here.
+CREATE OR REPLACE FUNCTION users_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  v_allowed text[];
+BEGIN
+  IF current_user NOT IN ('authenticated', 'anon') THEN
+    RETURN NEW;
+  END IF;
+
+  IF is_admin() THEN
+    v_allowed := ARRAY['status', 'campus', 'is_test_account', 'archived_at'];
+  ELSE
+    v_allowed := ARRAY[]::text[];
+  END IF;
+
+  -- every other column (including any added later) must stay exactly as it was
+  IF (to_jsonb(NEW) - v_allowed) IS DISTINCT FROM (to_jsonb(OLD) - v_allowed) THEN
+    RAISE EXCEPTION 'This account record can only be changed by the server.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS users_guard ON users;
+CREATE TRIGGER users_guard
+  BEFORE UPDATE ON users
+  FOR EACH ROW EXECUTE FUNCTION users_guard();
+
+CREATE OR REPLACE FUNCTION users_keep_one_admin() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF OLD.role = 'admin' AND OLD.status = 'active' AND OLD.archived_at IS NULL
+     AND ( TG_OP = 'DELETE'
+           OR NEW.role IS DISTINCT FROM 'admin'
+           OR NEW.status IS DISTINCT FROM 'active'
+           OR NEW.archived_at IS NOT NULL )
+     AND NOT EXISTS (
+           SELECT 1
+             FROM users u
+            WHERE u.id <> OLD.id
+              AND u.role = 'admin'
+              AND u.status = 'active'
+              AND u.archived_at IS NULL )
+  THEN
+    RAISE EXCEPTION 'You cannot remove, deactivate or archive the last active administrator.'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS users_keep_one_admin ON users;
+CREATE TRIGGER users_keep_one_admin
+  BEFORE UPDATE OR DELETE ON users
+  FOR EACH ROW EXECUTE FUNCTION users_keep_one_admin();
+
+CREATE OR REPLACE FUNCTION profiles_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF current_user NOT IN ('authenticated', 'anon') THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.id IS DISTINCT FROM OLD.id
+     OR NEW.student_id IS DISTINCT FROM OLD.student_id
+     OR (NEW.user_role IS DISTINCT FROM OLD.user_role
+         AND NOT (OLD.user_role IS NULL AND NEW.user_role = 'student'))
+  THEN
+    RAISE EXCEPTION 'This part of the profile can only be changed by the server.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS profiles_guard ON profiles;
+CREATE TRIGGER profiles_guard
+  BEFORE UPDATE ON profiles
+  FOR EACH ROW EXECUTE FUNCTION profiles_guard();
+
+COMMIT;
+
+-- CHECK 1 (expect 3 rows: profiles_guard on profiles, users_guard and users_keep_one_admin on users):
+SELECT tgname, tgrelid::regclass AS on_table
+  FROM pg_trigger
+ WHERE tgname IN ('users_guard', 'users_keep_one_admin', 'profiles_guard') AND NOT tgisinternal
+ ORDER BY tgname;
+
+-- CHECK 2 (expect t): is_admin() now looks at status and archive.
+SELECT prosrc ~ 'archived_at IS NULL' AND prosrc ~ 'status' AS is_admin_checks_active
+  FROM pg_proc WHERE proname = 'is_admin';
+
+-- CHECK 3 (expect 2): both administrators still count as active, so nobody is locked out.
+SELECT count(*) AS active_admins
+  FROM users WHERE role = 'admin' AND status = 'active' AND archived_at IS NULL;
+
+-- OPTIONAL CHECK 4 - the last-admin rule, nothing is kept (everything is rolled back).
+-- Expected: the first UPDATE works, the second stops with "You cannot remove, deactivate
+-- or archive the last active administrator." Run it as one script, then it rolls back.
+-- BEGIN;
+-- UPDATE users SET status = 'inactive' WHERE id = 464;
+-- UPDATE users SET status = 'inactive' WHERE id = 352;   -- <- must fail
+-- ROLLBACK;
+
+-- ---------------------------------------------------------
+-- ROLLBACK of PHASE 44 (run only to undo it). This reopens the hole.
+-- ---------------------------------------------------------
+-- DROP TRIGGER IF EXISTS profiles_guard ON profiles;
+-- DROP TRIGGER IF EXISTS users_keep_one_admin ON users;
+-- DROP TRIGGER IF EXISTS users_guard ON users;
+-- DROP FUNCTION IF EXISTS profiles_guard();
+-- DROP FUNCTION IF EXISTS users_keep_one_admin();
+-- DROP FUNCTION IF EXISTS users_guard();
+-- CREATE OR REPLACE FUNCTION is_admin() RETURNS boolean
+-- LANGUAGE sql SECURITY DEFINER STABLE AS $$
+--   SELECT EXISTS (
+--     SELECT 1 FROM users WHERE email = (auth.jwt() ->> 'email') AND role = 'admin'
+--   );
+-- $$;

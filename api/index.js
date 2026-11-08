@@ -217,6 +217,12 @@ if (!OPENROUTER_API_KEY) {
 // from — object key order isn't guaranteed stable across requests, so keys
 // are sorted recursively before hashing; otherwise the same underlying
 // data could hash differently and defeat the cache for no reason.
+// An administrator is only treated as one while the account is active and not archived
+// (matches is_admin() in the database, PHASE 44).
+function isActiveAdmin(record) {
+    return !!record && record.role === 'admin' && record.status === 'active' && !record.archived_at;
+}
+
 function canonicalStringify(value) {
     if (Array.isArray(value)) {
         return `[${value.map(canonicalStringify).join(',')}]`;
@@ -571,11 +577,11 @@ app.post('/api/admin/create-staff', createStaffLimiter, async (req, res) => {
 
         const { data: callerRecord } = await supabase
             .from('users')
-            .select('role')
+            .select('role, status, archived_at')
             .eq('email', callerAuthUser.email.toLowerCase())
             .maybeSingle();
 
-        if (callerRecord?.role !== 'admin') {
+        if (!isActiveAdmin(callerRecord)) {
             return res.status(403).json({ message: "Only admins can create staff accounts" });
         }
 
@@ -664,11 +670,11 @@ app.post('/api/admin/delete-user', deleteUserLimiter, async (req, res) => {
 
         const { data: callerRecord } = await supabase
             .from('users')
-            .select('role')
+            .select('role, status, archived_at')
             .eq('email', callerAuthUser.email.toLowerCase())
             .maybeSingle();
 
-        if (callerRecord?.role !== 'admin') {
+        if (!isActiveAdmin(callerRecord)) {
             return res.status(403).json({ message: "Only admins can delete accounts" });
         }
 
@@ -888,11 +894,11 @@ app.post('/api/notify-students', notifyLimiter, async (req, res) => {
 
         const { data: callerRecord } = await supabase
             .from('users')
-            .select('role, is_test_account')
+            .select('role, status, archived_at, is_test_account')
             .eq('email', callerAuthUser.email.toLowerCase())
             .maybeSingle();
 
-        if (callerRecord?.role !== 'admin') {
+        if (!isActiveAdmin(callerRecord)) {
             return res.status(403).json({ message: "Only admins can send student notifications" });
         }
 
@@ -1029,11 +1035,11 @@ app.post('/api/analytics-insight', analyticsInsightLimiter, async (req, res) => 
 
         const { data: callerRecord } = await supabase
             .from('users')
-            .select('role')
+            .select('role, status, archived_at')
             .eq('email', callerAuthUser.email.toLowerCase())
             .maybeSingle();
 
-        if (callerRecord?.role !== 'admin') {
+        if (!isActiveAdmin(callerRecord)) {
             return res.status(403).json({ message: "Only admins can generate analytics insights" });
         }
 
@@ -1237,14 +1243,14 @@ async function requireSignedIn(req, res, { admin = false } = {}) {
     }
     const { data: record } = await supabase
         .from('users')
-        .select('role, archived_at')
+        .select('role, status, archived_at')
         .eq('email', authUser.email.toLowerCase())
         .maybeSingle();
     if (!record || record.archived_at) {
         res.status(403).json({ message: 'This account cannot use this feature.' });
         return null;
     }
-    if (admin && record.role !== 'admin') {
+    if (admin && !isActiveAdmin(record)) {
         res.status(403).json({ message: 'Only admins can do this.' });
         return null;
     }
@@ -1385,7 +1391,7 @@ app.get('/api/video-url', async (req, res) => {
             .eq('id', materialId)
             .maybeSingle();
 
-        const isAdmin = session.record.role === 'admin';
+        const isAdmin = isActiveAdmin(session.record);
         if (
             !material?.video_public_id ||
             (material.archived_at && !isAdmin) ||
