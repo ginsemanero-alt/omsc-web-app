@@ -5106,3 +5106,125 @@ COMMIT;
 --   CHECK (entity_type IN ('program', 'material', 'survey', 'user', 'about'));
 -- ALTER TABLE users DROP COLUMN IF EXISTS anonymized_at;
 -- NOTIFY pgrst, 'reload schema';
+
+
+-- =========================================================
+-- PHASE 51: lock down the old storage policies (program-posters, library, materials)
+-- =========================================================
+-- program-posters: the public site shows program photos from it through public URLs and
+--   only an administrator uploads or removes them (ProgramManager). After this phase
+--   everyone can still READ it; INSERT / UPDATE / DELETE are administrators only (is_admin()).
+-- library and materials: not used by the app (library holds only an empty-folder
+--   placeholder, materials is empty, nothing references either). Every policy on them is
+--   dropped and the buckets are made private, so only the server key can touch them.
+-- Policies of the other buckets (material-covers, material-files, about-assets, site-assets)
+-- are never touched. The old policies are copied into storage_policy_backup_phase51 first,
+-- so the rollback can put them back exactly.
+
+-- ---------------------------------------------------------
+-- PREVIEW (read-only). Run this first. Rows marked REPLACE are what STEP 1 drops.
+-- ---------------------------------------------------------
+SELECT policyname, cmd, roles, permissive, qual, with_check,
+  CASE
+    WHEN (coalesce(qual, '') || ' ' || coalesce(with_check, '')) ~ '(material-covers|material-files|about-assets|site-assets)'
+     AND (coalesce(qual, '') || ' ' || coalesce(with_check, '')) ~ '''(program-posters|library|materials)'''
+      THEN 'MIXED with another bucket - left alone, tell me'
+    WHEN (coalesce(qual, '') || ' ' || coalesce(with_check, '')) ~ '''(program-posters|library|materials)'''
+      THEN 'REPLACE'
+    WHEN (coalesce(qual, '') || ' ' || coalesce(with_check, '')) !~ 'bucket_id'
+      THEN 'NO BUCKET CONDITION (applies to every bucket) - left alone, tell me'
+    ELSE 'other bucket - left alone'
+  END AS what_step_1_does
+FROM pg_policies
+WHERE schemaname = 'storage' AND tablename = 'objects'
+ORDER BY what_step_1_does, policyname;
+
+-- ---------------------------------------------------------
+-- STEP 1
+-- ---------------------------------------------------------
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.storage_policy_backup_phase51 (
+  policyname  text PRIMARY KEY,
+  cmd         text,
+  roles       text,
+  permissive  text,
+  qual        text,
+  with_check  text,
+  saved_at    timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.storage_policy_backup_phase51 ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.storage_policy_backup_phase51 FROM anon, authenticated;
+
+DO $do$
+DECLARE r record;
+BEGIN
+  FOR r IN
+    SELECT * FROM pg_policies
+     WHERE schemaname = 'storage' AND tablename = 'objects'
+       AND (coalesce(qual, '') || ' ' || coalesce(with_check, '')) ~ '''(program-posters|library|materials)'''
+       AND (coalesce(qual, '') || ' ' || coalesce(with_check, '')) !~ '(material-covers|material-files|about-assets|site-assets)'
+       AND policyname NOT IN ('program_posters_select_public', 'program_posters_insert_admin',
+                              'program_posters_update_admin', 'program_posters_delete_admin')
+  LOOP
+    INSERT INTO public.storage_policy_backup_phase51 (policyname, cmd, roles, permissive, qual, with_check)
+    VALUES (r.policyname, r.cmd, array_to_string(r.roles, ','), r.permissive, r.qual, r.with_check)
+    ON CONFLICT (policyname) DO NOTHING;
+    EXECUTE format('DROP POLICY %I ON storage.objects', r.policyname);
+  END LOOP;
+END $do$;
+
+-- program-posters: everyone reads, administrators write.
+DROP POLICY IF EXISTS program_posters_select_public ON storage.objects;
+CREATE POLICY program_posters_select_public ON storage.objects
+  FOR SELECT USING (bucket_id = 'program-posters');
+DROP POLICY IF EXISTS program_posters_insert_admin ON storage.objects;
+CREATE POLICY program_posters_insert_admin ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'program-posters' AND is_admin());
+DROP POLICY IF EXISTS program_posters_update_admin ON storage.objects;
+CREATE POLICY program_posters_update_admin ON storage.objects
+  FOR UPDATE USING (bucket_id = 'program-posters' AND is_admin())
+  WITH CHECK (bucket_id = 'program-posters' AND is_admin());
+DROP POLICY IF EXISTS program_posters_delete_admin ON storage.objects;
+CREATE POLICY program_posters_delete_admin ON storage.objects
+  FOR DELETE USING (bucket_id = 'program-posters' AND is_admin());
+
+-- library and materials: unused, so no policy at all and no public links.
+UPDATE storage.buckets SET public = false WHERE id IN ('library', 'materials');
+
+COMMIT;
+NOTIFY pgrst, 'reload schema';
+
+-- CHECK after STEP 1:
+-- 1) expect exactly the four program_posters_* policies for program-posters, and none for library / materials
+SELECT policyname, cmd, roles, qual, with_check FROM pg_policies
+ WHERE schemaname = 'storage' AND tablename = 'objects'
+   AND (coalesce(qual, '') || ' ' || coalesce(with_check, '')) ~ '''(program-posters|library|materials)''';
+-- 2) expect library | f  and  materials | f
+SELECT id, public FROM storage.buckets WHERE id IN ('library', 'materials', 'program-posters');
+-- 3) the saved copies of what was dropped
+SELECT policyname, cmd, roles FROM public.storage_policy_backup_phase51 ORDER BY policyname;
+
+-- ---------------------------------------------------------
+-- ROLLBACK (commented): puts the old policies back from the saved copies
+-- ---------------------------------------------------------
+-- BEGIN;
+-- DROP POLICY IF EXISTS program_posters_select_public ON storage.objects;
+-- DROP POLICY IF EXISTS program_posters_insert_admin ON storage.objects;
+-- DROP POLICY IF EXISTS program_posters_update_admin ON storage.objects;
+-- DROP POLICY IF EXISTS program_posters_delete_admin ON storage.objects;
+-- DO $do$
+-- DECLARE r record;
+-- BEGIN
+--   FOR r IN SELECT * FROM public.storage_policy_backup_phase51 LOOP
+--     EXECUTE format('DROP POLICY IF EXISTS %I ON storage.objects', r.policyname);
+--     EXECUTE format('CREATE POLICY %I ON storage.objects AS %s FOR %s TO %s%s%s',
+--       r.policyname, r.permissive, r.cmd, r.roles,
+--       CASE WHEN r.qual IS NOT NULL THEN ' USING (' || r.qual || ')' ELSE '' END,
+--       CASE WHEN r.with_check IS NOT NULL THEN ' WITH CHECK (' || r.with_check || ')' ELSE '' END);
+--   END LOOP;
+-- END $do$;
+-- UPDATE storage.buckets SET public = true WHERE id IN ('library', 'materials');
+-- COMMIT;
+-- NOTIFY pgrst, 'reload schema';
+-- (afterwards, once you are sure nothing needs it:  DROP TABLE public.storage_policy_backup_phase51;)
