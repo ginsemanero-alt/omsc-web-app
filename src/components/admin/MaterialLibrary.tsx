@@ -1471,7 +1471,7 @@ export default function IECMaterials({ uploadRequest, editRequest, onChanged }: 
                             ? 'Play Audio'
                             : item.type === 'Link'
                             ? 'Open Link'
-                            : 'Watch Now'}
+                            : 'Watch now'}
                         </Button>
 
                       </div>

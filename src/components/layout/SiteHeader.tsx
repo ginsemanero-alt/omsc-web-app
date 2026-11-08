@@ -8,7 +8,7 @@ import { BookOpen, Calendar, Home, Info, Menu, X } from "lucide-react";
 export const PUBLIC_NAV_LINKS: { label: string; to: string; icon: React.ElementType }[] = [
   { label: "Home", to: "/", icon: Home },
   { label: "Programs", to: "/programs", icon: Calendar },
-  { label: "IEC Materials", to: "/materials", icon: BookOpen },
+  { label: "IEC materials", to: "/materials", icon: BookOpen },
   { label: "About", to: "/about", icon: Info },
 ];
 

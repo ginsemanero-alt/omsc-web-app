@@ -466,7 +466,7 @@ export default function LearningGainSection({ filters }: { filters: AnalyticsFil
               <EmptyState
                 message={
                   programRows.length === 0
-                    ? "No knowledge assessment is linked to a program yet. In the Survey Builder, set a knowledge assessment's \"Pre/Post-Test For Program\"."
+                    ? "No knowledge assessment is linked to a program yet. In the survey builder, set the \"Program\" of a knowledge assessment (its pre-test/post-test form)."
                     : "No student has completed both the pre-test and the post-test yet."
                 }
               />

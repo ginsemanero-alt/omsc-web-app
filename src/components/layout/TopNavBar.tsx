@@ -673,7 +673,7 @@ export default function TopNavBar({
 
           <DialogHeader className="mt-4">
             <DialogTitle className="text-xl font-black text-center dark:text-slate-100">
-              {role === 'student' ? t('Sign out?') : 'Sign Out?'}
+              {t('Sign out?')}
             </DialogTitle>
           </DialogHeader>
 
@@ -697,7 +697,7 @@ export default function TopNavBar({
               }}
               className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black"
             >
-              {role === 'student' ? t('Yes, sign out') : 'Yes, Sign Out'}
+              {t('Yes, sign out')}
             </Button>
           </div>
         </DialogContent>

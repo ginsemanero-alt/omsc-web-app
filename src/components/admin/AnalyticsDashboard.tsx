@@ -2341,72 +2341,72 @@ export default function AnalyticsDashboard() {
       ],
 
       [
-        "Students Covered",
+        "Students covered",
         totalStudents,
       ],
 
       [
-        "Guidance Programs",
+        "Guidance programs",
         totalGuidancePrograms,
       ],
 
       [
-        "Active Surveys",
+        "Active surveys",
         activeSurveys,
       ],
 
       [
-        "Unique Survey Participants",
+        "Unique survey participants",
         surveyParticipants,
       ],
 
       [
-        "Survey Responses",
+        "Survey responses",
         totalSurveyResponses,
       ],
 
       [
-        "Total Materials",
+        "Total materials",
         totalMaterials,
       ],
 
       [
-        "Total IEC Materials",
+        "Total IEC materials",
         totalIECMaterials,
       ],
 
       [
-        "IEC Materials Created This Month",
+        "IEC materials created this month",
         iecMaterialsThisMonth,
       ],
 
       [
-        "Materials Created This Month",
+        "Materials created this month",
         materialsThisMonth,
       ],
 
       [
-        "Materials Created This Year",
+        "Materials created this year",
         materialsThisYear,
       ],
 
       [
-        "Total IEC Downloads",
+        "Total IEC downloads",
         totalIECDowloads,
       ],
 
       [
-        "Downloads (This Month's Uploads)",
+        "Downloads (this month's uploads)",
         downloadsThisMonth,
       ],
 
       [
-        "PWD Students",
+        "PWD students",
         inclusionAnalytics.pwd,
       ],
 
       [
-        "IP Students",
+        "IP students",
         inclusionAnalytics.ip,
       ],
     ];
@@ -2611,7 +2611,7 @@ export default function AnalyticsDashboard() {
     const pct = (value: unknown) => (value === null || value === undefined ? "—" : `${Number(value).toFixed(1)}%`);
 
     return {
-      title: "Learning Gain (Pre vs Post)",
+      title: "Learning gain (pre vs post)",
       head: ["Group", "Paired students", "Mean pre-test", "Mean post-test", "Mean gain"],
       rows: rows
         .filter((row) => row.dimension === "overall" || row.dimension === "program")
@@ -2651,34 +2651,34 @@ export default function AnalyticsDashboard() {
   ): ReportModel => {
     const small = (n: number) => (n < SMALL_SAMPLE_N ? " (small sample)" : "");
     const sections: ReportSection[] = [
-      { title: "Overview Metrics", head: ["Metric", "Value"], rows: getReportRows().slice(1) as (string | number)[][] },
+      { title: "Overview metrics", head: ["Metric", "Value"], rows: getReportRows().slice(1) as (string | number)[][] },
       {
-        title: "Program Awareness",
-        head: ["Program", "Guidance Service", "Avg. Score", "Responses"],
+        title: "Program awareness",
+        head: ["Program", "Guidance service", "Avg. score", "Responses"],
         rows: reportProgramAwareness.map((row) => [row.name, row.guidanceService, scoreCell(row.averageScore, row.tooFew), row.responseCount]),
       },
       {
-        title: "Demographic Breakdown",
+        title: "Demographic breakdown",
         head: ["Dimension", "Segment", "Count"],
         rows: [
-          ...reportDemographics.byYearLevel.map((r) => ["Year Level", r.label, r.count]),
+          ...reportDemographics.byYearLevel.map((r) => ["Year level", r.label, r.count]),
           ...reportDemographics.byGender.map((r) => ["Gender", r.label, r.count]),
-          ...reportDemographics.byAgeBand.map((r) => ["Age Band", r.label, r.count]),
-          ["PWD Status", "PWD", reportDemographics.pwd],
-          ["PWD Status", "Non-PWD", reportDemographics.nonPwd],
-          ["IP Status", "Indigenous Peoples", reportDemographics.ip],
-          ["IP Status", "Non-IP", reportDemographics.nonIp],
+          ...reportDemographics.byAgeBand.map((r) => ["Age band", r.label, r.count]),
+          ["PWD status", "PWD", reportDemographics.pwd],
+          ["PWD status", "Non-PWD", reportDemographics.nonPwd],
+          ["IP status", "Indigenous Peoples", reportDemographics.ip],
+          ["IP status", "Non-IP", reportDemographics.nonIp],
         ],
         note: "Counts only. No names, emails, or student IDs.",
       },
       {
-        title: "Guidance Service Coverage",
-        head: ["Guidance Service", "Programs", "Avg. Awareness Score"],
+        title: "Guidance service coverage",
+        head: ["Guidance service", "Programs", "Avg. awareness score"],
         rows: reportGuidanceCoverage.map((row) => [row.service, row.programCount, scoreCell(row.averageScore, row.tooFew)]),
       },
       {
-        title: "Awareness by Exposure",
-        head: ["IEC Category", "Opened", "Did Not Open", "Difference", "Respondents"],
+        title: "Awareness by exposure",
+        head: ["IEC category", "Opened", "Did not open", "Difference", "Respondents"],
         rows: materialExposureAwareness.map((row) => [
           row.category,
           row.openedTooFew ? `${TOO_FEW_TEXT} (${row.openedCount})` : row.openedAvg !== null ? `${row.openedAvg}% (${row.openedCount})` : "No data",
@@ -2688,13 +2688,13 @@ export default function AnalyticsDashboard() {
         ]),
       },
       {
-        title: "IEC Material Reach",
+        title: "IEC material reach",
         head: ["Category", "Materials", "Downloads"],
         rows: reportMaterialReach.byCategory.map((row) => [row.category, row.count, row.downloads]),
         note: `${reportMaterialReach.totalMaterials} materials, ${reportMaterialReach.totalDownloads} downloads`,
       },
       {
-        title: "Recent IEC Materials",
+        title: "Recent IEC materials",
         head: ["Title", "Format", "Category", "Campus", "Downloads", "Created"],
         rows: recentIECMaterials.map((material) => [
           safeString(material.title),
@@ -2709,13 +2709,13 @@ export default function AnalyticsDashboard() {
     if (learning) sections.push(learning);
     if (reach) {
       sections.push({
-        title: "Material Reach by Course",
+        title: "Material reach by course",
         head: ["Course", "Students", "Opened at least one", "Reached"],
         rows: reach.by_course.map((row) => [`${row.key}${small(row.students)}`, row.students, row.reached, pctPdf(row.pct)]),
         note: "Percentages are based on students with an account in the system, not on total enrollment.",
       });
       sections.push({
-        title: "Material Reach by Year Level",
+        title: "Material reach by year level",
         head: ["Year level", "Students", "Opened at least one", "Reached"],
         rows: reach.by_year_level.map((row) => [`${row.key}${small(row.students)}`, row.students, row.reached, pctPdf(row.pct)]),
       });
@@ -2811,7 +2811,7 @@ export default function AnalyticsDashboard() {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.setTextColor(15);
-      doc.text("Overview Metrics", 14, nextY);
+      doc.text("Overview metrics", 14, nextY);
       nextY += 6;
 
       autoTable(doc, {
@@ -2834,12 +2834,12 @@ export default function AnalyticsDashboard() {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.setTextColor(15);
-      doc.text("Program Awareness Summary", 14, nextY);
+      doc.text("Program awareness summary", 14, nextY);
       nextY += 6;
 
       autoTable(doc, {
         startY: nextY,
-        head: [["Program", "Guidance Service", "Avg. Score", "Responses"]],
+        head: [["Program", "Guidance service", "Avg. score", "Responses"]],
         body: tableBodyOrPlaceholder(reportProgramAwareness, 4, (row) => [
           row.name,
           row.guidanceService,
@@ -2868,20 +2868,20 @@ export default function AnalyticsDashboard() {
       // SECTION 3 — Demographic Breakdown
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
-      doc.text("Demographic Breakdown", 14, nextY);
+      doc.text("Demographic breakdown", 14, nextY);
       nextY += 6;
 
       autoTable(doc, {
         startY: nextY,
         head: [["Dimension", "Segment", "Count"]],
         body: [
-          ...reportDemographics.byYearLevel.map((r) => ["Year Level", r.label, r.count]),
+          ...reportDemographics.byYearLevel.map((r) => ["Year level", r.label, r.count]),
           ...reportDemographics.byGender.map((r) => ["Gender", r.label, r.count]),
-          ...reportDemographics.byAgeBand.map((r) => ["Age Band", r.label, r.count]),
-          ["PWD Status", "PWD", reportDemographics.pwd],
-          ["PWD Status", "Non-PWD", reportDemographics.nonPwd],
-          ["IP Status", "Indigenous Peoples", reportDemographics.ip],
-          ["IP Status", "Non-IP", reportDemographics.nonIp],
+          ...reportDemographics.byAgeBand.map((r) => ["Age band", r.label, r.count]),
+          ["PWD status", "PWD", reportDemographics.pwd],
+          ["PWD status", "Non-PWD", reportDemographics.nonPwd],
+          ["IP status", "Indigenous Peoples", reportDemographics.ip],
+          ["IP status", "Non-IP", reportDemographics.nonIp],
         ],
         headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: "bold" },
         styles: { fontSize: 12 },
@@ -2897,12 +2897,12 @@ export default function AnalyticsDashboard() {
       // SECTION 4 — Guidance Service Coverage
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
-      doc.text("Guidance Service Coverage", 14, nextY);
+      doc.text("Guidance service coverage", 14, nextY);
       nextY += 6;
 
       autoTable(doc, {
         startY: nextY,
-        head: [["Guidance Service", "Programs", "Avg. Awareness Score"]],
+        head: [["Guidance service", "Programs", "Avg. awareness score"]],
         body: reportGuidanceCoverage.map((row) => [
           row.service,
           row.programCount,
@@ -2923,12 +2923,12 @@ export default function AnalyticsDashboard() {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.setTextColor(15);
-      doc.text("Awareness by Material Exposure", 14, nextY);
+      doc.text("Awareness by material exposure", 14, nextY);
       nextY += 6;
 
       autoTable(doc, {
         startY: nextY,
-        head: [["IEC Category", "Opened", "Did Not Open", "Difference", "Respondents"]],
+        head: [["IEC category", "Opened", "Did not open", "Difference", "Respondents"]],
         body: tableBodyOrPlaceholder(materialExposureAwareness, 5, (row) => [
           row.category,
           row.openedTooFew ? `${TOO_FEW_TEXT} (${row.openedCount})` : row.openedAvg !== null ? `${row.openedAvg}% (${row.openedCount})` : "No data",
@@ -2992,7 +2992,7 @@ export default function AnalyticsDashboard() {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.setTextColor(15);
-      doc.text("Recent IEC Materials", 14, nextY);
+      doc.text("Recent IEC materials", 14, nextY);
       nextY += 6;
 
       autoTable(doc, {
@@ -3021,7 +3021,7 @@ export default function AnalyticsDashboard() {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(12);
         doc.setTextColor(15);
-        doc.text("Learning Gain (Pre-test vs Post-test)", 14, nextY);
+        doc.text("Learning gain (pre-test vs post-test)", 14, nextY);
         nextY += 6;
         autoTable(doc, {
           startY: nextY,
@@ -3064,7 +3064,7 @@ export default function AnalyticsDashboard() {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.setTextColor(15);
-      doc.text("Material Reach by Course", 14, nextY);
+      doc.text("Material reach by course", 14, nextY);
       nextY += 5;
 
       doc.setFont("helvetica", "normal");
@@ -3152,7 +3152,7 @@ export default function AnalyticsDashboard() {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(12);
         doc.setTextColor(15);
-        doc.text("Material Reach by Year Level", 14, nextY);
+        doc.text("Material reach by year level", 14, nextY);
         nextY += 6;
 
         autoTable(doc, {
@@ -4549,7 +4549,7 @@ export default function AnalyticsDashboard() {
                 <Line
                   type="monotone"
                   dataKey="materials"
-                  name="IEC Materials"
+                  name="IEC materials"
                   stroke="#4f46e5"
                   strokeWidth={4}
                   dot={{
@@ -4630,7 +4630,7 @@ export default function AnalyticsDashboard() {
 
                     <Bar
                       dataKey="count"
-                      name="IEC Materials"
+                      name="IEC materials"
                       fill="#4f46e5"
                       radius={[
                         8,

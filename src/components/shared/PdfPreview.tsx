@@ -202,7 +202,7 @@ export default function PdfPreview({ url }: PdfPreviewProps) {
             onClick={() => setRetryToken((t) => t + 1)}
             className="inline-flex items-center gap-2 h-12 px-8 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-black uppercase text-xs transition-colors"
           >
-            {t('Try Again')}
+            {t('Try again')}
           </button>
           <a
             href={url}
