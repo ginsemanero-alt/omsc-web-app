@@ -38,12 +38,14 @@ async function fetchUserRecord(email: string): Promise<{ role: Role; dbUserId: n
   // still technically valid.
   const { data, error } = await supabase
     .from('users')
-    .select('id, role, name')
+    .select('id, role, name, status')
     .eq('email', email)
     .is('archived_at', null)
     .maybeSingle();
 
   if (error || !data) return { role: null, dbUserId: null, userName: null };
+  // A deactivated account behaves as signed out, like an archived one.
+  if (data.status && data.status !== 'active') return { role: null, dbUserId: null, userName: null };
 
   return {
     role: (data.role as Role) ?? null,

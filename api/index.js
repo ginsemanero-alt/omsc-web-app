@@ -557,93 +557,241 @@ app.post('/api/register', registerIpLimiter, registerEmailLimiter, async (req, r
     }
 });
 
-app.post('/api/admin/create-staff', createStaffLimiter, async (req, res) => {
-    // Same privilege-escalation risk /api/register used to have if left
-    // unchecked, so this endpoint requires the caller's own session token
-    // and verifies they're an active admin before creating anything.
+// ---- Administrator accounts (PHASE 45) ----------------------------------
+// The role is always read from the database with the service key, never from
+// the browser. An administrator can only be added by invitation: the server
+// creates the account with a random password nobody sees, then sends the
+// person the same "set your password" email as Forgot password. Every
+// invite / deactivate / reactivate is written to the Activity Log here, on
+// the server, so a browser cannot skip or forge it.
+
+const ADMIN_CAMPUSES = ['San Jose Campus', 'Labangan Campus', 'Murtha Campus'];
+const NOTE_INVITED = 'Invited as administrator';
+const NOTE_DEACTIVATED = 'Deactivated';
+const NOTE_REACTIVATED = 'Reactivated';
+const LAST_ADMIN_MESSAGE = 'You cannot deactivate the last active administrator.';
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Verifies the bearer token and that the caller is an active administrator.
+// Sends the error response itself and returns null when the caller is not.
+async function requireActiveAdmin(req, res, forbiddenMessage) {
     const authHeader = req.headers.authorization || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-
     if (!token) {
-        return res.status(401).json({ message: "Missing authorization token" });
+        res.status(401).json({ message: 'Missing authorization token' });
+        return null;
     }
+    const { data: { user: authUser }, error: callerError } = await supabase.auth.getUser(token);
+    if (callerError || !authUser?.email) {
+        res.status(401).json({ message: 'Invalid or expired session' });
+        return null;
+    }
+    const { data: record } = await supabase
+        .from('users')
+        .select('id, name, email, role, status, archived_at')
+        .eq('email', authUser.email.toLowerCase())
+        .maybeSingle();
+    if (!isActiveAdmin(record)) {
+        res.status(403).json({ message: forbiddenMessage });
+        return null;
+    }
+    return { authUser, record };
+}
 
+// The Auth identity that belongs to a users row (the two only share the email).
+async function findAuthUserByEmail(email) {
+    const wanted = String(email || '').toLowerCase();
+    const perPage = 200;
+    for (let page = 1; page <= 50; page += 1) {
+        const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+        if (error) throw error;
+        const match = data.users.find((u) => u.email?.toLowerCase() === wanted);
+        if (match) return match;
+        if (data.users.length < perPage) break;
+    }
+    return null;
+}
+
+// Written by the server with the service key. Never lets a logging problem
+// fail the action that already happened.
+async function writeAdminLog(actor, action, target, details) {
     try {
-        const { data: { user: callerAuthUser }, error: callerError } = await supabase.auth.getUser(token);
+        await supabase.from('activity_logs').insert([{
+            actor_email: actor.email,
+            actor_name: actor.name || actor.email,
+            action,
+            entity_type: 'user',
+            entity_id: String(target.id),
+            entity_label: target.name || target.email,
+            details,
+        }]);
+    } catch (logErr) {
+        console.warn('Activity log write failed (admin accounts):', logErr.message);
+    }
+}
 
-        if (callerError || !callerAuthUser?.email) {
-            return res.status(401).json({ message: "Invalid or expired session" });
+app.post('/api/admin/invite-admin', createStaffLimiter, async (req, res) => {
+    try {
+        const caller = await requireActiveAdmin(req, res, 'Only active administrators can add administrators.');
+        if (!caller) return;
+
+        const { name, email, campus } = req.body || {};
+        const cleanName = typeof name === 'string' ? name.trim() : '';
+        const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+        const cleanCampus = ADMIN_CAMPUSES.includes(campus) ? campus : null;
+
+        if (!cleanName || cleanName.length > 100) {
+            return res.status(400).json({ message: 'Please enter the full name.' });
+        }
+        if (!EMAIL_SHAPE.test(cleanEmail) || cleanEmail.length > 254) {
+            return res.status(400).json({ message: 'Please enter a valid email address.' });
         }
 
-        const { data: callerRecord } = await supabase
-            .from('users')
-            .select('role, status, archived_at')
-            .eq('email', callerAuthUser.email.toLowerCase())
-            .maybeSingle();
-
-        if (!isActiveAdmin(callerRecord)) {
-            return res.status(403).json({ message: "Only admins can create staff accounts" });
-        }
-
-        const { name, email, password, campus, isTestAccount } = req.body;
-        const cleanEmail = email?.trim().toLowerCase();
-        const cleanName = name?.trim();
-
-        if (!cleanName || !cleanEmail || !password || password.length < 8) {
-            return res.status(400).json({ message: "Name, email, and a password of at least 8 characters are required" });
-        }
-
-        const { data: existing } = await supabase
-            .from('users')
-            .select('email')
-            .eq('email', cleanEmail);
-
+        const { data: existing } = await supabase.from('users').select('id').eq('email', cleanEmail);
         if (existing && existing.length > 0) {
-            return res.status(400).json({ message: "Email already exists" });
+            return res.status(400).json({ message: 'An account with this email already exists.' });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        // Same auth-then-db creation order as /api/register, for the same
-        // reason: profiles/users rows are meaningless without a matching
-        // auth identity, so the auth user has to exist first.
+        // Nobody ever sees or types this. It only exists because the account
+        // needs one until the person sets their own through the email link.
+        const placeholder = crypto.randomBytes(32).toString('base64url');
         const { data: authCreate, error: authCreateError } = await supabase.auth.admin.createUser({
             email: cleanEmail,
-            password,
+            password: placeholder,
             email_confirm: true,
-            user_metadata: { name: cleanName, role: 'admin' }
+            user_metadata: { name: cleanName, role: 'admin' },
         });
-
-        if (authCreateError) throw authCreateError;
-
+        if (authCreateError) {
+            if (/already|registered|exists/i.test(authCreateError.message || '')) {
+                return res.status(400).json({ message: 'An account with this email already exists.' });
+            }
+            throw authCreateError;
+        }
         const authUserId = authCreate.user.id;
 
-        // Admin accounts have no `profiles` row — demographics are
-        // student-only by design (see /api/register and TopNavBar).
-        const { data, error: dbError } = await supabase
+        const { data: inserted, error: dbError } = await supabase
             .from('users')
             .insert([{
                 name: cleanName,
                 email: cleanEmail,
-                password: hashedPassword,
+                password: await bcrypt.hash(placeholder, 10),
                 role: 'admin',
-                campus: campus || null,
+                campus: cleanCampus,
                 status: 'active',
-                // Test admins publish without notifying students
-                // (see /api/notify-students).
-                is_test_account: isTestAccount === true
+                is_test_account: false,
             }])
-            .select();
-
+            .select('id, name, email');
         if (dbError) {
             await supabase.auth.admin.deleteUser(authUserId);
             throw dbError;
         }
+        const created = inserted[0];
 
-        res.status(201).json({ message: "Staff account created!", userId: data[0].id });
+        // Same email as Forgot password, same page. The link goes back to the
+        // site the admin is using, if that is a known origin.
+        const origin = req.headers.origin;
+        const siteUrl = (origin && allowedOrigins.includes(origin)
+            ? origin
+            : (process.env.SITE_URL || 'https://www.webguidance.online')).replace(/\/$/, '');
+        const { error: mailError } = await supabaseAnon.auth.resetPasswordForEmail(cleanEmail, {
+            redirectTo: siteUrl + '/reset-password',
+        });
+        if (mailError) {
+            // An account nobody can sign in to is worse than none: undo it.
+            await supabase.from('users').delete().eq('id', created.id);
+            await supabase.auth.admin.deleteUser(authUserId);
+            console.warn('Invite email not sent:', mailError.message);
+            return res.status(502).json({ message: "We couldn't send the invitation email, so no account was created. Please try again in a minute." });
+        }
+
+        await writeAdminLog(caller.record, 'create', created, NOTE_INVITED);
+        res.status(201).json({ message: 'Invitation sent.', userId: created.id, emailSent: true });
     } catch (error) {
-        console.error("Create Staff Error:", error.message);
-        res.status(500).json({ message: error.message });
+        console.error('Invite Admin Error:', error.message);
+        res.status(500).json({ message: 'Could not add the administrator. Please try again.' });
+    }
+});
+
+app.post('/api/admin/set-admin-status', deleteUserLimiter, async (req, res) => {
+    try {
+        const caller = await requireActiveAdmin(req, res, 'Only active administrators can change administrator accounts.');
+        if (!caller) return;
+
+        const { userId, active } = req.body || {};
+        if (!userId || typeof active !== 'boolean') {
+            return res.status(400).json({ message: 'userId and active (true or false) are required.' });
+        }
+
+        const { data: target } = await supabase
+            .from('users')
+            .select('id, name, email, role, status, archived_at')
+            .eq('id', userId)
+            .maybeSingle();
+        if (!target) return res.status(404).json({ message: 'User not found' });
+        if (target.role !== 'admin') {
+            return res.status(400).json({ message: 'Only administrator accounts can be deactivated or reactivated here.' });
+        }
+        if (target.archived_at) {
+            return res.status(400).json({ message: 'This account is archived. Restore it from the Archive first.' });
+        }
+
+        const isSelf = String(target.id) === String(caller.record.id);
+        const currentlyActive = target.status === 'active';
+
+        if (!active) {
+            if (isSelf) return res.status(400).json({ message: "You can't deactivate your own account." });
+            if (!currentlyActive) return res.status(400).json({ message: 'This account is already inactive.' });
+
+            const { count: otherAdmins } = await supabase
+                .from('users')
+                .select('id', { count: 'exact', head: true })
+                .eq('role', 'admin')
+                .eq('status', 'active')
+                .is('archived_at', null)
+                .neq('id', target.id);
+            if (!otherAdmins) return res.status(400).json({ message: LAST_ADMIN_MESSAGE });
+
+            const { error: statusError } = await supabase.from('users').update({ status: 'inactive' }).eq('id', target.id);
+            if (statusError) {
+                // The database refuses the last active admin too (second layer).
+                return res.status(statusError.code === '23514' ? 400 : 500).json({
+                    message: statusError.code === '23514' ? LAST_ADMIN_MESSAGE : 'Could not deactivate the account.',
+                });
+            }
+            // Sign-in with Supabase Auth is blocked as well, so a session cannot be renewed.
+            try {
+                const authUser = await findAuthUserByEmail(target.email);
+                if (authUser) {
+                    const { error: banError } = await supabase.auth.admin.updateUserById(authUser.id, { ban_duration: '876000h' });
+                    if (banError) throw banError;
+                }
+            } catch (banErr) {
+                await supabase.from('users').update({ status: 'active' }).eq('id', target.id);
+                console.error('Deactivate: could not block sign-in:', banErr.message);
+                return res.status(500).json({ message: 'Could not block sign-in, so the account was left active. Please try again.' });
+            }
+            await writeAdminLog(caller.record, 'update', target, NOTE_DEACTIVATED);
+            return res.status(200).json({ message: 'Account deactivated.', status: 'inactive' });
+        }
+
+        if (currentlyActive) return res.status(400).json({ message: 'This account is already active.' });
+        try {
+            const authUser = await findAuthUserByEmail(target.email);
+            if (authUser) {
+                const { error: unbanError } = await supabase.auth.admin.updateUserById(authUser.id, { ban_duration: 'none' });
+                if (unbanError) throw unbanError;
+            }
+        } catch (unbanErr) {
+            console.error('Reactivate: could not allow sign-in:', unbanErr.message);
+            return res.status(500).json({ message: 'Could not re-enable sign-in. Please try again.' });
+        }
+        const { error: reError } = await supabase.from('users').update({ status: 'active' }).eq('id', target.id);
+        if (reError) return res.status(500).json({ message: 'Could not reactivate the account.' });
+        await writeAdminLog(caller.record, 'update', target, NOTE_REACTIVATED);
+        res.status(200).json({ message: 'Account reactivated.', status: 'active' });
+    } catch (error) {
+        console.error('Set Admin Status Error:', error.message);
+        res.status(500).json({ message: 'Could not change the account. Please try again.' });
     }
 });
 
@@ -670,7 +818,7 @@ app.post('/api/admin/delete-user', deleteUserLimiter, async (req, res) => {
 
         const { data: callerRecord } = await supabase
             .from('users')
-            .select('role, status, archived_at')
+            .select('id, name, role, status, archived_at')
             .eq('email', callerAuthUser.email.toLowerCase())
             .maybeSingle();
 
@@ -685,13 +833,21 @@ app.post('/api/admin/delete-user', deleteUserLimiter, async (req, res) => {
 
         const { data: targetUser, error: targetError } = await supabase
             .from('users')
-            .select('id, name, email')
+            .select('id, name, email, role')
             .eq('id', userId)
             .maybeSingle();
 
         if (targetError) throw targetError;
         if (!targetUser) {
             return res.status(404).json({ message: "User not found" });
+        }
+        // Administrator accounts are never removed from here: deactivating one
+        // keeps its history in the Activity Log, deleting it would not.
+        if (targetUser.role === 'admin') {
+            return res.status(400).json({ message: "Administrator accounts can't be deleted. Deactivate the account instead." });
+        }
+        if (String(targetUser.id) === String(callerRecord.id)) {
+            return res.status(400).json({ message: "You can't delete your own account." });
         }
 
         // profiles.id = the Auth uuid, which `users` never stores (see the
@@ -778,6 +934,15 @@ app.post('/api/login', loginLimiter, async (req, res) => {
             .maybeSingle();
 
         if (!user) return res.status(404).json({ message: "User not found" });
+
+        // A deactivated account cannot sign in (administrators are also blocked
+        // in Supabase Auth when deactivated).
+        if (user.status && user.status !== 'active') {
+            return res.status(403).json({
+                code: 'account_inactive',
+                message: 'This account is inactive. Please contact the guidance office.',
+            });
+        }
 
         const isMatch = await bcrypt.compare(password, user.password);
 

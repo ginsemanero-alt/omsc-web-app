@@ -12,14 +12,14 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { PaginationControls } from '../../components/ui/pagination-controls';
-import { Search, Trash2, Loader2, Save, X, Shield, Users, MapPin, Download, AlertCircle, Trash, UserPlus, Eye, EyeOff, RefreshCw, Pencil } from 'lucide-react';
+import { Search, Trash2, Loader2, Save, X, Shield, Users, MapPin, Download, AlertCircle, Trash, UserPlus, Pencil } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 
 const USERS_PAGE_SIZE = 15;
 
 export default function UserManagement() {
   const { toast } = useToast();
-  const { user: authUser, userName: authUserName } = useAuth();
+  const { user: authUser, userName: authUserName, dbUserId: currentDbUserId } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   // ?search=name-or-email (a link from the Activity Log) pre-fills the search box.
@@ -47,15 +47,16 @@ export default function UserManagement() {
   const [modalType, setModalType] = useState<'update' | 'delete' | null>(null);
   const [pendingAction, setPendingAction] = useState<{id: string, role: string} | null>(null);
 
-  // Add Staff Account States
+  // Add administrator (invitation) states
   const [showAddStaff, setShowAddStaff] = useState(false);
   const [staffName, setStaffName] = useState('');
   const [staffEmail, setStaffEmail] = useState('');
-  const [staffPassword, setStaffPassword] = useState('');
   const [staffCampus, setStaffCampus] = useState('');
-  const [staffIsTest, setStaffIsTest] = useState(false);
-  const [showStaffPassword, setShowStaffPassword] = useState(false);
   const [creatingStaff, setCreatingStaff] = useState(false);
+
+  // Deactivate / reactivate an administrator (done by the server)
+  const [confirmStatus, setConfirmStatus] = useState<'deactivate' | 'reactivate' | null>(null);
+  const [changingStatus, setChangingStatus] = useState(false);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -150,9 +151,14 @@ export default function UserManagement() {
       // TopNavBar, Analytics) — a now-removed `campus_id` field was being
       // written here instead, so editing a user's campus silently had no
       // visible effect anywhere.
+      const isAdminTarget = pendingAction.role === 'admin';
       const { error } = await supabase
         .from('users')
-        .update({ status: editStatus, campus: editCampus, is_test_account: editIsTest })
+        .update(
+          isAdminTarget
+            ? { campus: editCampus, is_test_account: editIsTest }
+            : { status: editStatus, campus: editCampus, is_test_account: editIsTest }
+        )
         .eq('id', pendingAction.id);
 
       if (error) throw error;
@@ -171,7 +177,7 @@ export default function UserManagement() {
           console.warn('Profile campus sync failed:', profileError);
         }
       }
-      logActivity({ actorEmail: authUser?.email, actorName: authUserName, action: 'update', entityType: 'user', entityId: pendingAction.id, entityLabel: targetUser?.name || targetUser?.email, details: `status: ${editStatus}, campus: ${editCampus}, test account: ${editIsTest ? 'yes' : 'no'}` });
+      logActivity({ actorEmail: authUser?.email, actorName: authUserName, action: 'update', entityType: 'user', entityId: pendingAction.id, entityLabel: targetUser?.name || targetUser?.email, details: `${isAdminTarget ? '' : `status: ${editStatus}, `}campus: ${editCampus}, test account: ${editIsTest ? 'yes' : 'no'}` });
 
       toast({
         title: "SUCCESS",
@@ -221,31 +227,21 @@ export default function UserManagement() {
     setEditingId(null);
   };
 
-  const generateStaffPassword = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
-    let generated = '';
-    for (let i = 0; i < 12; i++) {
-      generated += chars[Math.floor(Math.random() * chars.length)];
-    }
-    setStaffPassword(generated);
-    setShowStaffPassword(true);
-  };
-
   const resetStaffForm = () => {
     setStaffName('');
     setStaffEmail('');
-    setStaffPassword('');
     setStaffCampus('');
-    setStaffIsTest(false);
-    setShowStaffPassword(false);
   };
 
+  // The server creates the account and emails the person a link to set their
+  // own password. Nothing is typed or shown here, and the server writes the
+  // Activity Log entry.
   const handleCreateStaff = async () => {
-    if (!staffName.trim() || !staffEmail.trim() || staffPassword.length < 8) {
+    if (!staffName.trim() || !staffEmail.trim()) {
       toast({
         variant: "destructive",
-        title: "INCOMPLETE FORM",
-        description: "Name, email, and a password of at least 8 characters are required."
+        title: "Incomplete form",
+        description: "Enter the full name and the email address."
       });
       return;
     }
@@ -254,7 +250,7 @@ export default function UserManagement() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
-      const response = await fetch('/api/admin/create-staff', {
+      const response = await fetch('/api/admin/invite-admin', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -263,22 +259,19 @@ export default function UserManagement() {
         body: JSON.stringify({
           name: staffName.trim(),
           email: staffEmail.trim(),
-          password: staffPassword,
           campus: staffCampus || null,
-          isTestAccount: staffIsTest,
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data.message || "Failed to create staff account");
+        throw new Error(data.message || "Failed to send the invitation");
       }
-      logActivity({ actorEmail: authUser?.email, actorName: authUserName, action: 'create', entityType: 'user', entityId: data.userId, entityLabel: staffName.trim(), details: `${staffIsTest ? 'test ' : ''}admin account (${staffEmail.trim()})` });
 
       toast({
-        title: "STAFF ACCOUNT CREATED",
-        description: `${staffName.trim()} can now sign in as an admin.`,
+        title: "Invitation sent",
+        description: `${staffName.trim()} will get an email with a link to set their password.`,
         className: "bg-indigo-600 text-white font-black rounded-2xl"
       });
 
@@ -289,6 +282,38 @@ export default function UserManagement() {
       toast({ variant: "destructive", title: "Error", description: err.message });
     } finally {
       setCreatingStaff(false);
+    }
+  };
+
+  const handleAdminStatusChange = async (target: any, active: boolean) => {
+    setChangingStatus(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch('/api/admin/set-admin-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token || ''}`,
+        },
+        body: JSON.stringify({ userId: target.id, active }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || 'Could not change the account');
+
+      toast({
+        title: active ? "Account reactivated" : "Account deactivated",
+        description: active
+          ? `${target.name} can sign in again.`
+          : `${target.name} can no longer sign in.`,
+        className: "bg-slate-900 text-white font-black rounded-2xl"
+      });
+      setConfirmStatus(null);
+      setEditingId(null);
+      fetchUsers();
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Error", description: err.message });
+    } finally {
+      setChangingStatus(false);
     }
   };
 
@@ -460,12 +485,12 @@ export default function UserManagement() {
             className="h-12 rounded-2xl px-6 bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
           >
             <UserPlus className="w-4 h-4 mr-2" />
-            Add Staff Account
+            Add administrator
           </Button>
         </div>
       </div>
 
-      {/* ADD STAFF MODAL */}
+      {/* ADD ADMINISTRATOR (INVITATION) MODAL */}
       {showAddStaff && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200">
           <Card className="w-full max-w-md rounded-[2.5rem] border-none shadow-2xl bg-white overflow-hidden">
@@ -476,8 +501,8 @@ export default function UserManagement() {
                     <UserPlus className="w-6 h-6 text-indigo-600" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">Add Staff Account</h2>
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">Admin access only</p>
+                    <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">Add administrator</h2>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">They set their own password</p>
                   </div>
                 </div>
                 <button
@@ -513,7 +538,7 @@ export default function UserManagement() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-[9px] font-black uppercase tracking-wider text-slate-500 ml-1">Campus</Label>
+                  <Label className="text-[9px] font-black uppercase tracking-wider text-slate-500 ml-1">Campus (optional)</Label>
                   <Select value={staffCampus} onValueChange={setStaffCampus}>
                     <SelectTrigger className="h-12 bg-slate-50 border-none rounded-2xl font-bold">
                       <SelectValue placeholder="Assign Campus" />
@@ -526,46 +551,9 @@ export default function UserManagement() {
                   </Select>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-[9px] font-black uppercase tracking-wider text-slate-500 ml-1">Password</Label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Input
-                        type={showStaffPassword ? 'text' : 'password'}
-                        value={staffPassword}
-                        onChange={(e) => setStaffPassword(e.target.value)}
-                        placeholder="At least 8 characters"
-                        autoComplete="new-password"
-                        className="h-12 bg-slate-50 border-none rounded-2xl font-bold pr-11"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowStaffPassword(!showStaffPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600"
-                      >
-                        {showStaffPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={generateStaffPassword}
-                      className="h-12 w-12 rounded-2xl border-slate-100 shrink-0 p-0"
-                      title="Generate password"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <p className="text-[9px] text-slate-400 font-medium ml-1">
-                    Share this password with the staff member securely — it won't be shown again.
-                  </p>
-                </div>
-
-                <TestAccountToggle
-                  checked={staffIsTest}
-                  onChange={setStaffIsTest}
-                  description="Programs and surveys this account publishes won't notify or email students."
-                />
+                <p className="text-xs text-slate-500 font-medium ml-1 leading-5">
+                  We email them a link to set their own password. You won't see or type one.
+                </p>
 
                 <Button
                   onClick={handleCreateStaff}
@@ -575,10 +563,10 @@ export default function UserManagement() {
                   {creatingStaff ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Creating...
+                      Sending...
                     </>
                   ) : (
-                    'Create Admin Account'
+                    'Send invitation'
                   )}
                 </Button>
               </div>
@@ -736,6 +724,7 @@ export default function UserManagement() {
                             className="h-8 w-8 rounded-lg hover:bg-indigo-50"
                             onClick={() => {
                               setEditingId(user.id);
+                              setConfirmStatus(null);
                               setEditStatus(user.status || 'active');
                               setEditCampus(user.campus || '');
                               setEditIsTest(Boolean(user.is_test_account));
@@ -744,15 +733,17 @@ export default function UserManagement() {
                           >
                             <Pencil className="w-3.5 h-3.5 text-slate-500" />
                           </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 rounded-lg hover:bg-rose-50"
-                            onClick={() => handleDeleteAttempt(user.id, user.role)}
-                            aria-label={`Delete ${user.name}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                          </Button>
+                          {user.role !== 'admin' && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 rounded-lg hover:bg-rose-50"
+                              onClick={() => handleDeleteAttempt(user.id, user.role)}
+                              aria-label={`Delete ${user.name}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -796,16 +787,62 @@ export default function UserManagement() {
               </div>
 
               <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-[9px] font-black uppercase tracking-wider text-slate-500 ml-1">Status</Label>
-                  <Select value={editStatus} onValueChange={setEditStatus}>
-                    <SelectTrigger className="h-12 bg-slate-50 border-none rounded-2xl font-bold"><SelectValue /></SelectTrigger>
-                    <SelectContent className="rounded-2xl border-none">
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="inactive">Inactive</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {targetUser?.role === 'admin' ? (
+                  <div className="space-y-2">
+                    <Label className="text-[9px] font-black uppercase tracking-wider text-slate-500 ml-1">Status</Label>
+                    <div className="flex items-center justify-between gap-3 bg-slate-50 rounded-2xl px-4 py-3">
+                      <span className="text-sm font-bold text-slate-700">
+                        {targetUser.status === 'active' ? 'Active' : 'Inactive'}
+                      </span>
+                      {!confirmStatus && String(targetUser.id) !== String(currentDbUserId) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-9 rounded-xl text-xs font-bold"
+                          onClick={() => setConfirmStatus(targetUser.status === 'active' ? 'deactivate' : 'reactivate')}
+                        >
+                          {targetUser.status === 'active' ? 'Deactivate' : 'Reactivate'}
+                        </Button>
+                      )}
+                    </div>
+                    {String(targetUser.id) === String(currentDbUserId) && (
+                      <p className="text-xs text-slate-500 font-medium ml-1">You can't deactivate your own account.</p>
+                    )}
+                    {confirmStatus && (
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3" role="alert">
+                        <p className="text-sm font-semibold text-amber-900">
+                          {confirmStatus === 'deactivate'
+                            ? `Deactivate ${targetUser.name}? They won't be able to sign in until you reactivate the account.`
+                            : `Reactivate ${targetUser.name}? They will be able to sign in again.`}
+                        </p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <Button type="button" variant="ghost" className="h-10 rounded-xl font-bold bg-white" disabled={changingStatus} onClick={() => setConfirmStatus(null)}>
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            className="h-10 rounded-xl font-bold bg-slate-900 hover:bg-indigo-600 text-white"
+                            disabled={changingStatus}
+                            onClick={() => handleAdminStatusChange(targetUser, confirmStatus === 'reactivate')}
+                          >
+                            {changingStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : confirmStatus === 'deactivate' ? 'Deactivate' : 'Reactivate'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <Label className="text-[9px] font-black uppercase tracking-wider text-slate-500 ml-1">Status</Label>
+                    <Select value={editStatus} onValueChange={setEditStatus}>
+                      <SelectTrigger className="h-12 bg-slate-50 border-none rounded-2xl font-bold"><SelectValue /></SelectTrigger>
+                      <SelectContent className="rounded-2xl border-none">
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase tracking-wider text-slate-500 ml-1">Campus</Label>

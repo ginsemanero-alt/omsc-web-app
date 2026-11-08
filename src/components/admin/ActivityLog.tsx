@@ -63,6 +63,9 @@ const KIND_STYLE: Record<EventKind, { className: string; Icon: typeof PlusCircle
   signed_in: { className: 'bg-sky-50 text-sky-700', Icon: LogIn },
   signed_out: { className: 'bg-slate-100 text-slate-600', Icon: LogOut },
   registered: { className: 'bg-emerald-50 text-emerald-700', Icon: UserPlus },
+  invited_admin: { className: 'bg-emerald-50 text-emerald-700', Icon: UserPlus },
+  deactivated: { className: 'bg-amber-50 text-amber-700', Icon: Archive },
+  reactivated: { className: 'bg-teal-50 text-teal-700', Icon: RotateCcw },
   opened_programs: { className: 'bg-slate-100 text-slate-600', Icon: Calendar },
   consent: { className: 'bg-emerald-50 text-emerald-700', Icon: ShieldCheck },
 };
@@ -97,7 +100,7 @@ function consentUser(row: ConsentRow) {
 // words ("Archived", "Restored from Archive"...) are not repeated.
 function visibleDetail(row: LogRow, kind: EventKind): string | null {
   if (!row.details) return null;
-  if (['archived', 'restored', 'permanently_deleted', 'registered', 'created_published', 'published', 'unpublished'].includes(kind)) return null;
+  if (['archived', 'restored', 'permanently_deleted', 'registered', 'created_published', 'published', 'unpublished', 'invited_admin', 'deactivated', 'reactivated'].includes(kind)) return null;
   return row.details;
 }
 
@@ -516,7 +519,7 @@ export default function ActivityLog() {
                       {group.rows.map((item) => {
                         const { className, Icon } = KIND_STYLE[item.kind];
                         const entity = entityText(item);
-                        const noun = item.entityType && item.entityType !== 'about' ? NOUN[item.entityType] : '';
+                        const noun = item.entityType && item.entityType !== 'about' && item.kind !== 'invited_admin' ? NOUN[item.entityType] : '';
                         return (
                           <li key={item.key} className="flex items-start gap-3 px-4 md:px-5 py-1 border-t border-[#F1F2F8] first:border-t-0">
                             <span className={`w-6 h-6 mt-0 rounded-md flex items-center justify-center shrink-0 ${className}`} aria-hidden="true">

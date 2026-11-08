@@ -40,6 +40,9 @@ export type EventKind =
   | 'signed_in'
   | 'signed_out'
   | 'registered'
+  | 'invited_admin'
+  | 'deactivated'
+  | 'reactivated'
   | 'opened_programs'
   | 'consent';
 
@@ -55,6 +58,10 @@ export const NOTE_PERMANENT = 'Permanently deleted from Archive';
 export const NOTE_CREATED_PUBLISHED = 'Created and published';
 export const NOTE_PUBLISHED = 'Published';
 export const NOTE_UNPUBLISHED = 'Unpublished';
+// Written by the server (api/index.js) for administrator accounts.
+export const NOTE_INVITED = 'Invited as administrator';
+export const NOTE_DEACTIVATED = 'Deactivated';
+export const NOTE_REACTIVATED = 'Reactivated';
 
 export function eventKind(row: Pick<LogRow, 'action' | 'entity_type' | 'details'>): EventKind {
   const { action, entity_type: type, details } = row;
@@ -63,6 +70,9 @@ export function eventKind(row: Pick<LogRow, 'action' | 'entity_type' | 'details'
   if (action === 'view') return 'opened_programs';
   if (action === 'create' && type === 'user' && details === SELF_REGISTRATION) return 'registered';
   if (type === 'about') return 'about';
+  if (type === 'user' && action === 'create' && details === NOTE_INVITED) return 'invited_admin';
+  if (type === 'user' && action === 'update' && details === NOTE_DEACTIVATED) return 'deactivated';
+  if (type === 'user' && action === 'update' && details === NOTE_REACTIVATED) return 'reactivated';
   if (action === 'create') return type === 'program' && details === NOTE_CREATED_PUBLISHED ? 'created_published' : 'created';
   if (action === 'update') {
     if (type === 'program' && details === NOTE_PUBLISHED) return 'published';
@@ -90,6 +100,9 @@ export const VERB: Record<EventKind, string> = {
   signed_in: 'signed in',
   signed_out: 'signed out',
   registered: 'registered an account',
+  invited_admin: 'invited administrator',
+  deactivated: 'deactivated',
+  reactivated: 'reactivated',
   opened_programs: 'opened the Programs page',
   consent: 'agreed to the privacy notice',
 };
@@ -116,6 +129,9 @@ export const ADMIN_ACTIONS: Option[] = [
   { value: 'unpublished', label: 'Unpublished' },
   { value: 'updated', label: 'Updated' },
   { value: 'archived', label: 'Archived' },
+  { value: 'invited_admin', label: 'Invited an administrator' },
+  { value: 'deactivated', label: 'Deactivated' },
+  { value: 'reactivated', label: 'Reactivated' },
   { value: 'restored', label: 'Restored' },
   { value: 'permanently_deleted', label: 'Permanently deleted' },
   { value: 'removed_response', label: 'Removed a survey response' },
@@ -170,11 +186,17 @@ export function actionConditions(tab: LogTab, action: string): string[] {
   }
   switch (action) {
     case 'created':
-      return ['action.eq.create'];
+      return ['action.eq.create', `or(details.is.null,details.neq."${NOTE_INVITED}")`];
+    case 'invited_admin':
+      return ['action.eq.create', `details.eq."${NOTE_INVITED}"`];
+    case 'deactivated':
+      return ['action.eq.update', `details.eq."${NOTE_DEACTIVATED}"`];
+    case 'reactivated':
+      return ['action.eq.update', `details.eq."${NOTE_REACTIVATED}"`];
     case 'updated':
       return [
         'action.eq.update',
-        `or(details.is.null,and(details.neq."${NOTE_RESTORED}",details.neq."${NOTE_PUBLISHED}"))`,
+        `or(details.is.null,and(details.neq."${NOTE_RESTORED}",details.neq."${NOTE_PUBLISHED}",details.neq."${NOTE_DEACTIVATED}",details.neq."${NOTE_REACTIVATED}"))`,
       ];
     case 'published':
       return ['action.eq.update', `details.eq."${NOTE_PUBLISHED}"`, 'entity_type.eq.program'];
