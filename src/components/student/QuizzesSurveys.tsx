@@ -859,13 +859,13 @@ export default function QuizzesSurveys() {
                 </p>
 
                 <p className="m-0 mt-2 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-                  <span className="font-black uppercase text-[9px] tracking-wider text-slate-400 mr-1.5">{t('Your answer')}</span>
+                  <span className="font-black text-xs text-slate-400 mr-1.5">{t('Your answer')}</span>
                   {answerText(item.student_answer)}
                 </p>
 
                 {status !== 'unscored' && (
                   <p
-                    className={`m-0 mt-1 text-xs font-black uppercase tracking-wider ${
+                    className={`m-0 mt-1 text-xs font-black ${
                       status === 'correct' ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'
                     }`}
                   >
@@ -874,12 +874,12 @@ export default function QuizzesSurveys() {
                 )}
 
                 {status === 'incorrect' && (item.related_program_id || item.related_material_id) && (
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-col sm:flex-row sm:flex-wrap gap-2 min-w-0">
                     {item.related_program_id && programTitles[item.related_program_id] && (
                       <Button
                         onClick={() => navigate(`/student/programs?program=${item.related_program_id}`)}
                         variant="outline"
-                        className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
+                        className="min-h-[44px] h-auto max-w-full py-2 rounded-xl text-xs font-black gap-1.5 whitespace-normal text-left justify-start [&>span]:min-w-0"
                       >
                         <Calendar className="w-3.5 h-3.5" />
                         {programTitles[item.related_program_id]}
@@ -891,7 +891,7 @@ export default function QuizzesSurveys() {
                       <Button
                         onClick={() => navigate('/student/materials')}
                         variant="outline"
-                        className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
+                        className="min-h-[44px] h-auto max-w-full py-2 rounded-xl text-xs font-black gap-1.5 whitespace-normal text-left justify-start [&>span]:min-w-0"
                       >
                         <BookOpen className="w-3.5 h-3.5" />
                         {materialTitles[item.related_material_id]}
@@ -1010,10 +1010,10 @@ export default function QuizzesSurveys() {
           </div>
 
           <div className="flex justify-between mt-3 px-1">
-            <span className="text-[10px] sm:text-xs font-bold text-slate-400">
+            <span className="text-xs sm:text-xs font-bold text-slate-400">
               {t('Lowest')}
             </span>
-            <span className="text-[10px] sm:text-xs font-bold text-slate-400">
+            <span className="text-xs sm:text-xs font-bold text-slate-400">
               {t('Highest')}
             </span>
           </div>
@@ -1179,7 +1179,7 @@ export default function QuizzesSurveys() {
         <div className="flex flex-col items-center text-center">
           <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
 
-          <p className="mt-4 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
+          <p className="mt-4 text-xs font-black text-slate-400">
             {t('Loading assessments')}
           </p>
         </div>
@@ -1197,7 +1197,7 @@ export default function QuizzesSurveys() {
       {/* HEADER */}
       <div className="mb-8 sm:mb-10">
         <div className="flex flex-col gap-2">
-          <p className="text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] text-indigo-600">
+          <p className="text-xs sm:text-xs font-black text-indigo-600">
             {t('Student portal')}
           </p>
 
@@ -1216,7 +1216,7 @@ export default function QuizzesSurveys() {
         <button
           type="button"
           onClick={() => setView('available')}
-          className={`h-10 px-5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+          className={`min-h-[44px] px-4 sm:px-5 rounded-xl text-sm font-bold transition-all ${
             view === 'available'
               ? 'bg-indigo-600 text-white shadow-md'
               : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
@@ -1227,7 +1227,7 @@ export default function QuizzesSurveys() {
         <button
           type="button"
           onClick={() => setView('results')}
-          className={`h-10 px-5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+          className={`min-h-[44px] px-4 sm:px-5 rounded-xl text-sm font-bold transition-all ${
             view === 'results'
               ? 'bg-indigo-600 text-white shadow-md'
               : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
@@ -1243,7 +1243,7 @@ export default function QuizzesSurveys() {
           <div className="min-h-[40vh] flex items-center justify-center px-4">
             <div className="flex flex-col items-center text-center">
               <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
-              <p className="mt-4 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
+              <p className="mt-4 text-xs font-black text-slate-400">
                 {t('Loading your results')}
               </p>
             </div>
@@ -1258,7 +1258,7 @@ export default function QuizzesSurveys() {
             </p>
             <Button
               onClick={fetchMyResults}
-              className="mt-5 h-11 px-8 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
+              className="mt-5 h-11 px-8 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-black text-xs"
             >
               {t('Try again')}
             </Button>
@@ -1278,67 +1278,72 @@ export default function QuizzesSurveys() {
             {results.map((result) => (
               <div key={result.id} className="space-y-3">
               <Card
-                className="p-5 sm:p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 flex items-center gap-4"
+                className="p-4 sm:p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 min-w-0 overflow-hidden"
               >
-                <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
-                  <FileCheck2 className="w-6 h-6 text-indigo-600" />
-                </div>
+                {/* Phone: icon + title/badges on top, then the score, then the comparison on its own row. */}
+                <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0 sm:flex-1">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-indigo-50 flex items-center justify-center shrink-0">
+                    <FileCheck2 className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" />
+                  </div>
 
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white truncate">
-                    {result.title}
-                  </h3>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-                    {result.attempt_type && (
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                          result.attempt_type === 'pre'
-                            ? 'bg-cyan-50 text-cyan-700'
-                            : 'bg-indigo-50 text-indigo-600'
-                        }`}
-                      >
-                        {ATTEMPT_LABEL[result.attempt_type]}
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white break-words [overflow-wrap:anywhere]">
+                      {result.title}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 min-w-0">
+                      {result.attempt_type && (
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            result.attempt_type === 'pre'
+                              ? 'bg-cyan-50 text-cyan-700'
+                              : 'bg-indigo-50 text-indigo-600'
+                          }`}
+                        >
+                          {ATTEMPT_LABEL[result.attempt_type]}
+                        </span>
+                      )}
+                      {result.category && (
+                        <span className="text-xs font-bold text-violet-600 break-words min-w-0">
+                          {result.category}
+                        </span>
+                      )}
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500">
+                        <Clock className="w-3 h-3" />
+                        {new Date(result.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
                       </span>
-                    )}
-                    {result.category && (
-                      <span className="text-[10px] font-black uppercase tracking-wider text-violet-500">
-                        {result.category}
-                      </span>
-                    )}
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400">
-                      <Clock className="w-3 h-3" />
-                      {new Date(result.created_at).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
-                    </span>
+                    </div>
                   </div>
                 </div>
 
                 {result.percentage !== null && result.percentage !== undefined ? (
-                  <div className="text-center shrink-0">
-                    <p
-                      className={`text-xl font-black ${
-                        result.attempt_type === 'pre'
-                          ? 'text-indigo-600 dark:text-indigo-300'
-                          : isPassingPct(result.percentage)
-                            ? 'text-emerald-600'
-                            : 'text-amber-600'
-                      }`}
-                    >
-                      {result.percentage}%
-                    </p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                      {result.score}/{result.total_scored} {t('Correct')}
-                    </p>
+                  <div className="min-w-0 sm:text-center sm:shrink-0 sm:max-w-[14rem]">
+                    <div className="flex items-baseline gap-2 sm:block">
+                      <p
+                        className={`m-0 text-2xl sm:text-xl font-black ${
+                          result.attempt_type === 'pre'
+                            ? 'text-indigo-600 dark:text-indigo-300'
+                            : isPassingPct(result.percentage)
+                              ? 'text-emerald-600'
+                              : 'text-amber-600'
+                        }`}
+                      >
+                        {result.percentage}%
+                      </p>
+                      <p className="m-0 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        {result.score}/{result.total_scored} {t('Correct')}
+                      </p>
+                    </div>
                     {result.attempt_type === 'pre' && (
-                      <p className="mt-1 max-w-[12rem] text-xs text-slate-500 dark:text-slate-400">
+                      <p className="mt-1 mb-0 sm:max-w-[12rem] text-xs text-slate-500 dark:text-slate-400 break-words">
                         {tr(PRE_TEST_PRIVACY_NOTE)}
                       </p>
                     )}
                     {result.attempt_type === 'post' && preTestComparison(result.survey_id) && (
-                      <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      <p className="mt-1 mb-0 text-xs font-semibold text-slate-600 dark:text-slate-300 break-words whitespace-normal">
                         {preTestComparison(result.survey_id)}
                       </p>
                     )}
@@ -1347,7 +1352,7 @@ export default function QuizzesSurveys() {
                         type="button"
                         onClick={() => toggleReview(result.survey_id)}
                         aria-expanded={openReviewId === String(result.survey_id)}
-                        className="mt-1 min-h-[44px] px-2 inline-flex items-center gap-1.5 rounded-lg text-sm font-bold text-indigo-700 dark:text-indigo-300 hover:underline focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
+                        className="mt-1 min-h-[44px] px-2 -ml-2 sm:ml-0 inline-flex items-center gap-1.5 rounded-lg text-sm font-bold text-indigo-700 dark:text-indigo-300 hover:underline focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]"
                       >
                         {reviewLoadingId === String(result.survey_id) && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
                         {openReviewId === String(result.survey_id) ? t('Hide review') : t('Review answers')}
@@ -1355,7 +1360,7 @@ export default function QuizzesSurveys() {
                     )}
                   </div>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-wider shrink-0">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-700 text-xs font-bold shrink-0 self-start">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     {t('Submitted')}
                   </span>
@@ -1411,7 +1416,7 @@ export default function QuizzesSurveys() {
 
               <Button
                 onClick={fetchActiveSurveys}
-                className="mt-5 h-11 px-8 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest"
+                className="mt-5 h-11 px-8 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-black text-xs"
               >
                 {t('Try again')}
               </Button>
@@ -1462,8 +1467,8 @@ export default function QuizzesSurveys() {
                           inline-flex items-center gap-1.5
                           px-3 py-1.5
                           rounded-full
-                          text-[9px] sm:text-[10px]
-                          font-black uppercase tracking-wider
+                          text-xs
+                          font-bold
                           ${
                             survey.is_completed
                               ? 'bg-emerald-50 text-emerald-600'
@@ -1489,8 +1494,8 @@ export default function QuizzesSurveys() {
                       <span
                         className={`
                           px-3 py-1 rounded-full
-                          text-[8px] sm:text-[9px]
-                          font-black uppercase tracking-wider
+                          text-xs
+                          font-bold
                           ${
                             survey.type === 'knowledge'
                               ? 'bg-purple-50 text-purple-600'
@@ -1529,9 +1534,9 @@ export default function QuizzesSurveys() {
                     className={`
                       mt-7 w-full h-12 sm:h-14
                       rounded-2xl
-                      font-black uppercase
-                      text-[10px] sm:text-xs
-                      tracking-widest
+                      font-black
+                      text-xs sm:text-xs
+                     
                       ${
                         survey.is_completed || survey.post_test_lock
                           ? 'bg-slate-100 dark:bg-slate-800 text-slate-400'
@@ -1597,7 +1602,7 @@ export default function QuizzesSurveys() {
           <div className="p-4 sm:p-6 lg:p-8 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">
+                <p className="text-xs sm:text-xs font-black text-indigo-600">
                   {t('Assessment')}
                 </p>
 
@@ -1631,11 +1636,11 @@ export default function QuizzesSurveys() {
             {!showInstructions && !showReview && !scoreSummary && (
               <div className="mt-6">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <span className="text-xs sm:text-xs font-black text-slate-500 dark:text-slate-400">
                     {t('Question {n} of {total}', { n: currentQuestionIndex + 1, total: totalQuestions })}
                   </span>
 
-                  <span className="text-[10px] sm:text-xs font-black text-indigo-600">
+                  <span className="text-xs sm:text-xs font-black text-indigo-600">
                     {Math.round(progressPercentage)}%
                   </span>
                 </div>
@@ -1663,7 +1668,7 @@ export default function QuizzesSurveys() {
                   <ClipboardList className="w-7 h-7 sm:w-8 sm:h-8 text-indigo-600" />
                 </div>
 
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-2">
+                <p className="text-xs font-black text-indigo-600 mb-2">
                   {activeSurvey?.next_attempt
                     ? (activeSurvey.next_attempt === 'pre' ? t('Pre-test · Before you begin') : t('Post-test · Before you begin'))
                     : t('Before you begin')}
@@ -1712,9 +1717,9 @@ export default function QuizzesSurveys() {
                     rounded-2xl
                     bg-indigo-600 hover:bg-indigo-700
                     text-white
-                    font-black uppercase
-                    text-[10px] sm:text-xs
-                    tracking-widest
+                    font-black
+                    text-xs sm:text-xs
+                   
                   "
                 >
                   {t('Begin assessment')}
@@ -1745,7 +1750,7 @@ export default function QuizzesSurveys() {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">
+                    <p className="text-xs sm:text-xs font-black text-slate-400 mb-2">
                       {t('Question')} {currentQuestionIndex + 1}
                     </p>
 
@@ -1777,9 +1782,9 @@ export default function QuizzesSurveys() {
                       h-12 sm:h-14
                       px-5 sm:px-7
                       rounded-2xl
-                      font-black uppercase
-                      text-[10px]
-                      tracking-wider
+                      font-black
+                      text-xs
+                     
                       disabled:opacity-40
                     "
                   >
@@ -1796,9 +1801,9 @@ export default function QuizzesSurveys() {
                       bg-slate-900
                       hover:bg-indigo-600
                       text-white
-                      font-black uppercase
-                      text-[10px] sm:text-xs
-                      tracking-widest
+                      font-black
+                      text-xs sm:text-xs
+                     
                     "
                   >
                     {currentQuestionIndex === totalQuestions - 1
@@ -1821,7 +1826,7 @@ export default function QuizzesSurveys() {
                     <Eye className="w-7 h-7 sm:w-8 sm:h-8 text-indigo-600" />
                   </div>
 
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">
+                  <p className="text-xs font-black text-indigo-600">
                     {t('Final review')}
                   </p>
 
@@ -1890,9 +1895,9 @@ export default function QuizzesSurveys() {
                             type="button"
                             onClick={() => handleEditQuestion(index)}
                             className="
-                              text-[9px] sm:text-[10px]
-                              font-black uppercase
-                              tracking-wider
+                              text-xs sm:text-xs
+                              font-black
+                             
                               text-indigo-600
                               hover:text-indigo-800
                               shrink-0
@@ -1933,9 +1938,9 @@ export default function QuizzesSurveys() {
                     className="
                       h-12 sm:h-14
                       rounded-2xl
-                      font-black uppercase
-                      text-[10px]
-                      tracking-wider
+                      font-black
+                      text-xs
+                     
                     "
                   >
                     <ChevronLeft className="w-4 h-4 mr-2" />
@@ -1952,9 +1957,9 @@ export default function QuizzesSurveys() {
                       bg-indigo-600
                       hover:bg-indigo-700
                       text-white
-                      font-black uppercase
-                      text-[10px] sm:text-xs
-                      tracking-widest
+                      font-black
+                      text-xs sm:text-xs
+                     
                       disabled:bg-slate-200 dark:bg-slate-700
                       disabled:text-slate-400
                     "
@@ -1994,7 +1999,7 @@ export default function QuizzesSurveys() {
                         )}
                       </div>
 
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-2">
+                      <p className="text-xs font-black text-indigo-600 mb-2">
                         {submittedAttempt ? (submittedAttempt === 'pre' ? t('Pre-test complete') : t('Post-test complete')) : t('Assessment complete')}
                       </p>
 
@@ -2029,7 +2034,7 @@ export default function QuizzesSurveys() {
                     materials, then back here for the post-test. */}
                 {submittedAttempt === 'pre' && (
                   <div className="mt-8 p-5 sm:p-6 rounded-2xl bg-indigo-50 border border-indigo-100">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">
+                    <p className="text-xs font-black text-indigo-600">
                       {t('Next step')}
                     </p>
                     <p className="mt-2 text-sm sm:text-base font-semibold text-slate-700 leading-relaxed">
@@ -2039,7 +2044,7 @@ export default function QuizzesSurveys() {
                       <Button
                         onClick={() => navigate('/student/materials')}
                         variant="outline"
-                        className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
+                        className="min-h-[44px] h-auto max-w-full py-2 rounded-xl text-xs font-black gap-1.5 whitespace-normal text-left justify-start [&>span]:min-w-0"
                       >
                         <BookOpen className="w-3.5 h-3.5" />
                         {t('IEC materials')}
@@ -2048,7 +2053,7 @@ export default function QuizzesSurveys() {
                       <Button
                         onClick={() => navigate('/student/programs')}
                         variant="outline"
-                        className="h-9 rounded-xl text-[10px] font-black uppercase tracking-wider gap-1.5"
+                        className="min-h-[44px] h-auto max-w-full py-2 rounded-xl text-xs font-black gap-1.5 whitespace-normal text-left justify-start [&>span]:min-w-0"
                       >
                         <Calendar className="w-3.5 h-3.5" />
                         {t('Programs')}
@@ -2062,7 +2067,7 @@ export default function QuizzesSurveys() {
 
                 <Button
                   onClick={handleCloseSurvey}
-                  className="mt-8 w-full h-12 sm:h-14 rounded-2xl bg-slate-900 hover:bg-indigo-600 text-white font-black uppercase text-[10px] sm:text-xs tracking-widest"
+                  className="mt-8 w-full h-12 sm:h-14 rounded-2xl bg-slate-900 hover:bg-indigo-600 text-white font-black text-xs sm:text-xs"
                 >
                   {t('Done')}
                 </Button>
@@ -2126,9 +2131,9 @@ export default function QuizzesSurveys() {
                   h-12
                   rounded-2xl
                   bg-slate-50 dark:bg-slate-800
-                  font-black uppercase
-                  text-[10px]
-                  tracking-wider
+                  font-black
+                  text-xs
+                 
                 "
               >
                 <RotateCcw className="w-4 h-4 mr-2" />
@@ -2145,9 +2150,9 @@ export default function QuizzesSurveys() {
                   bg-indigo-600
                   hover:bg-indigo-700
                   text-white
-                  font-black uppercase
-                  text-[10px]
-                  tracking-wider
+                  font-black
+                  text-xs
+                 
                 "
               >
                 {submitting ? (
