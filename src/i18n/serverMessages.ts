@@ -17,6 +17,7 @@ const KNOWN = new Set([
   'Sign in with a student account.',
   'Sign in with a student account to take assessments.',
   'Sign in with a student account to submit.',
+  'Complete your profile before taking an assessment.',
 ]);
 
 const LOCK_PREFIX = /^Post-test locked:\s*/;

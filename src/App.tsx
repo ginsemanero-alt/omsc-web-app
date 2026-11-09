@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from './hooks/useAuth';
 import { LanguageProvider } from './i18n';
 import ProtectedRoute from './components/ProtectedRoute';
 import ConsentGate from './components/ConsentGate';
+import ProfileGate from './components/ProfileGate';
 
 // Layout
 import Layout from "./components/layout/Layout";
@@ -132,7 +133,9 @@ function AppContent() {
             element={
               <ProtectedRoute role="student">
                 <ConsentGate onSignOut={handleLogout}>
-                  <StudentDashboard onLogout={handleLogout} />
+                  <ProfileGate onSignOut={handleLogout}>
+                    <StudentDashboard onLogout={handleLogout} />
+                  </ProfileGate>
                 </ConsentGate>
               </ProtectedRoute>
             }
