@@ -228,7 +228,9 @@ export default function ActivityLog() {
 
       // ---- do the records an admin row mentions still exist? (for links)
       const lookups: Record<string, Found> = {};
-      if (tab === 'admin') {
+      // Both tabs: student sign-in / sign-out rows point at a user record too,
+      // and without this lookup every one of them was labelled "(deleted)".
+      {
         const ids: Record<'program' | 'material' | 'survey' | 'user', Set<string>> = {
           program: new Set(),
           material: new Set(),
