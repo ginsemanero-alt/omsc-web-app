@@ -663,6 +663,7 @@ export default function AnalyticsDashboard() {
         userBridgeResult,
         materialViewLogsResult,
         programMaterialsResult,
+        profileLinksResult,
       ] = await Promise.all([
         supabase.from("profiles").select("*"),
 
@@ -715,6 +716,11 @@ export default function AnalyticsDashboard() {
 
         // PHASE 41: which IEC materials are linked to which program.
         supabase.from("program_materials").select("program_id, material_id"),
+
+        // PHASE 52: which profile each users row belongs to, found by the
+        // sign-in (auth) id, not the student ID. If this fails (the SQL not
+        // run yet, a network error) the page falls back to the old matching.
+        supabase.rpc("admin_user_profile_links"),
       ]);
 
       if (profilesResult.error) {
@@ -745,7 +751,45 @@ export default function AnalyticsDashboard() {
         console.error("Material view logs:", materialViewLogsResult.error);
       }
 
-      setProfiles((profilesResult.data || []) as Profile[]);
+      // PHASE 52: one student, one identity. Every panel below keys students
+      // by profiles.student_id, but nine students have a different student ID
+      // in `users`, so they were counted twice and fell out of the filters.
+      // Where the sign-in id links a users row to a profile, that profile's
+      // student ID is used for the row. A profile no users row points to
+      // (it is not on the Users page) is left out of the counts.
+      const profileLinks = profileLinksResult.error
+        ? null
+        : ((profileLinksResult.data || []) as {
+            link_user_id: number | string;
+            link_profile_id: string | null;
+            link_student_id: string | null;
+          }[]);
+      if (profileLinksResult.error) {
+        console.error("Profile links:", profileLinksResult.error);
+      }
+      const studentIdByUserId = new Map<string, string>();
+      const linkedProfileIds = new Set<string>();
+      // The bridge already holds only live accounts (archived ones left out,
+      // anonymized ones kept), so an archived student's profile drops out
+      // here too, matching the Users page.
+      const liveUserIds = new Set(
+        ((userBridgeResult.data || []) as UserBridge[]).map((user) => String(user.id))
+      );
+      (profileLinks || []).forEach((link) => {
+        if (link.link_profile_id && liveUserIds.has(String(link.link_user_id))) {
+          linkedProfileIds.add(link.link_profile_id);
+        }
+        if (link.link_student_id) {
+          studentIdByUserId.set(String(link.link_user_id), link.link_student_id);
+        }
+      });
+      const allProfiles = (profilesResult.data || []) as Profile[];
+
+      setProfiles(
+        profileLinks
+          ? allProfiles.filter((profile) => linkedProfileIds.has(String(profile.id)))
+          : allProfiles
+      );
       setPrograms((programsResult.data || []) as GuidanceProgram[]);
       // The forms (item analysis needs the answer keys) come from
       // admin_survey_forms(): the columns aren't readable directly.
@@ -778,7 +822,12 @@ export default function AnalyticsDashboard() {
       );
 
       setMaterials((materialsResult.data || []) as Material[]);
-      setUserBridge((userBridgeResult.data || []) as UserBridge[]);
+      setUserBridge(
+        ((userBridgeResult.data || []) as UserBridge[]).map((user) => ({
+          ...user,
+          student_id: studentIdByUserId.get(String(user.id)) || user.student_id,
+        }))
+      );
       setMaterialViewLogs((materialViewLogsResult.data || []) as MaterialViewLog[]);
       setProgramMaterialLinks((programMaterialsResult.data || []) as { program_id: number | string; material_id: number | string }[]);
     } catch (error) {
