@@ -42,3 +42,11 @@ admin-design-reference/
 # One-time material migration backups (full originals): never commit
 scripts/_material-backup*/
 i18n-review/
+
+# Spreadsheets / CSV exports can hold student data: never commit them.
+# (Student lists live outside the repo in C:\dev\omsc-data\ and C:\dev\omsc-exports\.)
+*.xlsx
+*.xls
+*.csv
+omsc-data/
+omsc-exports/
