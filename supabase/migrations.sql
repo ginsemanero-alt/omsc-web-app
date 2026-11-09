@@ -5228,3 +5228,386 @@ SELECT policyname, cmd, roles FROM public.storage_policy_backup_phase51 ORDER BY
 -- COMMIT;
 -- NOTIFY pgrst, 'reload schema';
 -- (afterwards, once you are sure nothing needs it:  DROP TABLE public.storage_policy_backup_phase51;)
+
+-- =========================================================
+-- PHASE 52: one student, one identity in the Analytics dashboard
+-- ---------------------------------------------------------
+-- The dashboard matched survey responses to profiles through the student ID.
+-- Nine students have a different student ID in `users` than in `profiles`,
+-- so each was counted twice ("Students covered" 43 instead of 34) and their
+-- answers were missing from the demographic filters.
+-- This admin-only function returns, for every users row, the profile it
+-- belongs to, found the same way learning_gain_summary and
+-- material_reach_summary already do: by the sign-in (auth) id first, the
+-- student ID only as a fallback. Read-only; it changes no data.
+-- learning_gain_summary and material_reach_summary need no change.
+-- =========================================================
+
+CREATE OR REPLACE FUNCTION admin_user_profile_links()
+RETURNS TABLE (link_user_id bigint, link_profile_id uuid, link_student_id text)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+  IF NOT is_admin() THEN
+    RAISE EXCEPTION 'Only admins can view this' USING ERRCODE = '42501';
+  END IF;
+
+  RETURN QUERY
+  SELECT u.id::bigint, prof.id, prof.student_id::text
+    FROM users u
+    LEFT JOIN auth.users au ON lower(au.email) = lower(u.email)
+    LEFT JOIN LATERAL (
+      SELECT p.id, p.student_id
+        FROM profiles p
+       WHERE p.id = au.id
+          OR (u.student_id IS NOT NULL AND p.student_id = u.student_id)
+       ORDER BY (p.id = au.id) DESC NULLS LAST
+       LIMIT 1
+    ) prof ON true;
+END $$;
+
+REVOKE ALL ON FUNCTION admin_user_profile_links() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION admin_user_profile_links() TO authenticated;
+NOTIFY pgrst, 'reload schema';
+
+-- CHECKS (run after the block above; a signed-in admin session is needed for the
+-- function itself, so in the SQL editor check these two instead):
+-- 1) the function exists and anon cannot run it (expect: authenticated only, no anon/PUBLIC)
+-- SELECT has_function_privilege('anon', 'admin_user_profile_links()', 'EXECUTE') AS anon_can_run,
+--        has_function_privilege('authenticated', 'admin_user_profile_links()', 'EXECUTE') AS authenticated_can_run;
+-- 2) how many real students would be matched by sign-in id but NOT by student ID (expect 9)
+-- SELECT count(*) FROM users u
+--   JOIN auth.users au ON lower(au.email) = lower(u.email)
+--   JOIN profiles p ON p.id = au.id
+--  WHERE u.role = 'student' AND NOT u.is_test_account
+--    AND (u.student_id IS NULL OR p.student_id <> u.student_id);
+
+-- ROLLBACK (commented):
+-- DROP FUNCTION IF EXISTS admin_user_profile_links();
+-- NOTIFY pgrst, 'reload schema';
+
+-- =========================================================
+-- PHASE 53: quarantine the non-genuine survey responses
+-- ---------------------------------------------------------
+-- 282 survey_responses rows have created_at exactly 2026-10-28 08:00:00+00
+-- (all other rows carry microseconds). They were written outside the app:
+-- the app's only write path, submit_assessment(), never sets created_at,
+-- 138 of their 145 post-tests break the "open every linked material first"
+-- lock, and 8 of the accounts behind them never signed in.
+-- They are COPIED to survey_responses_quarantine (admin-readable only, with a
+-- reason) and then DELETED from survey_responses, in one transaction that
+-- aborts unless exactly 282 rows are involved. The Analytics dashboard and
+-- the learning-gain functions then see only genuine responses.
+-- Nothing is lost: the rollback below puts every row back.
+-- =========================================================
+
+-- STEP 1 ------------------------------------------------------------------
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS survey_responses_quarantine (
+  id             uuid        PRIMARY KEY,
+  created_at     timestamptz,
+  user_id        bigint,
+  survey_id      uuid,
+  answers        jsonb,
+  score          integer,
+  total_scored   integer,
+  percentage     numeric,
+  attempt_type   text,
+  quarantined_at timestamptz NOT NULL DEFAULT now(),
+  reason         text        NOT NULL
+);
+-- (no foreign keys on purpose: removing a user later must not touch the evidence)
+
+ALTER TABLE survey_responses_quarantine ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON survey_responses_quarantine FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON survey_responses_quarantine TO authenticated;
+DROP POLICY IF EXISTS survey_responses_quarantine_select_admin ON survey_responses_quarantine;
+CREATE POLICY survey_responses_quarantine_select_admin ON survey_responses_quarantine
+  FOR SELECT TO authenticated USING (is_admin());
+
+DO $do$
+DECLARE
+  v_found   integer;
+  v_pre     integer;
+  v_post    integer;
+  v_copied  integer;
+  v_deleted integer;
+BEGIN
+  SELECT count(*), count(*) FILTER (WHERE attempt_type = 'pre'), count(*) FILTER (WHERE attempt_type = 'post')
+    INTO v_found, v_pre, v_post
+    FROM survey_responses
+   WHERE created_at = timestamptz '2026-10-28 08:00:00+00';
+  IF v_found <> 282 THEN
+    RAISE EXCEPTION 'Expected 282 rows stamped 2026-10-28 08:00:00+00, found %. Nothing was changed.', v_found;
+  END IF;
+
+  INSERT INTO survey_responses_quarantine
+         (id, created_at, user_id, survey_id, answers, score, total_scored, percentage, attempt_type, reason)
+  SELECT  id, created_at, user_id, survey_id, answers, score, total_scored, percentage, attempt_type,
+          'Not genuine: written outside the app (created_at fixed at 2026-10-28 08:00:00 UTC; bypasses the post-test lock; accounts that never signed in)'
+    FROM survey_responses
+   WHERE created_at = timestamptz '2026-10-28 08:00:00+00';
+  GET DIAGNOSTICS v_copied = ROW_COUNT;
+
+  DELETE FROM survey_responses r
+   USING survey_responses_quarantine q
+   WHERE q.id = r.id;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+
+  IF v_copied <> 282 OR v_deleted <> 282 THEN
+    RAISE EXCEPTION 'Copied %, deleted % (expected 282 each). Rolled back.', v_copied, v_deleted;
+  END IF;
+
+  -- Activity Log note, counts only
+  INSERT INTO activity_logs (actor_email, actor_name, action, entity_type, entity_label, details)
+  VALUES ('System', 'System', 'delete', 'survey', 'Survey responses',
+          format('Removed non-genuine responses written outside the app (timestamp 2026-10-28 08:00 UTC): %s moved to quarantine (%s pre-test, %s post-test)',
+                 v_found, v_pre, v_post));
+END
+$do$;
+
+COMMIT;
+NOTIFY pgrst, 'reload schema';
+
+-- CHECKS (run after STEP 1) ------------------------------------------------
+-- 1) expect 28 left, 0 at the fake timestamp, 282 in quarantine
+-- SELECT (SELECT count(*) FROM survey_responses) AS responses_left,
+--        (SELECT count(*) FROM survey_responses WHERE created_at = timestamptz '2026-10-28 08:00:00+00') AS still_fake,
+--        (SELECT count(*) FROM survey_responses_quarantine) AS quarantined;
+-- 2) what is left, by program and attempt (expect only program 78: 18 pre, 10 post)
+-- SELECT s.program_id, r.attempt_type, count(*)
+--   FROM survey_responses r JOIN surveys s ON s.id = r.survey_id GROUP BY 1, 2 ORDER BY 1, 2;
+-- 3) the table is closed to the public (expect false, true)
+-- SELECT has_table_privilege('anon', 'survey_responses_quarantine', 'SELECT') AS anon_can_read,
+--        has_table_privilege('authenticated', 'survey_responses_quarantine', 'SELECT') AS authenticated_has_select_but_rls_limits_to_admin;
+
+-- ROLLBACK (commented): puts every quarantined row back exactly as it was ----
+-- The set_attempt_type trigger would re-decide pre/post on insert, so it is
+-- switched off for the restore only.
+-- BEGIN;
+-- ALTER TABLE survey_responses DISABLE TRIGGER survey_responses_set_attempt_type;
+-- INSERT INTO survey_responses (id, created_at, user_id, survey_id, answers, score, total_scored, percentage, attempt_type)
+-- SELECT id, created_at, user_id, survey_id, answers, score, total_scored, percentage, attempt_type
+--   FROM survey_responses_quarantine
+--  WHERE created_at = timestamptz '2026-10-28 08:00:00+00';
+-- ALTER TABLE survey_responses ENABLE TRIGGER survey_responses_set_attempt_type;
+-- DELETE FROM survey_responses_quarantine WHERE created_at = timestamptz '2026-10-28 08:00:00+00';
+-- COMMIT;
+-- (the Activity Log note stays: it is a record that the quarantine happened and was undone)
+-- (to remove the table entirely once nothing needs it:  DROP TABLE survey_responses_quarantine;)
+
+-- =========================================================
+-- PHASE 54: admin-provisioned accounts + required profile step
+-- ---------------------------------------------------------
+-- 1. users.provisioned_batch / provisioned_at mark accounts an administrator
+--    created. They are written only by the server key: users_guard already
+--    stops every browser session from changing any column except the four
+--    admin ones, including columns added later.
+-- 2. profiles.is_pwd / is_ip / gender / age may be empty ("not answered yet").
+--    A provisioned student leaves them empty and answers at first sign-in.
+--    Column defaults are NOT changed, so registration is untouched.
+-- 3. my_profile_is_complete(): true only when gender, age, PWD and IP have all
+--    been answered. The app shows a required "Complete your profile" screen
+--    (ProfileGate) until it is true, and submit_assessment() refuses to record
+--    an answer before that, so the API cannot be used to skip the screen.
+--    Every current profile (34 of 34) is already complete, so nobody who is
+--    signed up today is affected.
+-- Nothing in existing data is changed.
+-- =========================================================
+
+-- STEP 0 (read-only, run first and keep the output: it is what the rollback restores)
+-- SELECT table_name, column_name, is_nullable, column_default
+--   FROM information_schema.columns
+--  WHERE table_schema = 'public'
+--    AND ((table_name = 'profiles' AND column_name IN ('gender', 'age', 'is_pwd', 'is_ip'))
+--      OR (table_name = 'users'    AND column_name IN ('provisioned_batch', 'provisioned_at')))
+--  ORDER BY table_name, column_name;
+
+-- STEP 1 ------------------------------------------------------------------
+BEGIN;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS provisioned_batch text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS provisioned_at    timestamptz;
+
+-- harmless if they are already nullable
+ALTER TABLE profiles ALTER COLUMN gender DROP NOT NULL;
+ALTER TABLE profiles ALTER COLUMN age    DROP NOT NULL;
+ALTER TABLE profiles ALTER COLUMN is_pwd DROP NOT NULL;
+ALTER TABLE profiles ALTER COLUMN is_ip  DROP NOT NULL;
+
+CREATE OR REPLACE FUNCTION my_profile_is_complete() RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT COALESCE((
+    SELECT p.gender IS NOT NULL AND btrim(p.gender) <> ''
+       AND p.age IS NOT NULL
+       AND p.is_pwd IS NOT NULL
+       AND p.is_ip  IS NOT NULL
+      FROM profiles p
+     WHERE p.id = auth.uid()
+  ), false)
+$$;
+
+REVOKE ALL ON FUNCTION my_profile_is_complete() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION my_profile_is_complete() TO authenticated;
+
+-- submit_assessment: identical to the PHASE 34 version except the one new check
+CREATE OR REPLACE FUNCTION submit_assessment(p_survey_id uuid, p_answers jsonb) RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_user bigint := current_student_id();
+  v_survey surveys;
+  v_attempt text;
+  v_form text;
+  v_questions jsonb;
+  v_lock text;
+  v_score integer;
+  v_total integer;
+  v_percentage numeric;
+  v_row survey_responses;
+BEGIN
+  IF v_user IS NULL THEN
+    RAISE EXCEPTION 'Sign in with a student account to submit.' USING ERRCODE = '42501';
+  END IF;
+  IF NOT my_profile_is_complete() THEN
+    RAISE EXCEPTION 'Complete your profile before taking an assessment.' USING ERRCODE = '42501';
+  END IF;
+  IF p_answers IS NULL OR jsonb_typeof(p_answers) <> 'object' THEN
+    RAISE EXCEPTION 'Answers must be an object keyed by question id.' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT * INTO v_survey FROM surveys
+   WHERE id = p_survey_id AND status = 'active' AND archived_at IS NULL;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'This assessment is not open.' USING ERRCODE = 'P0002';
+  END IF;
+
+  v_attempt := next_attempt_for(v_user, v_survey);
+  IF v_attempt IS NULL THEN
+    RAISE EXCEPTION 'You have already submitted this assessment.' USING ERRCODE = '23505';
+  END IF;
+
+  IF v_attempt = 'post' THEN
+    v_lock := post_test_lock_reason(v_user, v_survey.program_id);
+    IF v_lock IS NOT NULL THEN
+      RAISE EXCEPTION 'Post-test locked: %', v_lock USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  IF v_survey.type = 'knowledge' THEN
+    v_form := assessment_form_for(v_survey, v_attempt);
+    v_questions := CASE WHEN v_form = 'B' THEN v_survey.questions_data_post ELSE v_survey.questions_data END;
+
+    SELECT count(*),
+           count(*) FILTER (WHERE p_answers ->> (q ->> 'id') = q ->> 'correct_option')
+      INTO v_total, v_score
+      FROM jsonb_array_elements(
+             CASE WHEN jsonb_typeof(v_questions) = 'array' THEN v_questions ELSE '[]'::jsonb END
+           ) AS t(q)
+     WHERE q ->> 'type' = 'mcq'
+       AND coalesce(q ->> 'correct_option', '') <> '';
+
+    v_percentage := CASE WHEN v_total > 0 THEN round(v_score * 100.0 / v_total) END;
+  END IF;
+
+  INSERT INTO survey_responses (user_id, survey_id, answers, score, total_scored, percentage)
+  VALUES (v_user, v_survey.id, p_answers, v_score, v_total, v_percentage)
+  RETURNING * INTO v_row;
+
+  RETURN jsonb_build_object(
+    'id', v_row.id,
+    'attempt_type', v_row.attempt_type,
+    'form', v_form,
+    'score', v_row.score,
+    'total_scored', v_row.total_scored,
+    'percentage', v_row.percentage
+  );
+END $$;
+
+REVOKE ALL ON FUNCTION submit_assessment(uuid, jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION submit_assessment(uuid, jsonb) TO authenticated;
+
+COMMIT;
+NOTIFY pgrst, 'reload schema';
+
+-- CHECKS (run after STEP 1) ------------------------------------------------
+-- 1) expect the 4 profiles columns (age, gender, is_ip, is_pwd) all YES, plus 2 users columns
+-- SELECT table_name, column_name, is_nullable FROM information_schema.columns
+--  WHERE table_schema = 'public'
+--    AND ((table_name = 'profiles' AND column_name IN ('gender', 'age', 'is_pwd', 'is_ip'))
+--      OR (table_name = 'users' AND column_name IN ('provisioned_batch', 'provisioned_at')))
+--  ORDER BY 1, 2;
+-- 2) expect: anon false, authenticated true
+-- SELECT has_function_privilege('anon', 'my_profile_is_complete()', 'EXECUTE') AS anon,
+--        has_function_privilege('authenticated', 'my_profile_is_complete()', 'EXECUTE') AS authenticated;
+-- 3) expect 34 complete, 0 incomplete (nobody who exists today is blocked)
+-- SELECT count(*) FILTER (WHERE gender IS NOT NULL AND btrim(gender) <> '' AND age IS NOT NULL AND is_pwd IS NOT NULL AND is_ip IS NOT NULL) AS complete,
+--        count(*) FILTER (WHERE NOT (gender IS NOT NULL AND btrim(gender) <> '' AND age IS NOT NULL AND is_pwd IS NOT NULL AND is_ip IS NOT NULL)) AS incomplete
+--   FROM profiles;
+
+-- ROLLBACK (commented) -------------------------------------------------------
+-- BEGIN;
+-- -- the PHASE 34 submit_assessment, without the profile check
+-- CREATE OR REPLACE FUNCTION submit_assessment(p_survey_id uuid, p_answers jsonb) RETURNS jsonb
+-- LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+-- DECLARE
+--   v_user bigint := current_student_id();
+--   v_survey surveys;
+--   v_attempt text;
+--   v_form text;
+--   v_questions jsonb;
+--   v_lock text;
+--   v_score integer;
+--   v_total integer;
+--   v_percentage numeric;
+--   v_row survey_responses;
+-- BEGIN
+--   IF v_user IS NULL THEN
+--     RAISE EXCEPTION 'Sign in with a student account to submit.' USING ERRCODE = '42501';
+--   END IF;
+--   IF p_answers IS NULL OR jsonb_typeof(p_answers) <> 'object' THEN
+--     RAISE EXCEPTION 'Answers must be an object keyed by question id.' USING ERRCODE = '22023';
+--   END IF;
+--   SELECT * INTO v_survey FROM surveys
+--    WHERE id = p_survey_id AND status = 'active' AND archived_at IS NULL;
+--   IF NOT FOUND THEN
+--     RAISE EXCEPTION 'This assessment is not open.' USING ERRCODE = 'P0002';
+--   END IF;
+--   v_attempt := next_attempt_for(v_user, v_survey);
+--   IF v_attempt IS NULL THEN
+--     RAISE EXCEPTION 'You have already submitted this assessment.' USING ERRCODE = '23505';
+--   END IF;
+--   IF v_attempt = 'post' THEN
+--     v_lock := post_test_lock_reason(v_user, v_survey.program_id);
+--     IF v_lock IS NOT NULL THEN
+--       RAISE EXCEPTION 'Post-test locked: %', v_lock USING ERRCODE = '42501';
+--     END IF;
+--   END IF;
+--   IF v_survey.type = 'knowledge' THEN
+--     v_form := assessment_form_for(v_survey, v_attempt);
+--     v_questions := CASE WHEN v_form = 'B' THEN v_survey.questions_data_post ELSE v_survey.questions_data END;
+--     SELECT count(*),
+--            count(*) FILTER (WHERE p_answers ->> (q ->> 'id') = q ->> 'correct_option')
+--       INTO v_total, v_score
+--       FROM jsonb_array_elements(
+--              CASE WHEN jsonb_typeof(v_questions) = 'array' THEN v_questions ELSE '[]'::jsonb END
+--            ) AS t(q)
+--      WHERE q ->> 'type' = 'mcq'
+--        AND coalesce(q ->> 'correct_option', '') <> '';
+--     v_percentage := CASE WHEN v_total > 0 THEN round(v_score * 100.0 / v_total) END;
+--   END IF;
+--   INSERT INTO survey_responses (user_id, survey_id, answers, score, total_scored, percentage)
+--   VALUES (v_user, v_survey.id, p_answers, v_score, v_total, v_percentage)
+--   RETURNING * INTO v_row;
+--   RETURN jsonb_build_object('id', v_row.id, 'attempt_type', v_row.attempt_type, 'form', v_form,
+--     'score', v_row.score, 'total_scored', v_row.total_scored, 'percentage', v_row.percentage);
+-- END $$;
+-- REVOKE ALL ON FUNCTION submit_assessment(uuid, jsonb) FROM PUBLIC, anon;
+-- GRANT EXECUTE ON FUNCTION submit_assessment(uuid, jsonb) TO authenticated;
+-- DROP FUNCTION IF EXISTS my_profile_is_complete();
+-- ALTER TABLE users DROP COLUMN IF EXISTS provisioned_batch;
+-- ALTER TABLE users DROP COLUMN IF EXISTS provisioned_at;
+-- -- Only if STEP 0 showed these columns were NOT NULL, and only when no row has a NULL in them:
+-- -- ALTER TABLE profiles ALTER COLUMN gender SET NOT NULL;   (likewise age, is_pwd, is_ip)
+-- COMMIT;
+-- NOTIFY pgrst, 'reload schema';
