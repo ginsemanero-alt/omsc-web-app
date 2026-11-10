@@ -61,8 +61,6 @@ import {
 } from "recharts";
 
 import { motion } from "framer-motion";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
 import { fetchAnalyticsInsight, type AnalyticsInsightResult } from "../../lib/analyticsInsight";
 import { campusLabel } from "../../lib/campuses";
 import LearningGainSection from "./LearningGainSection";
@@ -80,7 +78,7 @@ import {
   withSmallGroupNote,
   type AnalyticsFilters,
 } from "../../lib/analyticsFilters";
-import { drawEmptyLine, drawNoMatchBanner, drawWrappedCaption } from "../../lib/analyticsPdf";
+import { buildAnalyticsPdf, type ReachPdf } from "../../lib/analyticsReportPdf";
 import { downloadReportXlsx, type ReportModel, type ReportSection } from "../../lib/analyticsExcel";
 import MaterialReachSection from "./MaterialReachSection";
 import {
@@ -93,6 +91,7 @@ import {
   SMALL_SAMPLE_N,
   T_TEST_CAUTION_N,
   pairedTTest,
+  formatPValue,
   yearLevelLabel,
   buildLearningGainParams,
 } from "../../lib/learningGain";
@@ -424,6 +423,22 @@ function getAgeGroup(age: unknown): string {
   if (n <= 26) return "25–26";
 
   return "27+";
+}
+
+// The "Format" of an IEC material for the exports, from its type (the format column is empty).
+const MATERIAL_FORMAT_LABELS: Record<string, string> = {
+  image: "Infographic",
+  video: "Video",
+  audio: "Audio",
+  pdf: "Document",
+  document: "Document",
+  link: "Link",
+};
+
+function materialFormatLabel(material: { type?: string | null; format?: string | null }): string {
+  const type = safeString(material.type).trim().toLowerCase();
+  if (type && MATERIAL_FORMAT_LABELS[type]) return MATERIAL_FORMAT_LABELS[type];
+  return safeString(material.format).trim() || safeString(material.type).trim() || "Other";
 }
 
 function escapeCSV(value: unknown): string {
@@ -2659,6 +2674,17 @@ export default function AnalyticsDashboard() {
 
   // Learning gain (pre-test vs post-test) under the current filters. A group of
   // fewer than 5 paired students is labelled "small group" but its scores are shown.
+  // "p < .001" / "p = .012" like the card, or n/a when a t-test cannot be worked out.
+  const pairedPCell = (row: any) => {
+    const test = pairedTTest(
+      Number(row.paired_n) || 0,
+      row.mean_gain === null || row.mean_gain === undefined ? null : Number(row.mean_gain),
+      row.sd_diff === null || row.sd_diff === undefined ? null : Number(row.sd_diff)
+    );
+    if (!test) return "n/a";
+    return test.p < 0.001 ? "p < .001" : `p = ${formatPValue(test.p)}`;
+  };
+
   const buildLearningSection = async (): Promise<ReportSection | null> => {
     const { data, error } = await supabase.rpc("learning_gain_summary", buildLearningGainParams(filters));
     if (error || !data) return null;
@@ -2672,7 +2698,7 @@ export default function AnalyticsDashboard() {
 
     return {
       title: "Learning gain (pre vs post)",
-      head: ["Group", "Paired students", "Mean pre-test", "Mean post-test", "Mean gain"],
+      head: ["Group", "Paired students", "Mean pre-test", "Mean post-test", "Mean gain", "Normalized gain", "Paired t-test"],
       rows: rows
         .filter((row) => row.dimension === "overall" || row.dimension === "program")
         .map((row) => {
@@ -2689,6 +2715,9 @@ export default function AnalyticsDashboard() {
             pct(row.mean_pre),
             pct(row.mean_post),
             gain,
+            // Same values as the Learning gain card: group-level (post - pre) / (100 - pre) and the paired t-test p.
+            row.norm_gain === null || row.norm_gain === undefined ? "—" : Number(row.norm_gain).toFixed(2),
+            pairedPCell(row),
           ];
         }),
       note: "Paired students only (both a pre-test and a post-test). A group under 5 paired students is shown with a caution note.",
@@ -2750,7 +2779,7 @@ export default function AnalyticsDashboard() {
         head: ["Title", "Format", "Category", "Campus", "Downloads", "Created"],
         rows: recentIECMaterials.map((material) => [
           safeString(material.title),
-          safeString(material.format),
+          materialFormatLabel(material),
           safeString(material.category),
           campusLabel(safeString(material.campus)),
           Number(material.downloads || 0),
@@ -2812,290 +2841,10 @@ export default function AnalyticsDashboard() {
     setGeneratingReport(true);
 
     try {
-      const doc = new jsPDF() as any;
-
-      const NO_RECORDS_NOTE = "No records found for the selected period.";
-      const tableBodyOrPlaceholder = <T,>(rows: T[], columnCount: number, mapRow: (row: T) => (string | number)[]) =>
-        rows.length > 0 ? rows.map(mapRow) : [Array(columnCount).fill("—")];
-
-      const generatedAtLabel = new Date().toLocaleString("en-US", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      });
-
       const learningSection = await buildLearningSection();
-      const filtersLine = describeFilters(filters, selectedProgramName);
-      let bodyTop = 46;
 
-      const addHeader = (firstPage = false) => {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(16);
-        doc.setTextColor(15);
-        doc.text("OMSU GUIDANCE AND TESTING CENTER", 14, 18);
-
-        doc.setFontSize(12);
-        const titleLines = doc.splitTextToSize(reportTitle, 182).slice(0, 2);
-        doc.text(titleLines, 14, 26);
-        const shift = (titleLines.length - 1) * 5;
-
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(9);
-        doc.setTextColor(100);
-        doc.text(`Report Period: ${reportRangeLabel}`, 14, 33 + shift);
-        doc.text(`Generated: ${generatedAtLabel}`, 14, 38 + shift);
-
-        // The filters in force and what "participants" means, on every page.
-        doc.setTextColor(40);
-        const filterLines = doc.splitTextToSize(filtersLine, 182);
-        doc.text(filterLines, 14, 43 + shift);
-        let y = 43 + shift + filterLines.length * 4;
-        const definitionLines = doc.splitTextToSize(PARTICIPANTS_DEFINITION, 182);
-        doc.text(definitionLines, 14, y);
-        y += definitionLines.length * 4;
-        // A clear banner right under the filter line, on page 1 only.
-        if (firstPage && noStudentsMatch) y = drawNoMatchBanner(doc, y);
-        bodyTop = y + 5;
-      };
-
-      addHeader(true);
-
-      let nextY = bodyTop;
-
-      // SECTION 1 — Overview Metrics
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.setTextColor(15);
-      doc.text("Overview metrics", 14, nextY);
-      nextY += 6;
-
-      autoTable(doc, {
-        startY: nextY,
-        head: [["Metric", "Value"]],
-        body: getReportRows().slice(1),
-        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: "bold" },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
-        styles: { fontSize: 12 },
-      });
-      nextY = (doc.lastAutoTable?.finalY || nextY) + 12;
-
-      if (nextY > 250) {
-        doc.addPage();
-        addHeader();
-        nextY = bodyTop;
-      }
-
-      // SECTION 2 — Program Awareness Summary
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.setTextColor(15);
-      doc.text("Program awareness summary", 14, nextY);
-      nextY += 6;
-
-      autoTable(doc, {
-        startY: nextY,
-        head: [["Program", "Guidance service", "Avg. score", "Responses"]],
-        body: tableBodyOrPlaceholder(reportProgramAwareness, 4, (row) => [
-          row.name,
-          row.guidanceService,
-          scoreCell(row.averageScore, row.students),
-          row.responseCount,
-        ]),
-        headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
-        styles: { fontSize: 12 },
-      });
-      nextY = (doc.lastAutoTable?.finalY || nextY) + (reportProgramAwareness.length === 0 ? 5 : 12);
-
-      if (reportProgramAwareness.length === 0) {
-        doc.setFont("helvetica", "italic");
-        doc.setFontSize(8);
-        doc.setTextColor(148);
-        doc.text(NO_RECORDS_NOTE, 14, nextY);
-        nextY += 10;
-      }
-
-      if (nextY > 250) {
-        doc.addPage();
-        addHeader();
-        nextY = bodyTop;
-      }
-
-      // SECTION 3 — Demographic Breakdown
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.text("Demographic breakdown", 14, nextY);
-      nextY += 6;
-
-      autoTable(doc, {
-        startY: nextY,
-        head: [["Dimension", "Segment", "Count"]],
-        body: [
-          ...reportDemographics.byYearLevel.map((r) => ["Year level", r.label, r.count]),
-          ...reportDemographics.byGender.map((r) => ["Gender", r.label, r.count]),
-          ...reportDemographics.byAgeBand.map((r) => ["Age band", r.label, r.count]),
-          ["PWD status", "PWD", reportDemographics.pwd],
-          ["PWD status", "Non-PWD", reportDemographics.nonPwd],
-          ["IP status", "Indigenous Peoples", reportDemographics.ip],
-          ["IP status", "Non-IP", reportDemographics.nonIp],
-        ],
-        headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: "bold" },
-        styles: { fontSize: 12 },
-      });
-      nextY = (doc.lastAutoTable?.finalY || nextY) + 12;
-
-      if (nextY > 250) {
-        doc.addPage();
-        addHeader();
-        nextY = bodyTop;
-      }
-
-      // SECTION 4 — Guidance Service Coverage
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.text("Guidance service coverage", 14, nextY);
-      nextY += 6;
-
-      autoTable(doc, {
-        startY: nextY,
-        head: [["Guidance service", "Programs", "Avg. awareness score"]],
-        body: reportGuidanceCoverage.map((row) => [
-          row.service,
-          row.programCount,
-          scoreCell(row.averageScore, row.students),
-        ]),
-        headStyles: { fillColor: [217, 119, 6], textColor: [255, 255, 255], fontStyle: "bold" },
-        styles: { fontSize: 12 },
-      });
-      nextY = (doc.lastAutoTable?.finalY || nextY) + 12;
-
-      if (nextY > 250) {
-        doc.addPage();
-        addHeader();
-        nextY = bodyTop;
-      }
-
-      // SECTION 5 — Awareness by Material Exposure. Not printed: see SHOW_MATERIAL_EXPOSURE.
-      if (SHOW_MATERIAL_EXPOSURE) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.setTextColor(15);
-      doc.text("Awareness by material exposure", 14, nextY);
-      nextY += 6;
-
-      autoTable(doc, {
-        startY: nextY,
-        head: [["IEC category", "Opened", "Did not open", "Difference", "Respondents"]],
-        body: tableBodyOrPlaceholder(materialExposureAwareness, 5, (row) => [
-          row.category,
-          row.openedAvg !== null ? `${row.openedAvg}% (${row.openedCount})` : "No data",
-          row.notOpenedAvg !== null ? `${row.notOpenedAvg}% (${row.notOpenedCount})` : "No data",
-          row.difference !== null ? `${row.difference >= 0 ? "+" : ""}${row.difference}pp` : "No data",
-          row.totalRespondents,
-        ]),
-        headStyles: { fillColor: [8, 145, 178], textColor: [255, 255, 255], fontStyle: "bold" },
-        styles: { fontSize: 12 },
-      });
-      nextY = (doc.lastAutoTable?.finalY || nextY) + (materialExposureAwareness.length === 0 ? 5 : 12);
-
-      if (materialExposureAwareness.length === 0) {
-        doc.setFont("helvetica", "italic");
-        doc.setFontSize(8);
-        doc.setTextColor(148);
-        doc.text("No responses have been recorded yet.", 14, nextY);
-        nextY += 10;
-      }
-      }
-
-      if (nextY > 250) {
-        doc.addPage();
-        addHeader();
-        nextY = bodyTop;
-      }
-
-      // SECTION 6 — IEC Material Reach
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.text(
-        `IEC Material Reach (${reportMaterialReach.totalMaterials} materials, ${reportMaterialReach.totalDownloads} downloads)`,
-        14,
-        nextY
-      );
-      nextY += 6;
-
-      autoTable(doc, {
-        startY: nextY,
-        head: [["Category", "Materials", "Downloads"]],
-        body: tableBodyOrPlaceholder(reportMaterialReach.byCategory, 3, (row) => [row.category, row.count, row.downloads]),
-        headStyles: { fillColor: [190, 24, 93], textColor: [255, 255, 255], fontStyle: "bold" },
-        styles: { fontSize: 12 },
-      });
-      nextY = (doc.lastAutoTable?.finalY || nextY) + (reportMaterialReach.byCategory.length === 0 ? 5 : 12);
-
-      if (reportMaterialReach.byCategory.length === 0) {
-        doc.setFont("helvetica", "italic");
-        doc.setFontSize(8);
-        doc.setTextColor(148);
-        doc.text(NO_RECORDS_NOTE, 14, nextY);
-        nextY += 10;
-      }
-
-      if (nextY > 250) {
-        doc.addPage();
-        addHeader();
-        nextY = bodyTop;
-      }
-
-      // SECTION 7 — Recent IEC Materials
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.setTextColor(15);
-      doc.text("Recent IEC materials", 14, nextY);
-      nextY += 6;
-
-      autoTable(doc, {
-        startY: nextY,
-        head: [["Title", "Format", "Category", "Campus", "Downloads", "Created"]],
-        body: tableBodyOrPlaceholder(recentIECMaterials, 6, (material) => [
-          safeString(material.title),
-          safeString(material.format),
-          safeString(material.category),
-          campusLabel(safeString(material.campus)),
-          Number(material.downloads || 0),
-          material.created_at ? new Date(material.created_at).toLocaleDateString() : "",
-        ]),
-        headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
-        styles: { fontSize: 12 },
-      });
-
-      // SECTION 8 — Learning gain (pre-test vs post-test) under the same filters.
-      if (learningSection) {
-        nextY = (doc.lastAutoTable?.finalY || nextY) + 12;
-        if (nextY > 250) {
-          doc.addPage();
-          addHeader();
-          nextY = bodyTop;
-        }
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(12);
-        doc.setTextColor(15);
-        doc.text("Learning gain (pre-test vs post-test)", 14, nextY);
-        nextY += 6;
-        autoTable(doc, {
-          startY: nextY,
-          head: [learningSection.head],
-          body: learningSection.rows.length > 0 ? learningSection.rows : [Array(learningSection.head.length).fill("—")],
-          headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
-          styles: { fontSize: 12 },
-        });
-        nextY = (doc.lastAutoTable?.finalY || nextY) + 5;
-        doc.setFont("helvetica", "italic");
-        doc.setFontSize(8);
-        doc.setTextColor(100);
-        doc.text(doc.splitTextToSize(learningSection.note || "", 180), 14, nextY);
-      }
-
-      // SECTION 8 — Material Reach by Course (PHASE 32). Uses what is on
-      // screen (the dashboard filters, IEC program and test-accounts
-      // switch), fetching it if the screen has not loaded it yet.
+      // Material reach by course (PHASE 32). Uses what is on screen (the dashboard filters, IEC
+      // program and test-accounts switch), fetching it if the screen has not loaded it yet.
       let reachForPdf = materialReach;
       if (!reachForPdf) {
         try {
@@ -3105,19 +2854,6 @@ export default function AnalyticsDashboard() {
         }
       }
 
-      doc.addPage();
-      addHeader();
-      nextY = bodyTop;
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.setTextColor(15);
-      doc.text("Material reach by course", 14, nextY);
-      nextY += 5;
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(100);
       const reachFilterBits = [
         selectedCampus !== "all" && `Campus: ${selectedCampus}`,
         selectedProgram !== "all" && `Course: ${selectedProgram}`,
@@ -3139,97 +2875,51 @@ export default function AnalyticsDashboard() {
         ...(reachFilterBits.length ? reachFilterBits : ["No dashboard filters"]),
         reachIncludeTest ? "Test accounts included" : "Test accounts excluded",
       ].join(" | ");
-      // The caption can be long: wrap it, then start everything below the LAST wrapped line.
-      nextY = drawWrappedCaption(doc, reachScope, 14, nextY, 180).nextY;
 
-      if (!reachForPdf) {
-        nextY = drawEmptyLine(doc, "Material reach could not be loaded.", 14, nextY);
-      } else if (reachForPdf.overall.students === 0) {
-        nextY = drawEmptyLine(doc, "No students match the current filters.", 14, nextY);
-      } else {
-        const reachRows = reachForPdf.by_course;
-        const reachSmall = (n: number) => (n < SMALL_SAMPLE_N ? ` (${smallGroupNote(n)})` : "");
+      const reach: ReachPdf = !reachForPdf
+        ? { kind: "unavailable", scope: reachScope }
+        : reachForPdf.overall.students === 0
+          ? { kind: "empty", scope: reachScope }
+          : { kind: "data", scope: reachScope, byCourse: reachForPdf.by_course, byYearLevel: reachForPdf.by_year_level };
 
-        // Native bar chart: % reached per course, lowest first.
-        const labelWidth = 62;
-        const barMaxWidth = 100;
-        const barHeight = 5;
-        const barGap = 3;
-        for (const row of reachRows) {
-          if (nextY + barHeight > 275) {
-            doc.addPage();
-            addHeader();
-            nextY = bodyTop;
-          }
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(8);
-          doc.setTextColor(30);
-          const label = doc.splitTextToSize(row.key, labelWidth - 2)[0];
-          doc.text(label, 14, nextY + 3.8);
-          doc.setFillColor(238, 240, 250);
-          doc.rect(14 + labelWidth, nextY, barMaxWidth, barHeight, "F");
-          doc.setFillColor(79, 70, 229);
-          const barWidth = (barMaxWidth * (row.pct ?? 0)) / 100;
-          if (barWidth > 0) doc.rect(14 + labelWidth, nextY, barWidth, barHeight, "F");
-          doc.text(pctPdf(row.pct), 14 + labelWidth + barMaxWidth + 2, nextY + 3.8);
-          nextY += barHeight + barGap;
-        }
-        nextY += 4;
-
-        autoTable(doc, {
-          startY: nextY,
-          head: [["Course", "Students", "Opened at least one", "Reached"]],
-          body: reachRows.map((row) => [
-            `${row.key}${reachSmall(row.students)}`,
-            row.students,
-            row.reached,
-            pctPdf(row.pct),
-          ]),
-          headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
-          styles: { fontSize: 12 },
-        });
-        nextY = (doc.lastAutoTable?.finalY || nextY) + 10;
-
-        if (nextY > 250) {
-          doc.addPage();
-          addHeader();
-          nextY = bodyTop;
-        }
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(12);
-        doc.setTextColor(15);
-        doc.text("Material reach by year level", 14, nextY);
-        nextY += 6;
-
-        autoTable(doc, {
-          startY: nextY,
-          head: [["Year level", "Students", "Opened at least one", "Reached"]],
-          body: reachForPdf.by_year_level.map((row) => [
-            `${row.key}${reachSmall(row.students)}`,
-            row.students,
-            row.reached,
-            pctPdf(row.pct),
-          ]),
-          headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
-          styles: { fontSize: 12 },
-        });
-        nextY = (doc.lastAutoTable?.finalY || nextY) + 6;
-
-        doc.setFont("helvetica", "italic");
-        doc.setFontSize(8);
-        doc.setTextColor(100);
-        const reachNotes = doc.splitTextToSize(
-          "Percentages are based on students with an account in the system, not on total enrollment. " +
-            "Material views are recorded only since IEC materials were linked to programs, so reach for earlier students may be understated.",
-          180
-        );
-        if (nextY + reachNotes.length * 4 > 280) {
-          doc.addPage();
-          addHeader();
-          nextY = bodyTop;
-        }
-        doc.text(reachNotes, 14, nextY);
-      }
+      // The layout itself lives in lib/analyticsReportPdf.ts (page breaks, repeated headers, wrapped labels).
+      const doc = buildAnalyticsPdf({
+        title: reportTitle,
+        periodLabel: reportRangeLabel,
+        generatedAt: new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }),
+        filtersLine: describeFilters(filters, selectedProgramName),
+        definition: PARTICIPANTS_DEFINITION,
+        noMatch: noStudentsMatch,
+        overview: getReportRows().slice(1) as (string | number)[][],
+        programAwareness: reportProgramAwareness.map((row) => [
+          row.name,
+          row.guidanceService,
+          scoreCell(row.averageScore, row.students),
+          row.responseCount,
+        ]),
+        demographics: [
+          ...reportDemographics.byYearLevel.map((r) => ["Year level", r.label, r.count]),
+          ...reportDemographics.byGender.map((r) => ["Gender", r.label, r.count]),
+          ...reportDemographics.byAgeBand.map((r) => ["Age band", r.label, r.count]),
+          ["PWD status", "PWD", reportDemographics.pwd],
+          ["PWD status", "Non-PWD", reportDemographics.nonPwd],
+          ["IP status", "Indigenous Peoples", reportDemographics.ip],
+          ["IP status", "Non-IP", reportDemographics.nonIp],
+        ],
+        coverage: reportGuidanceCoverage.map((row) => [row.service, row.programCount, scoreCell(row.averageScore, row.students)]),
+        materialReachHeading: `IEC Material Reach (${reportMaterialReach.totalMaterials} materials, ${reportMaterialReach.totalDownloads} downloads)`,
+        materialReach: reportMaterialReach.byCategory.map((row) => [row.category, row.count, row.downloads]),
+        recent: recentIECMaterials.map((material) => [
+          safeString(material.title),
+          materialFormatLabel(material),
+          safeString(material.category),
+          campusLabel(safeString(material.campus)),
+          Number(material.downloads || 0),
+          material.created_at ? new Date(material.created_at).toLocaleDateString() : "",
+        ]),
+        learning: learningSection ? { head: learningSection.head, rows: learningSection.rows, note: learningSection.note } : null,
+        reach,
+      });
 
       doc.save(`${reportFileBase()}.pdf`);
     } finally {
