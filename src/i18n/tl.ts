@@ -365,6 +365,7 @@ export const tl = {
   'Your response has been successfully recorded. Thank you for participating!': 'Naitala na ang sagot mo. Salamat sa pakikilahok!',
   'Your results': 'Mga resulta mo',
   'YouTube video': 'YouTube Video',
+  'Watch on YouTube': 'Panoorin sa YouTube',
   // PHASE 54: the required profile step (ProfileGate) for administrator-provisioned accounts
   'Answer these four questions once. You can then continue to the programs and assessments.': 'Sagutin nang isang beses ang apat na tanong na ito. Pagkatapos ay makakapunta ka na sa mga programa at assessment.',
   'Complete your profile': 'Kumpletuhin ang iyong profile',

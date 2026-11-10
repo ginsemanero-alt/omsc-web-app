@@ -58,6 +58,7 @@ import {
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { useToast } from '../../hooks/use-toast';
+import YouTubeEmbed from '../shared/YouTubeEmbed';
 
 import {
   FileText,
@@ -1022,35 +1023,6 @@ export default function IECMaterials({ uploadRequest, editRequest, onChanged }: 
   // YOUTUBE
   // =========================================================
 
-  const getYouTubeEmbedUrl = (url: string) => {
-    if (!url) return '';
-
-    try {
-      const parsedUrl = new URL(url);
-
-      // youtube.com/watch?v=
-      if (parsedUrl.hostname.includes('youtube.com')) {
-        const videoId = parsedUrl.searchParams.get('v');
-
-        if (videoId) {
-          return `https://www.youtube.com/embed/${videoId}`;
-        }
-      }
-
-      // youtu.be/VIDEO_ID
-      if (parsedUrl.hostname === 'youtu.be') {
-        const videoId = parsedUrl.pathname.substring(1);
-
-        if (videoId) {
-          return `https://www.youtube.com/embed/${videoId}`;
-        }
-      }
-    } catch {
-      // Invalid URL
-    }
-
-    return url;
-  };
 
   // =========================================================
   // FILTER
@@ -2054,15 +2026,7 @@ export default function IECMaterials({ uploadRequest, editRequest, onChanged }: 
             ) : previewItem &&
             previewItem.type === 'Video' &&
             (previewItem.file_url?.includes('youtube') || previewItem.file_url?.includes('youtu.be')) ? (
-              <iframe
-                src={getYouTubeEmbedUrl(
-                  previewItem.file_url || ''
-                )}
-                className="w-full aspect-video max-w-4xl rounded-2xl shadow-2xl border-none"
-                allowFullScreen
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                title={previewItem.title}
-              />
+              <YouTubeEmbed url={previewItem.file_url || ''} title={previewItem.title} />
             ) : previewItem &&
               previewItem.type === 'Video' &&
               previewItem.file_url ? (

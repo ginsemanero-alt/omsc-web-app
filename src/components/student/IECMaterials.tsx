@@ -11,6 +11,8 @@ import { PaginationControls } from '../../components/ui/pagination-controls';
 import { usePagination } from '../../hooks/usePagination';
 import { logActivity } from '../../lib/activityLog';
 import { recordMaterialView } from '../../lib/materialProgress';
+import YouTubeEmbed from '../shared/YouTubeEmbed';
+import { parseYouTubeId, youTubeThumbnailUrl } from '../../lib/youtube';
 import { useAuth } from '../../hooks/useAuth';
 import { IEC_CATEGORIES } from '../../lib/iecCategories';
 import { fetchViewerCampus, campusVisibilityFilter } from '../../lib/campuses';
@@ -258,18 +260,6 @@ export default function IECMaterials() {
     setLinksPage(1);
   }, [searchQuery, selectedCategory]);
 
-  // Helper function to format YouTube URLs for iframe
-  const getYouTubeEmbedUrl = (url: string) => {
-    if (!url) return '';
-    let videoId = '';
-    if (url.includes('v=')) {
-      videoId = url.split('v=')[1]?.split('&')[0];
-    } else if (url.includes('youtu.be/')) {
-      videoId = url.split('youtu.be/')[1]?.split('?')[0];
-    }
-    return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
-  };
-
   // A thumbnail to show before the video plays: prefer the admin-uploaded
   // cover (image_url), then fall back to YouTube's own thumbnail for a
   // YouTube link, since YouTube always has one — a self-hosted upload
@@ -279,15 +269,8 @@ export default function IECMaterials() {
     if (item.thumb_url) return item.thumb_url as string;
     if (item.image_url) return item.image_url as string;
     const url = item.file_url || '';
-    if (url.includes('youtube.com') || url.includes('youtu.be')) {
-      let videoId = '';
-      if (url.includes('v=')) {
-        videoId = url.split('v=')[1]?.split('&')[0];
-      } else if (url.includes('youtu.be/')) {
-        videoId = url.split('youtu.be/')[1]?.split('?')[0];
-      }
-      if (videoId) return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-    }
+    const videoId = parseYouTubeId(url);
+    if (videoId) return youTubeThumbnailUrl(videoId);
     return null;
   };
 
@@ -534,12 +517,7 @@ export default function IECMaterials() {
                 poster={previewItem.thumb_url || previewItem.image_url}
               />
             ) : previewItem?.file_url?.includes('youtube') || previewItem?.file_url?.includes('youtu.be') ? (
-               <iframe
-                src={getYouTubeEmbedUrl(previewItem.file_url)}
-                className="w-full aspect-video max-w-4xl rounded-2xl shadow-2xl border-none"
-                allowFullScreen
-                title={t('YouTube video')}
-              />
+              <YouTubeEmbed url={previewItem.file_url} title={t('YouTube video')} watchLabel={t('Watch on YouTube')} />
             ) : previewItem?.type === 'Video' && previewItem?.file_url ? (
               // Self-hosted upload, not YouTube — native <video> controls
               // already include a fullscreen button on every browser. No

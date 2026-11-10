@@ -27,6 +27,7 @@ import ProgramEntryTimeline from '../shared/ProgramEntryTimeline';
 import PhotoViewer, { collectProgramPhotos, viewerAt, type PhotoViewerState } from '../shared/PhotoViewer';
 import ZoomableImage from '../shared/ZoomableImage';
 import HostedVideoPlayer from '../shared/HostedVideoPlayer';
+import YouTubeEmbed from '../shared/YouTubeEmbed';
 import { useT } from '../../i18n';
 
 // Lazy: pdfjs-dist is a large library (~500KB+) — no reason to ship it in
@@ -162,10 +163,6 @@ function isYouTube(url: string): boolean {
   return /youtube\.com|youtu\.be/.test(url);
 }
 
-function youTubeEmbedUrl(url: string): string {
-  const match = url.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/);
-  return match ? `https://www.youtube.com/embed/${match[1]}` : url;
-}
 
 interface PreviewFile {
   url: string;
@@ -1002,12 +999,7 @@ export default function ProgramsActivities() {
                 className="w-full max-h-full max-w-4xl rounded-2xl"
               />
             ) : previewHandout && isYouTube(previewHandout.url) ? (
-              <iframe
-                src={youTubeEmbedUrl(previewHandout.url)}
-                className="w-full aspect-video max-w-4xl rounded-2xl border-none"
-                allowFullScreen
-                title={previewHandout.title}
-              />
+              <YouTubeEmbed url={previewHandout.url} title={previewHandout.title} watchLabel={t('Watch on YouTube')} />
             ) : previewHandout && (previewHandout.type === 'Video' || /\.(mp4|webm|mov)(\?.*)?$/i.test(previewHandout.url)) ? (
               <video
                 src={previewHandout.url}
