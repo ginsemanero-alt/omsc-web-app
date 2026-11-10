@@ -5635,3 +5635,21 @@ GRANT SELECT ON app_settings TO authenticated;
 COMMIT;
 NOTIFY pgrst, 'reload schema';
 -- Rollback: DROP TABLE IF EXISTS app_settings;
+
+-- =====================================================================
+-- PHASE 56 — Day-before reminder marker (documentation of SQL run by the user)
+-- The daily cron (/api/cron/retention) runs a second step: for every published,
+-- non-archived program whose first day (programs.date) is TOMORROW in Asia/Manila,
+-- it creates one in-app notification per active, non-archived, non-test student.
+-- In-app only: no email, whatever the email notifications setting says.
+-- A program is claimed once per start date; changing programs.date makes a new
+-- reminder possible. Additive and harmless.
+-- =====================================================================
+BEGIN;
+ALTER TABLE programs ADD COLUMN IF NOT EXISTS reminder_sent_at   timestamptz;
+ALTER TABLE programs ADD COLUMN IF NOT EXISTS reminder_for_date  date;
+COMMENT ON COLUMN programs.reminder_for_date IS
+  'The programs.date a day-before reminder was already sent for. Changing the date makes a new reminder possible.';
+COMMIT;
+NOTIFY pgrst, 'reload schema';
+-- Rollback: ALTER TABLE programs DROP COLUMN IF EXISTS reminder_sent_at, DROP COLUMN IF EXISTS reminder_for_date;

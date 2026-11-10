@@ -369,7 +369,7 @@ export function createRetention({ supabase, findAuthUserByEmail, cldDestroy, cld
 }
 
 // ---- routes -----------------------------------------------------------------
-export function registerRetentionRoutes(app, { retention, requireActiveAdmin, limiter }) {
+export function registerRetentionRoutes(app, { retention, requireActiveAdmin, limiter, reminders }) {
     app.post('/api/admin/retention-preview', limiter, async (req, res) => {
         try {
             const admin = await requireActiveAdmin(req, res, 'Only administrators can view this.');
@@ -421,12 +421,28 @@ export function registerRetentionRoutes(app, { retention, requireActiveAdmin, li
         const given = String(req.headers.authorization || '').replace(/^Bearer /, '');
         const hash = (v) => crypto.createHash('sha256').update(v).digest();
         if (!crypto.timingSafeEqual(hash(given), hash(secret))) return res.status(401).json({ message: 'Unauthorized' });
+        // Two independent steps: the cleanup, then (PHASE 56) the day-before reminders.
+        // A failure in one never stops the other.
+        let failed = false;
+        let cleanup = {};
         try {
             if (!retention.cldReady()) console.warn('Retention: Cloudinary is not configured; hosted videos cannot be removed.');
-            res.status(200).json(await retention.run());
+            cleanup = await retention.run();
         } catch (error) {
+            failed = true;
+            cleanup = { cleanupFailed: true };
             console.error('retention cron error:', error.message);
-            res.status(500).json({ message: 'The cleanup failed.' });
         }
+        let reminderResult = { skipped: true };
+        if (reminders) {
+            try {
+                reminderResult = await reminders.run();
+            } catch (error) {
+                failed = true;
+                reminderResult = { failed: true };
+                console.error('reminder cron error:', error.message);
+            }
+        }
+        res.status(failed ? 500 : 200).json({ ...cleanup, reminders: reminderResult });
     });
 }

@@ -7,6 +7,7 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { Resend } from 'resend';
 import crypto from 'crypto';
 import { createRetention, registerRetentionRoutes } from './retention.js';
+import { createReminders } from './reminders.js';
 
 
 const app = express();
@@ -1831,6 +1832,7 @@ registerRetentionRoutes(app, {
     retention: createRetention({ supabase, findAuthUserByEmail, cldDestroy, cldReady: cldConfigured }),
     requireActiveAdmin,
     limiter: retentionAdminLimiter,
+    reminders: createReminders({ supabase }),
 });
 
 // PHASE 55: the "Send email notifications" switch. Only an active administrator
