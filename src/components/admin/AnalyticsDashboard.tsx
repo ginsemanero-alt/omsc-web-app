@@ -69,15 +69,18 @@ import LearningGainSection from "./LearningGainSection";
 import {
   ALL as ALL_FILTER,
   DEFAULT_FILTERS,
+  NO_MATCH_TEXT,
   PARTICIPANTS_DEFINITION,
-  TOO_FEW_TEXT,
   describeFilters,
   filtersFromParams,
   filtersToParams,
   hasActiveFilters as anyFilterActive,
-  isTooFew,
+  isSmallGroup,
+  smallGroupNote,
+  withSmallGroupNote,
   type AnalyticsFilters,
 } from "../../lib/analyticsFilters";
+import { drawEmptyLine, drawNoMatchBanner, drawWrappedCaption } from "../../lib/analyticsPdf";
 import { downloadReportXlsx, type ReportModel, type ReportSection } from "../../lib/analyticsExcel";
 import MaterialReachSection from "./MaterialReachSection";
 import {
@@ -260,6 +263,13 @@ const ANALYTICS_TABS: { id: AnalyticsTab; label: string; icon: React.ElementType
   { id: "iec", label: "IEC materials", icon: BookOpen },
   { id: "students", label: "Students and inclusion", icon: Users },
 ];
+
+// "Awareness by material exposure" is switched off. It compares scores by whether a student opened an
+// IEC material of the SURVEY'S category, which relies on surveys.iec_category; no survey has that field set
+// (knowledge checks are linked to materials through program_materials instead), so the block was always
+// empty ("No responses have been recorded yet"). The code is kept; flip this to bring it back once it is
+// rebuilt on program_materials + material_views.
+const SHOW_MATERIAL_EXPOSURE = false;
 
 const focusRing =
   "focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#A5B4FC]";
@@ -1566,8 +1576,8 @@ export default function AnalyticsDashboard() {
     });
   }, [filteredSurveyResponses, surveys]);
 
-  // The small-group rule (PHASE 41): the scores of fewer than 5 DISTINCT students
-  // are never shown, on the page, in the exports or in the AI insight. Counts stay.
+  // Small groups (PHASE 57): scores are always shown; a group of fewer than 5 DISTINCT
+  // students carries the note "n = X — small group, interpret with caution".
   const studentOfResponse = (response: SurveyResponse) =>
     userIdToStudentId[safeString(response.user_id)] ||
     safeString(response.student_id) ||
@@ -1580,11 +1590,8 @@ export default function AnalyticsDashboard() {
         : null;
 
     const overallStudents = new Set(scoredSurveyResponses.map(studentOfResponse)).size;
-    const overallTooFew = isTooFew(overallStudents);
-
-    const overall = overallTooFew
-      ? null
-      : average(scoredSurveyResponses.map((r) => r.percentage || 0));
+    const overallSmall = isSmallGroup(overallStudents);
+    const overall = average(scoredSurveyResponses.map((r) => r.percentage || 0));
 
     const groupBy = (
       keyFn: (profile: Profile | undefined) => string
@@ -1603,13 +1610,12 @@ export default function AnalyticsDashboard() {
 
       return Object.entries(buckets)
         .map(([label, { values, students }]) => {
-          const tooFew = isTooFew(students.size);
           return {
             label,
-            average: tooFew ? null : average(values) ?? 0,
+            average: average(values) ?? 0,
             count: values.length,
             students: students.size,
-            tooFew,
+            small: isSmallGroup(students.size),
           };
         })
         .sort((a, b) => b.count - a.count);
@@ -1617,7 +1623,7 @@ export default function AnalyticsDashboard() {
 
     return {
       overall,
-      overallTooFew,
+      overallSmall,
       overallStudents,
       totalResponses: scoredSurveyResponses.length,
       byYearLevel: groupBy((p) => getYearLevel(p?.year_level)),
@@ -1665,17 +1671,13 @@ export default function AnalyticsDashboard() {
         const program = programs.find(
           (p) => safeString(p.id) === programId
         );
-        const tooFew = isTooFew(students.size);
-
         return {
           programId,
           name: program ? getProgramName(program) : `Program #${programId}`,
-          average: tooFew
-            ? null
-            : Math.round(values.reduce((sum, v) => sum + v, 0) / values.length),
+          average: Math.round(values.reduce((sum, v) => sum + v, 0) / values.length),
           count: values.length,
           students: students.size,
-          tooFew,
+          small: isSmallGroup(students.size),
         };
       })
       .sort((a, b) => b.count - a.count);
@@ -1737,16 +1739,16 @@ export default function AnalyticsDashboard() {
 
     return GUIDANCE_SERVICES.map((service) => {
       const bucket = scoreBuckets[service];
-      const tooFew = bucket ? isTooFew(bucket.students.size) : false;
 
       return {
         service,
         programCount: programCounts[service] || 0,
         averageScore:
-          bucket && bucket.values.length > 0 && !tooFew
+          bucket && bucket.values.length > 0
             ? Math.round(bucket.values.reduce((sum, v) => sum + v, 0) / bucket.values.length)
             : null,
-        tooFew,
+        students: bucket ? bucket.students.size : 0,
+        small: bucket ? isSmallGroup(bucket.students.size) : false,
       };
     });
   }, [scopedPrograms, scoredSurveyResponses, surveys, userIdToStudentId]);
@@ -1923,16 +1925,16 @@ export default function AnalyticsDashboard() {
     return Object.entries(buckets)
       .map(([category, { opened, notOpened }]) => {
         // Each side is judged on its own number of distinct students.
-        const openedTooFew = isTooFew(opened.students.size);
-        const notOpenedTooFew = isTooFew(notOpened.students.size);
-        const openedAvg = openedTooFew ? null : average(opened.values);
-        const notOpenedAvg = notOpenedTooFew ? null : average(notOpened.values);
+        const openedSmall = isSmallGroup(opened.students.size);
+        const notOpenedSmall = isSmallGroup(notOpened.students.size);
+        const openedAvg = average(opened.values);
+        const notOpenedAvg = average(notOpened.values);
         return {
           category,
           openedAvg,
           notOpenedAvg,
-          openedTooFew,
-          notOpenedTooFew,
+          openedSmall,
+          notOpenedSmall,
           difference: openedAvg !== null && notOpenedAvg !== null ? openedAvg - notOpenedAvg : null,
           openedCount: opened.values.length,
           notOpenedCount: notOpened.values.length,
@@ -2383,6 +2385,14 @@ export default function AnalyticsDashboard() {
   ======================================================= */
 
   const getReportRows = () => {
+    // A single-program export drops the rows that describe the whole library, not the program.
+    const singleProgram = selectedGuidanceProgram !== ALL_FILTER;
+    const libraryOnlyRows = new Set([
+      "IEC materials created this month",
+      "Materials created this month",
+      "Materials created this year",
+      "Downloads (this month's uploads)",
+    ]);
     return [
       [
         "Metric",
@@ -2458,8 +2468,11 @@ export default function AnalyticsDashboard() {
         "IP students",
         inclusionAnalytics.ip,
       ],
-    ];
+    ].filter((row) => !(singleProgram && libraryOnlyRows.has(String(row[0]))));
   };
+
+  // Filters that match nobody: say so on the page and on page 1 of every export.
+  const noStudentsMatch = anyFilterActive(filters) && participantCount === 0;
 
   /* =======================================================
      EXPORT REPORT — ported from the retired ReportsCenter screen.
@@ -2523,13 +2536,12 @@ export default function AnalyticsDashboard() {
     return scopedPrograms
       .map((program) => {
         const bucket = buckets[safeString(program.id)];
-        const tooFew = bucket ? isTooFew(bucket.students.size) : false;
         return {
           name: getProgramName(program),
           guidanceService: safeString(program.guidance_service) || "Not Categorized",
-          averageScore: bucket && !tooFew ? average(bucket.values) : null,
+          averageScore: bucket ? average(bucket.values) : null,
           responseCount: bucket ? bucket.values.length : 0,
-          tooFew,
+          students: bucket ? bucket.students.size : 0,
         };
       })
       .sort((a, b) => b.responseCount - a.responseCount);
@@ -2597,12 +2609,11 @@ export default function AnalyticsDashboard() {
 
     return GUIDANCE_SERVICES.map((service) => {
       const bucket = scoreBuckets[service];
-      const tooFew = bucket ? isTooFew(bucket.students.size) : false;
       return {
         service,
         programCount: programCounts[service] || 0,
-        averageScore: bucket && !tooFew ? average(bucket.values) : null,
-        tooFew,
+        averageScore: bucket ? average(bucket.values) : null,
+        students: bucket ? bucket.students.size : 0,
       };
     });
   }, [scopedPrograms, reportScoredResponses, surveys, userIdToStudentId]);
@@ -2638,16 +2649,16 @@ export default function AnalyticsDashboard() {
   // downloads, so that section isn't duplicated here — Recent IEC
   // Materials is kept since it's the one piece the old Export Report
   // never had.
-  // A score cell: the small-group text when the group is under the rule,
-  // "No data" when there is nothing to show.
-  const scoreCell = (value: number | null, tooFew: boolean) =>
-    tooFew ? TOO_FEW_TEXT : value !== null ? `${value}%` : "No data";
+  // A score cell: the real score, followed by the small-group note when the group
+  // has fewer than 5 students; "No data" when there is nothing to show.
+  const scoreCell = (value: number | null, students: number) =>
+    value !== null ? withSmallGroupNote(`${value}%`, students) : "No data";
 
   const [generatingExcel, setGeneratingExcel] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
-  // Learning gain (pre-test vs post-test) under the current filters. The SQL
-  // already withholds the scores of a group under 5 paired students.
+  // Learning gain (pre-test vs post-test) under the current filters. A group of
+  // fewer than 5 paired students is labelled "small group" but its scores are shown.
   const buildLearningSection = async (): Promise<ReportSection | null> => {
     const { data, error } = await supabase.rpc("learning_gain_summary", buildLearningGainParams(filters));
     if (error || !data) return null;
@@ -2665,20 +2676,22 @@ export default function AnalyticsDashboard() {
       rows: rows
         .filter((row) => row.dimension === "overall" || row.dimension === "program")
         .map((row) => {
-          const hidden = row.suppressed === true;
           const gain =
             row.mean_gain === null || row.mean_gain === undefined
               ? "—"
               : `${Number(row.mean_gain) > 0 ? "+" : ""}${Number(row.mean_gain).toFixed(1)} pts`;
           return [
-            row.dimension === "overall" ? "All paired students" : programTitles.get(String(row.key)) || `Program ${row.key}`,
+            withSmallGroupNote(
+              row.dimension === "overall" ? "All paired students" : programTitles.get(String(row.key)) || `Program ${row.key}`,
+              Number(row.paired_n) || 0
+            ),
             Number(row.paired_n) || 0,
-            hidden ? TOO_FEW_TEXT : pct(row.mean_pre),
-            hidden ? TOO_FEW_TEXT : pct(row.mean_post),
-            hidden ? TOO_FEW_TEXT : gain,
+            pct(row.mean_pre),
+            pct(row.mean_post),
+            gain,
           ];
         }),
-      note: "Paired students only (both a pre-test and a post-test). A group under 5 paired students is not reported.",
+      note: "Paired students only (both a pre-test and a post-test). A group under 5 paired students is shown with a caution note.",
     };
   };
 
@@ -2698,13 +2711,13 @@ export default function AnalyticsDashboard() {
     reach: Awaited<ReturnType<typeof fetchMaterialReach>> | null,
     learning: ReportSection | null
   ): ReportModel => {
-    const small = (n: number) => (n < SMALL_SAMPLE_N ? " (small sample)" : "");
+    const small = (n: number) => (n < SMALL_SAMPLE_N ? ` (${smallGroupNote(n)})` : "");
     const sections: ReportSection[] = [
       { title: "Overview metrics", head: ["Metric", "Value"], rows: getReportRows().slice(1) as (string | number)[][] },
       {
         title: "Program awareness",
         head: ["Program", "Guidance service", "Avg. score", "Responses"],
-        rows: reportProgramAwareness.map((row) => [row.name, row.guidanceService, scoreCell(row.averageScore, row.tooFew), row.responseCount]),
+        rows: reportProgramAwareness.map((row) => [row.name, row.guidanceService, scoreCell(row.averageScore, row.students), row.responseCount]),
       },
       {
         title: "Demographic breakdown",
@@ -2723,19 +2736,9 @@ export default function AnalyticsDashboard() {
       {
         title: "Guidance service coverage",
         head: ["Guidance service", "Programs", "Avg. awareness score"],
-        rows: reportGuidanceCoverage.map((row) => [row.service, row.programCount, scoreCell(row.averageScore, row.tooFew)]),
+        rows: reportGuidanceCoverage.map((row) => [row.service, row.programCount, scoreCell(row.averageScore, row.students)]),
       },
-      {
-        title: "Awareness by exposure",
-        head: ["IEC category", "Opened", "Did not open", "Difference", "Respondents"],
-        rows: materialExposureAwareness.map((row) => [
-          row.category,
-          row.openedTooFew ? `${TOO_FEW_TEXT} (${row.openedCount})` : row.openedAvg !== null ? `${row.openedAvg}% (${row.openedCount})` : "No data",
-          row.notOpenedTooFew ? `${TOO_FEW_TEXT} (${row.notOpenedCount})` : row.notOpenedAvg !== null ? `${row.notOpenedAvg}% (${row.notOpenedCount})` : "No data",
-          row.openedTooFew || row.notOpenedTooFew ? TOO_FEW_TEXT : row.difference !== null ? `${row.difference >= 0 ? "+" : ""}${row.difference}pp` : "No data",
-          row.totalRespondents,
-        ]),
-      },
+      // "Awareness by exposure" is not exported: see SHOW_MATERIAL_EXPOSURE.
       {
         title: "IEC material reach",
         head: ["Category", "Materials", "Downloads"],
@@ -2824,7 +2827,7 @@ export default function AnalyticsDashboard() {
       const filtersLine = describeFilters(filters, selectedProgramName);
       let bodyTop = 46;
 
-      const addHeader = () => {
+      const addHeader = (firstPage = false) => {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(16);
         doc.setTextColor(15);
@@ -2849,10 +2852,12 @@ export default function AnalyticsDashboard() {
         const definitionLines = doc.splitTextToSize(PARTICIPANTS_DEFINITION, 182);
         doc.text(definitionLines, 14, y);
         y += definitionLines.length * 4;
+        // A clear banner right under the filter line, on page 1 only.
+        if (firstPage && noStudentsMatch) y = drawNoMatchBanner(doc, y);
         bodyTop = y + 5;
       };
 
-      addHeader();
+      addHeader(true);
 
       let nextY = bodyTop;
 
@@ -2892,7 +2897,7 @@ export default function AnalyticsDashboard() {
         body: tableBodyOrPlaceholder(reportProgramAwareness, 4, (row) => [
           row.name,
           row.guidanceService,
-          scoreCell(row.averageScore, row.tooFew),
+          scoreCell(row.averageScore, row.students),
           row.responseCount,
         ]),
         headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
@@ -2955,7 +2960,7 @@ export default function AnalyticsDashboard() {
         body: reportGuidanceCoverage.map((row) => [
           row.service,
           row.programCount,
-          scoreCell(row.averageScore, row.tooFew),
+          scoreCell(row.averageScore, row.students),
         ]),
         headStyles: { fillColor: [217, 119, 6], textColor: [255, 255, 255], fontStyle: "bold" },
         styles: { fontSize: 12 },
@@ -2968,7 +2973,8 @@ export default function AnalyticsDashboard() {
         nextY = bodyTop;
       }
 
-      // SECTION 5 — Awareness by Material Exposure
+      // SECTION 5 — Awareness by Material Exposure. Not printed: see SHOW_MATERIAL_EXPOSURE.
+      if (SHOW_MATERIAL_EXPOSURE) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.setTextColor(15);
@@ -2980,9 +2986,9 @@ export default function AnalyticsDashboard() {
         head: [["IEC category", "Opened", "Did not open", "Difference", "Respondents"]],
         body: tableBodyOrPlaceholder(materialExposureAwareness, 5, (row) => [
           row.category,
-          row.openedTooFew ? `${TOO_FEW_TEXT} (${row.openedCount})` : row.openedAvg !== null ? `${row.openedAvg}% (${row.openedCount})` : "No data",
-          row.notOpenedTooFew ? `${TOO_FEW_TEXT} (${row.notOpenedCount})` : row.notOpenedAvg !== null ? `${row.notOpenedAvg}% (${row.notOpenedCount})` : "No data",
-          row.openedTooFew || row.notOpenedTooFew ? TOO_FEW_TEXT : row.difference !== null ? `${row.difference >= 0 ? "+" : ""}${row.difference}pp` : "No data",
+          row.openedAvg !== null ? `${row.openedAvg}% (${row.openedCount})` : "No data",
+          row.notOpenedAvg !== null ? `${row.notOpenedAvg}% (${row.notOpenedCount})` : "No data",
+          row.difference !== null ? `${row.difference >= 0 ? "+" : ""}${row.difference}pp` : "No data",
           row.totalRespondents,
         ]),
         headStyles: { fillColor: [8, 145, 178], textColor: [255, 255, 255], fontStyle: "bold" },
@@ -2996,6 +3002,7 @@ export default function AnalyticsDashboard() {
         doc.setTextColor(148);
         doc.text("No responses have been recorded yet.", 14, nextY);
         nextY += 10;
+      }
       }
 
       if (nextY > 250) {
@@ -3075,15 +3082,7 @@ export default function AnalyticsDashboard() {
         autoTable(doc, {
           startY: nextY,
           head: [learningSection.head],
-          // A withheld group prints the small-group text once, across the three score columns.
-          body:
-            learningSection.rows.length > 0
-              ? learningSection.rows.map((row) =>
-                  row[2] === TOO_FEW_TEXT
-                    ? [row[0], row[1], { content: TOO_FEW_TEXT, colSpan: 3, styles: { halign: "center" } }]
-                    : row
-                )
-              : [Array(learningSection.head.length).fill("—")],
+          body: learningSection.rows.length > 0 ? learningSection.rows : [Array(learningSection.head.length).fill("—")],
           headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: "bold" },
           styles: { fontSize: 12 },
         });
@@ -3140,18 +3139,16 @@ export default function AnalyticsDashboard() {
         ...(reachFilterBits.length ? reachFilterBits : ["No dashboard filters"]),
         reachIncludeTest ? "Test accounts included" : "Test accounts excluded",
       ].join(" | ");
-      doc.text(doc.splitTextToSize(reachScope, 180), 14, nextY);
-      nextY += 7;
+      // The caption can be long: wrap it, then start everything below the LAST wrapped line.
+      nextY = drawWrappedCaption(doc, reachScope, 14, nextY, 180).nextY;
 
       if (!reachForPdf) {
-        doc.setFont("helvetica", "italic");
-        doc.text("Material reach could not be loaded.", 14, nextY);
+        nextY = drawEmptyLine(doc, "Material reach could not be loaded.", 14, nextY);
       } else if (reachForPdf.overall.students === 0) {
-        doc.setFont("helvetica", "italic");
-        doc.text("No students match the current filters.", 14, nextY);
+        nextY = drawEmptyLine(doc, "No students match the current filters.", 14, nextY);
       } else {
         const reachRows = reachForPdf.by_course;
-        const reachSmall = (n: number) => (n < SMALL_SAMPLE_N ? " (small sample)" : "");
+        const reachSmall = (n: number) => (n < SMALL_SAMPLE_N ? ` (${smallGroupNote(n)})` : "");
 
         // Native bar chart: % reached per course, lowest first.
         const labelWidth = 62;
@@ -3385,10 +3382,11 @@ export default function AnalyticsDashboard() {
   const handleGenerateInsight = async (regenerate = false) => {
     setInsightError(null);
 
-    // The small-group rule also covers what leaves for the AI service.
-    if (hasActiveFilters && isTooFew(totalStudents)) {
+    // Kept on purpose (PHASE 57): the page and the exports now show small groups, but fewer than 5
+    // students are still not sent to the external AI service.
+    if (hasActiveFilters && isSmallGroup(totalStudents)) {
       setInsight(null);
-      setInsightError(TOO_FEW_TEXT);
+      setInsightError("Too few students match these filters to send to the AI Insight (fewer than 5). Remove some filters and try again.");
       return;
     }
 
@@ -3523,6 +3521,10 @@ export default function AnalyticsDashboard() {
             </button>
           </div>
         </div>
+
+        {noStudentsMatch && (
+          <p role="alert" className="m-0 px-4 py-3 rounded-2xl bg-[#FEF3C7] text-[#92400E] text-sm font-semibold">{NO_MATCH_TEXT}</p>
+        )}
 
         {exportError && (
           <p role="alert" className="m-0 text-sm font-semibold text-[#BE123C]">{exportError}</p>
@@ -4098,13 +4100,15 @@ export default function AnalyticsDashboard() {
                 info="The average of every scored answer across all awareness checks, shown as a percentage. No list has a matching count."
                 title="Overall average score"
                 value={
-                  awarenessAnalytics.overallTooFew
-                    ? TOO_FEW_TEXT
-                    : awarenessAnalytics.overall !== null
-                      ? `${awarenessAnalytics.overall}%`
-                      : "No data"
+                  awarenessAnalytics.overall !== null
+                    ? `${awarenessAnalytics.overall}%`
+                    : "No data"
                 }
-                description="Across all knowledge assessments"
+                description={
+                  awarenessAnalytics.overallSmall
+                    ? `Across all knowledge assessments · ${smallGroupNote(awarenessAnalytics.overallStudents)}`
+                    : "Across all knowledge assessments"
+                }
                 icon={Trophy}
               />
 
@@ -4176,10 +4180,12 @@ export default function AnalyticsDashboard() {
                 </ResponsiveContainer>
               )}
 
-              {programAwarenessAnalytics.some((p) => p.tooFew) && (
-                <p className="m-0 mt-3 text-[13px] font-semibold text-[#92400E]">
-                  {TOO_FEW_TEXT}: {programAwarenessAnalytics.filter((p) => p.tooFew).map((p) => p.name).join(", ")}
-                </p>
+              {programAwarenessAnalytics.some((p) => p.small) && (
+                <ul className="m-0 mt-3 p-0 list-none text-[13px] font-semibold text-[#92400E]">
+                  {programAwarenessAnalytics.filter((p) => p.small).map((p) => (
+                    <li key={p.programId}>{p.name}: {smallGroupNote(p.students)}</li>
+                  ))}
+                </ul>
               )}
             </Card>
 
@@ -4219,20 +4225,19 @@ export default function AnalyticsDashboard() {
                                 ({row.count})
                               </span>
                             </span>
-                            {row.tooFew ? (
-                              <span className="text-xs font-bold text-[#92400E]">{TOO_FEW_TEXT}</span>
-                            ) : (
-                              <span className="text-xs font-black text-indigo-600">
-                                {row.average}%
-                              </span>
-                            )}
+                            <span className="text-xs font-black text-indigo-600">
+                              {row.average}%
+                            </span>
                           </div>
                           <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                             <div
                               className="h-full bg-indigo-600 rounded-full"
-                              style={{ width: `${row.tooFew ? 0 : row.average}%` }}
+                              style={{ width: `${row.average}%` }}
                             />
                           </div>
+                          {row.small && (
+                            <p className="m-0 mt-1 text-[12px] font-semibold text-[#92400E]">{smallGroupNote(row.students)}</p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -4270,10 +4275,13 @@ export default function AnalyticsDashboard() {
                           {row.programCount}
                         </td>
                         <td className="py-3 text-xs font-black">
-                          {row.tooFew ? (
-                            <span className="text-[#92400E] font-bold">{TOO_FEW_TEXT}</span>
-                          ) : row.averageScore !== null ? (
-                            <span className="text-indigo-600">{row.averageScore}%</span>
+                          {row.averageScore !== null ? (
+                            <>
+                              <span className="text-indigo-600">{row.averageScore}%</span>
+                              {row.small && (
+                                <span className="block text-[12px] font-semibold text-[#92400E]">{smallGroupNote(row.students)}</span>
+                              )}
+                            </>
                           ) : (
                             <span className="text-slate-300 font-bold">No data</span>
                           )}
@@ -4285,11 +4293,10 @@ export default function AnalyticsDashboard() {
               </div>
             </Card>
 
-            {/* AWARENESS BY MATERIAL EXPOSURE — the intervention-outcome
-                comparison: did opening an IEC material actually correlate
-                with a higher knowledge score on that category? Rendered
-                (headers + em dashes) even with zero scored responses,
-                never hidden. */}
+            {/* AWARENESS BY MATERIAL EXPOSURE — hidden, see SHOW_MATERIAL_EXPOSURE.
+                The intervention-outcome comparison: did opening an IEC material
+                correlate with a higher knowledge score on that category? */}
+            {SHOW_MATERIAL_EXPOSURE && (
             <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">
               <h3 className="text-sm font-bold text-[#1E1B4B] mb-1">
                 Awareness by material exposure
@@ -4327,27 +4334,21 @@ export default function AnalyticsDashboard() {
                             {row.category}
                           </td>
                           <td className="py-3 pr-4 text-xs font-black">
-                            {row.openedTooFew ? (
-                              <span className="text-[#92400E] font-bold">{TOO_FEW_TEXT} <span className="text-slate-400 font-medium">({row.openedCount})</span></span>
-                            ) : row.openedAvg !== null ? (
+                            {row.openedAvg !== null ? (
                               <span className="text-indigo-600">{row.openedAvg}% <span className="text-slate-400 font-medium">({row.openedCount})</span></span>
                             ) : (
                               <span className="text-slate-300 font-bold">No data</span>
                             )}
                           </td>
                           <td className="py-3 pr-4 text-xs font-black">
-                            {row.notOpenedTooFew ? (
-                              <span className="text-[#92400E] font-bold">{TOO_FEW_TEXT} <span className="text-slate-400 font-medium">({row.notOpenedCount})</span></span>
-                            ) : row.notOpenedAvg !== null ? (
+                            {row.notOpenedAvg !== null ? (
                               <span className="text-slate-700">{row.notOpenedAvg}% <span className="text-slate-400 font-medium">({row.notOpenedCount})</span></span>
                             ) : (
                               <span className="text-slate-300 font-bold">No data</span>
                             )}
                           </td>
                           <td className="py-3 pr-4 text-xs font-black">
-                            {row.openedTooFew || row.notOpenedTooFew ? (
-                              <span className="text-[#92400E] font-bold">{TOO_FEW_TEXT}</span>
-                            ) : row.difference !== null ? (
+                            {row.difference !== null ? (
                               <span className={row.difference >= 0 ? "text-emerald-600" : "text-rose-500"}>
                                 {row.difference >= 0 ? "+" : ""}
                                 {row.difference}pp
@@ -4372,6 +4373,7 @@ export default function AnalyticsDashboard() {
                 </p>
               )}
             </Card>
+            )}
 
             {/* PROGRAM PARTICIPATION BY COURSE */}
             <Card className="border-none shadow-none rounded-[32px] p-5 md:p-7 bg-white">

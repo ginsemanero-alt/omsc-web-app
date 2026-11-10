@@ -124,12 +124,23 @@ export function describeFilters(filters: AnalyticsFilters, programName?: string)
   return `Filters: ${parts.join('; ')}`;
 }
 
-// ----- The small-group rule ---------------------------------------------
+// ----- The small-group note ----------------------------------------------
 //
-// A group of 1 to 4 students never has its scores shown (page, exports, and
-// the AI insight); the counts stay visible. The learning-gain SQL applies the
-// same rule (v_min_group in PHASE 41), so those scores never leave the database.
+// Nothing is withheld any more (PHASE 57). A group of 1 to 4 students shows its
+// real numbers, with "n = X — small group, interpret with caution" next to it.
+// This applies on the page, in the PDF and in the Excel export. The learning-gain
+// SQL no longer hides scores either (v_min_group = 1 in PHASE 57).
+//
+// The AI insight is the one exception, on purpose: its own guard still refuses to
+// send a filtered group of fewer than MIN_GROUP_SIZE students to the external AI
+// service (see handleGenerateInsight).
 
 export const MIN_GROUP_SIZE = 5;
-export const TOO_FEW_TEXT = `Too few to report (n < ${MIN_GROUP_SIZE})`;
-export const isTooFew = (students: number) => students > 0 && students < MIN_GROUP_SIZE;
+export const isSmallGroup = (students: number) => students > 0 && students < MIN_GROUP_SIZE;
+export const smallGroupNote = (students: number) => `n = ${students} — small group, interpret with caution`;
+// "Label (n = 3 — small group, interpret with caution)" when the group is small, the label alone otherwise.
+export const withSmallGroupNote = (label: string, students: number) =>
+  isSmallGroup(students) ? `${label} (${smallGroupNote(students)})` : label;
+// Page 1 of an export and the Analytics page, when the filters match nobody.
+export const NO_MATCH_TEXT =
+  'No students match the selected filters (0 students). Remove some filters and export again.';

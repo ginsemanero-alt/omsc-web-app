@@ -38,7 +38,7 @@ import {
   type LearningGainRow,
   type LearningGainSummary,
 } from "../../lib/learningGain";
-import { ALL, MIN_GROUP_SIZE, TOO_FEW_TEXT, type AnalyticsFilters } from "../../lib/analyticsFilters";
+import { ALL, MIN_GROUP_SIZE, isSmallGroup, smallGroupNote, type AnalyticsFilters } from "../../lib/analyticsFilters";
 
 /* =========================================================
    LEARNING GAIN (pre-test vs post-test)
@@ -272,7 +272,7 @@ export default function LearningGainSection({ filters }: { filters: AnalyticsFil
   }, [summary, breakdown]);
 
   const programChartData = programRows
-    .filter((row) => row.paired_n > 0 && !row.suppressed)
+    .filter((row) => row.paired_n > 0 && row.mean_pre !== null && row.mean_post !== null)
     .map((row) => ({
       name: row.label,
       pre: row.mean_pre,
@@ -281,7 +281,7 @@ export default function LearningGainSection({ filters }: { filters: AnalyticsFil
     }));
 
   const gainChartData = breakdownRows
-    .filter((row) => row.paired_n > 0 && !row.suppressed && row.mean_gain !== null)
+    .filter((row) => row.paired_n > 0 && row.mean_gain !== null)
     .map((row) => ({
       name: row.label,
       gain: row.mean_gain as number,
@@ -359,25 +359,23 @@ export default function LearningGainSection({ filters }: { filters: AnalyticsFil
             <div className="px-[22px] py-5 rounded-[26px] bg-white flex flex-col gap-1 min-w-0">
               <span className="text-[13px] font-semibold text-[#5B6477]">Students with both tests</span>
               <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#1E1B4B]">{overall.paired_n}</span>
-              {overall.suppressed && (
-                <span className="text-xs text-[#92400E]">Scores are hidden for a group under {MIN_GROUP_SIZE}.</span>
+              {isSmallGroup(overall.paired_n) && (
+                <span className="text-xs font-semibold text-[#92400E]">{smallGroupNote(overall.paired_n)}</span>
               )}
             </div>
             <div className="px-[22px] py-5 rounded-[26px] bg-white flex flex-col gap-1 min-w-0">
               <span className="text-[13px] font-semibold text-[#5B6477]">Mean pre-test</span>
-              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#1E1B4B]">{overall.suppressed ? <TooFew /> : fmtPct(overall.mean_pre)}</span>
+              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#1E1B4B]">{fmtPct(overall.mean_pre)}</span>
             </div>
             <div className="px-[22px] py-5 rounded-[26px] bg-white flex flex-col gap-1 min-w-0">
               <span className="text-[13px] font-semibold text-[#5B6477]">Mean post-test</span>
-              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#1E1B4B]">{overall.suppressed ? <TooFew /> : fmtPct(overall.mean_post)}</span>
+              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#1E1B4B]">{fmtPct(overall.mean_post)}</span>
             </div>
             <div className="px-[22px] py-5 rounded-[26px] bg-[#D1FAE5] flex flex-col gap-1 min-w-0">
               <span className="text-[13px] font-semibold text-[#065F46]">Mean gain</span>
-              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#065F46]">{overall.suppressed ? <TooFew /> : fmtGain(overall.mean_gain)}</span>
+              <span className="font-bricolage font-extrabold text-[36px] leading-tight text-[#065F46]">{fmtGain(overall.mean_gain)}</span>
               <span className="text-xs text-[#065F46]">
-                {overall.suppressed
-                  ? "Hidden: too few students"
-                  : overall.paired_n > 0 && overall.norm_gain === null
+                {overall.paired_n > 0 && overall.norm_gain === null
                     ? "Normalized gain: pre-test mean is 100%, no room to gain"
                     : `Normalized gain ${fmtG(overall.norm_gain)}`}
               </span>
@@ -386,22 +384,18 @@ export default function LearningGainSection({ filters }: { filters: AnalyticsFil
             <div className="col-span-2 lg:col-span-1 px-[22px] py-5 rounded-[26px] bg-[#1E1B4B] text-white flex flex-col gap-1 min-w-0">
               <span className="text-[13px] font-semibold text-[#FBBF24]">Paired t-test</span>
               <span className="font-bricolage font-extrabold text-[28px] leading-tight">
-                {overall.suppressed
-                  ? TOO_FEW_TEXT
-                  : overallTest
-                    ? overallTest.p < 0.001
-                      ? "p < .001"
-                      : `p = ${formatPValue(overallTest.p)}`
-                    : "Not enough data"}
+                {overallTest
+                  ? overallTest.p < 0.001
+                    ? "p < .001"
+                    : `p = ${formatPValue(overallTest.p)}`
+                  : "Not enough data"}
               </span>
               <span className="text-xs text-[#C7C9F2]">
-                {overall.suppressed
-                  ? "The test is not shown for a group this small"
-                  : overallTest
-                    ? `t(${overallTest.df}) = ${overallTest.t.toFixed(2)} · ${overallTest.significant ? "Significant at 0.05" : "Not significant at 0.05"}`
-                    : "Needs at least 2 paired students with differing gains"}
+                {overallTest
+                  ? `t(${overallTest.df}) = ${overallTest.t.toFixed(2)} · ${overallTest.significant ? "Significant at 0.05" : "Not significant at 0.05"}`
+                  : "Needs at least 2 paired students with differing gains"}
               </span>
-              {!overall.suppressed && overall.paired_n > 0 && overall.paired_n < T_TEST_CAUTION_N && (
+              {overall.paired_n > 0 && overall.paired_n < T_TEST_CAUTION_N && (
                 <span className="self-start mt-1"><CautionBadge compact /></span>
               )}
             </div>
@@ -618,7 +612,7 @@ export default function LearningGainSection({ filters }: { filters: AnalyticsFil
               <strong>⟨g⟩</strong> (normalized gain) = gain ÷ (100 − pre-test), the share of the
               possible improvement actually achieved: High ≥ 0.70, Medium 0.30–0.69, Low &lt; 0.30.
               It is blank when the pre-test mean is already 100%.{" "}
-              A group under {MIN_GROUP_SIZE} paired students shows <strong>{TOO_FEW_TEXT}</strong> instead of scores; its counts stay visible.
+              A group under {MIN_GROUP_SIZE} paired students still shows its real numbers, marked <strong>small group, interpret with caution</strong>.
               Incomplete students (pre-test only) are never included in the means.
             </p>
           </div>
@@ -678,13 +672,16 @@ function MetricsTable({
             </tr>
           ) : (
             rows.map((row) => {
-              const test = row.suppressed ? null : pairedTTest(row.paired_n, row.mean_gain, row.sd_diff);
-              const level = row.suppressed ? null : normalizedGainLevel(row.norm_gain);
+              const test = pairedTTest(row.paired_n, row.mean_gain, row.sd_diff);
+              const level = normalizedGainLevel(row.norm_gain);
 
               return (
                 <tr key={`${row.dimension}-${row.key}`} className="border-b border-slate-50 align-top">
                   <td className="py-3 pr-4">
                     <p className="text-xs font-black text-slate-800 max-w-[240px]">{row.label}</p>
+                    {isSmallGroup(row.paired_n) && (
+                      <p className="m-0 mt-0.5 text-xs font-semibold text-[#92400E] max-w-[240px]">{smallGroupNote(row.paired_n)}</p>
+                    )}
                     <div className="mt-1 flex flex-wrap gap-1">
                       {row.ceiling_n > 0 && (
                         <span className="px-2 py-[3px] rounded-full bg-[#F1F5F9] text-[#475569] text-xs font-bold">
@@ -695,9 +692,6 @@ function MetricsTable({
                   </td>
                   <td className="py-3 pr-4 text-xs font-black text-slate-900">{row.paired_n}</td>
                   <td className="py-3 pr-4 text-xs font-bold text-slate-500">{row.incomplete_n}</td>
-                  {row.suppressed ? (
-                    <td colSpan={8} className="py-3 text-xs font-bold text-[#92400E]">{TOO_FEW_TEXT}</td>
-                  ) : (
                   <>
                   <td className="py-3 pr-4 text-xs font-bold text-[#5B6477]">{fmtPct(row.mean_pre)}</td>
                   <td className="py-3 pr-4 text-xs font-bold text-indigo-600">{fmtPct(row.mean_post)}</td>
@@ -735,7 +729,6 @@ function MetricsTable({
                     </div>
                   </td>
                   </>
-                  )}
                 </tr>
               );
             })
@@ -753,11 +746,6 @@ function EmptyState({ message }: { message: string }) {
       <p className="text-xs font-bold text-slate-400 max-w-md leading-relaxed">{message}</p>
     </div>
   );
-}
-
-// Shown where a score would be, for a group too small to report.
-function TooFew() {
-  return <span className="text-[15px] font-bold text-[#92400E]">{TOO_FEW_TEXT}</span>;
 }
 
 function CautionBadge({ compact = false }: { compact?: boolean }) {

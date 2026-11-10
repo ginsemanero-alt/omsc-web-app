@@ -37,11 +37,11 @@ interface Props {
 
 const BAR_COLOR = "#4f46e5";
 
-function SmallSampleBadge() {
+function SmallSampleBadge({ n }: { n: number }) {
   return (
     <span className="inline-flex items-center gap-1 px-2 py-[3px] rounded-full bg-[#FEF3C7] text-[#92400E] text-xs font-bold whitespace-nowrap">
       <AlertTriangle className="w-2.5 h-2.5" aria-hidden="true" />
-      Small sample
+      n = {n} — small group, interpret with caution
     </span>
   );
 }
@@ -65,7 +65,7 @@ function ReachTable({ title, rows }: { title: string; rows: MaterialReachRow[] }
             <tr key={row.key} className="border-b border-[#F0F1F7] last:border-0">
               <td className="py-2.5 pr-3 font-semibold text-[#1E1B4B]">
                 <span className="mr-2">{row.key}</span>
-                {row.students < SMALL_SAMPLE_N && <SmallSampleBadge />}
+                {row.students < SMALL_SAMPLE_N && <SmallSampleBadge n={row.students} />}
               </td>
               <td className="py-2.5 px-3 text-right tabular-nums">{row.students}</td>
               <td className="py-2.5 px-3 text-right tabular-nums">{row.reached}</td>
@@ -201,7 +201,7 @@ export default function MaterialReachSection({
         </p>
         <p className="m-0">
           Material views are recorded only since IEC materials were linked to programs, so reach for
-          earlier students may be understated. <strong>Small sample</strong> marks groups under {SMALL_SAMPLE_N} students (paler bars).
+          earlier students may be understated. <strong>Small group</strong> marks groups under {SMALL_SAMPLE_N} students (paler bars); their numbers are real, so interpret them with caution.
         </p>
       </div>
     </Card>
