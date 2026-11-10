@@ -35,7 +35,8 @@ export async function notifyStudents(
     } else {
       console.log(
         `notifyStudents: ${data.notified ?? 0} in-app notification(s), ` +
-        `${data.emailSent ?? 0} email(s) sent of ${data.total ?? 0} active student(s).`
+        `${data.emailSent ?? 0} email(s) sent of ${data.total ?? 0} active student(s)` +
+        (data.emailSkippedReason ? ` (email skipped: ${data.emailSkippedReason}).` : '.')
       );
     }
   } catch (err) {

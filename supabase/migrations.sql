@@ -5611,3 +5611,27 @@ NOTIFY pgrst, 'reload schema';
 -- -- ALTER TABLE profiles ALTER COLUMN gender SET NOT NULL;   (likewise age, is_pwd, is_ip)
 -- COMMIT;
 -- NOTIFY pgrst, 'reload schema';
+
+-- =====================================================================
+-- PHASE 55 — Admin setting "Send email notifications" (default OFF)
+-- Documentation of SQL run by the user. /api/notify-students emails students
+-- ONLY for a new program and ONLY when email_notifications is true; surveys
+-- and everything else are in-app only. In-app notifications are always created.
+-- Written only by /api/admin/notification-settings (service key); admins can read.
+-- =====================================================================
+BEGIN;
+CREATE TABLE IF NOT EXISTS app_settings (
+  id                  integer PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  email_notifications boolean NOT NULL DEFAULT false,
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+  updated_by          text
+);
+INSERT INTO app_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS app_settings_select_admin ON app_settings;
+CREATE POLICY app_settings_select_admin ON app_settings FOR SELECT TO authenticated USING (is_admin());
+REVOKE ALL ON app_settings FROM anon, authenticated;
+GRANT SELECT ON app_settings TO authenticated;
+COMMIT;
+NOTIFY pgrst, 'reload schema';
+-- Rollback: DROP TABLE IF EXISTS app_settings;

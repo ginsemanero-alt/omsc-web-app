@@ -1167,10 +1167,28 @@ app.post('/api/login', loginLimiter, async (req, res) => {
     }
 });
 
+// PHASE 55: the admin's "Send email notifications" switch (app_settings, one row).
+// Fail-safe: anything other than a clear "true" (row missing, table missing,
+// database error) means NO email. In-app notifications never depend on it.
+async function emailNotificationsEnabled() {
+    try {
+        const { data, error } = await supabase.from('app_settings').select('email_notifications').eq('id', 1).maybeSingle();
+        if (error) {
+            console.error('Could not read the email notification setting, sending no email:', error.message);
+            return false;
+        }
+        return data?.email_notifications === true;
+    } catch (err) {
+        console.error('Could not read the email notification setting, sending no email:', err.message);
+        return false;
+    }
+}
+
 // Notifies every active student when the admin publishes a new Program
-// or activates a new Survey — both an in-app row (the primary channel;
-// always attempted) and an email (best-effort, only if RESEND_API_KEY
-// is configured). Same admin-session-check shape as
+// or activates a new Survey. The in-app row is the primary channel and is
+// always created. An email goes out ONLY for a new Program, and only when
+// the admin has turned on "Send email notifications" (PHASE 55) and
+// RESEND_API_KEY is configured. Surveys are in-app only. Same admin-session-check shape as
 // /api/admin/create-staff — this fans out to potentially every student
 // in the system, so it's gated the same way.
 app.post('/api/notify-students', notifyLimiter, async (req, res) => {
@@ -1253,9 +1271,16 @@ app.post('/api/notify-students', notifyLimiter, async (req, res) => {
             notifiedCount = count ?? notificationRows.length;
         }
 
+        // Email: a new program only, and only when the admin switched it on.
+        if (type !== 'program') {
+            return res.status(200).json({ notified: notifiedCount, emailSent: 0, emailSkipped: true, emailSkippedReason: 'not_a_program', total: activeStudents.length });
+        }
+        if (!(await emailNotificationsEnabled())) {
+            return res.status(200).json({ notified: notifiedCount, emailSent: 0, emailSkipped: true, emailSkippedReason: 'setting_off', total: activeStudents.length });
+        }
         if (!resend) {
             console.warn('Skipped email notification — RESEND_API_KEY not configured.');
-            return res.status(200).json({ notified: notifiedCount, emailSent: 0, emailSkipped: true, total: activeStudents.length });
+            return res.status(200).json({ notified: notifiedCount, emailSent: 0, emailSkipped: true, emailSkippedReason: 'not_configured', total: activeStudents.length });
         }
 
         const recipients = [...new Set(activeStudents.map((s) => s.email).filter(Boolean))];
@@ -1806,6 +1831,45 @@ registerRetentionRoutes(app, {
     retention: createRetention({ supabase, findAuthUserByEmail, cldDestroy, cldReady: cldConfigured }),
     requireActiveAdmin,
     limiter: retentionAdminLimiter,
+});
+
+// PHASE 55: the "Send email notifications" switch. Only an active administrator
+// can change it, only through here (the table has no write access for the
+// browser), and every change is recorded in the Activity Log.
+app.post('/api/admin/notification-settings', retentionAdminLimiter, async (req, res) => {
+    try {
+        const admin = await requireActiveAdmin(req, res, 'Only administrators can change this setting.');
+        if (!admin) return;
+        const value = req.body?.emailNotifications;
+        if (typeof value !== 'boolean') {
+            return res.status(400).json({ message: 'emailNotifications must be true or false.' });
+        }
+        const { data: current, error: readError } = await supabase.from('app_settings').select('email_notifications').eq('id', 1).maybeSingle();
+        if (readError) throw readError;
+        if (current && current.email_notifications === value) {
+            return res.status(200).json({ unchanged: true, emailNotifications: value });
+        }
+        const { error: saveError } = await supabase.from('app_settings').upsert({
+            id: 1,
+            email_notifications: value,
+            updated_at: new Date().toISOString(),
+            updated_by: admin.authUser.email,
+        });
+        if (saveError) throw saveError;
+        const { error: logError } = await supabase.from('activity_logs').insert([{
+            actor_email: admin.authUser.email,
+            actor_name: admin.record.name || admin.authUser.email,
+            action: 'update',
+            entity_type: 'retention',
+            entity_label: 'Email notifications',
+            details: value ? 'Turned on: students are emailed when a new program is published' : 'Turned off: notifications are shown inside the app only',
+        }]);
+        if (logError) console.error('Notification setting: Activity Log entry failed:', logError.message);
+        res.status(200).json({ unchanged: false, emailNotifications: value });
+    } catch (error) {
+        console.error('notification-settings error:', error.message);
+        res.status(500).json({ message: 'Could not save the setting.' });
+    }
 });
 
 export default app;

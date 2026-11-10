@@ -4,6 +4,7 @@ import { useToast } from '../../hooks/use-toast';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import NotificationSettings from './NotificationSettings';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import {
   adminPost,
@@ -241,6 +242,8 @@ export default function PrivacySettings() {
           </div>
         </>
       )}
+
+      <NotificationSettings />
 
       <Dialog open={!!preview} onOpenChange={(open) => !open && !saving && setPreview(null)}>
         <DialogContent className="max-w-lg bg-white rounded-[2rem] p-6 border-none shadow-2xl font-sans">
