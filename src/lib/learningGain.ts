@@ -1,4 +1,4 @@
-import { ALL, AGE_GROUP_RANGES, MIN_GROUP_SIZE, type AnalyticsFilters } from './analyticsFilters';
+import { ALL, AGE_BANDS, AGE_GROUP_RANGES, MIN_GROUP_SIZE, type AnalyticsFilters } from './analyticsFilters';
 
 // Learning Gain (pre-test vs post-test) — shared constants and the
 // statistics the Analytics Dashboard's Learning Gain section needs.
@@ -7,16 +7,15 @@ import { ALL, AGE_GROUP_RANGES, MIN_GROUP_SIZE, type AnalyticsFilters } from './
 // (PHASE 23). This file only turns those per-group aggregates into a
 // normalized-gain label and a paired-samples t-test.
 
-// Age brackets for every Learning Gain breakdown and filter. Change
-// them here only: this list is sent to learning_gain_summary() as
-// p_age_brackets, so the SQL grouping follows automatically.
-// max: null = open-ended ("and above").
-export const AGE_BRACKETS: { label: string; min: number; max: number | null }[] = [
-  { label: '17–18', min: 17, max: 18 },
-  { label: '19–20', min: 19, max: 20 },
-  { label: '21–22', min: 21, max: 22 },
-  { label: '23 and above', min: 23, max: null },
-];
+// Age brackets for every Learning Gain breakdown and filter, derived from AGE_BANDS (analyticsFilters.ts),
+// the one definition of the age bands. This list is sent to learning_gain_summary() as p_age_brackets, so
+// the SQL grouping follows automatically. The SQL needs a number for min, so the open-ended bottom band
+// starts at 0: nobody lands in "Outside brackets". max: null = open-ended ("and above").
+export const AGE_BRACKETS: { label: string; min: number; max: number | null }[] = AGE_BANDS.map((band) => ({
+  label: band.label,
+  min: band.min ?? 0,
+  max: band.max,
+}));
 
 // Fewer paired students than this and the group is flagged "small group,
 // interpret with caution". The scores are still shown (PHASE 57). Same number as

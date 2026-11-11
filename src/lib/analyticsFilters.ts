@@ -79,15 +79,33 @@ export function filtersToParams(filters: AnalyticsFilters, base: URLSearchParams
 
 export const hasActiveFilters = (filters: AnalyticsFilters) => FILTER_KEYS.some((key) => filters[key] !== ALL);
 
-// The dashboard's age groups (AnalyticsDashboard getAgeGroup) as min/max ages.
-export const AGE_GROUP_RANGES: Record<string, { min: number | null; max: number | null }> = {
-  'Below 18': { min: null, max: 17 },
-  '18–20': { min: 18, max: 20 },
-  '21–22': { min: 21, max: 22 },
-  '23–24': { min: 23, max: 24 },
-  '25–26': { min: 25, max: 26 },
-  '27+': { min: 27, max: null },
-};
+// ----- Age bands: the ONE definition ------------------------------------
+//
+// Every place that groups or filters by age is derived from AGE_BANDS: the demographic breakdown, the Age
+// filter, Learning gain (its p_age_brackets, see AGE_BRACKETS in learningGain.ts), Material reach, and the
+// PDF and Excel exports. Change the bands here only. min / max are inclusive; null = open-ended.
+// A missing age is "Not specified". Nobody falls outside the bands.
+export const AGE_NOT_SPECIFIED = 'Not specified';
+
+export const AGE_BANDS: { label: string; min: number | null; max: number | null }[] = [
+  { label: '19 and below', min: null, max: 19 },
+  { label: '20–22', min: 20, max: 22 },
+  { label: '23 and above', min: 23, max: null },
+];
+
+// The band a student's age belongs to, or "Not specified" when the age is missing or not a number.
+export function ageBandOf(age: unknown): string {
+  if (age === null || age === undefined || age === '') return AGE_NOT_SPECIFIED;
+  const n = Number(age);
+  if (!Number.isFinite(n)) return AGE_NOT_SPECIFIED;
+  const band = AGE_BANDS.find((b) => (b.min === null || n >= b.min) && (b.max === null || n <= b.max));
+  return band ? band.label : AGE_NOT_SPECIFIED;
+}
+
+// The same bands as min/max ages, keyed by label (for the Age filter's RPC parameters).
+export const AGE_GROUP_RANGES: Record<string, { min: number | null; max: number | null }> = Object.fromEntries(
+  AGE_BANDS.map((b) => [b.label, { min: b.min, max: b.max }])
+);
 
 // ----- What the exports print -------------------------------------------
 

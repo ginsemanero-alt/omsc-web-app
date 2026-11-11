@@ -72,6 +72,9 @@ import {
   describeFilters,
   filtersFromParams,
   filtersToParams,
+  AGE_BANDS,
+  AGE_NOT_SPECIFIED,
+  ageBandOf,
   hasActiveFilters as anyFilterActive,
   isSmallGroup,
   smallGroupNote,
@@ -412,18 +415,8 @@ function getYearLevel(value: unknown): string {
   return year;
 }
 
-function getAgeGroup(age: unknown): string {
-  const n = Number(age);
-
-  if (!Number.isFinite(n)) return "Not Specified";
-  if (n < 18) return "Below 18";
-  if (n <= 20) return "18–20";
-  if (n <= 22) return "21–22";
-  if (n <= 24) return "23–24";
-  if (n <= 26) return "25–26";
-
-  return "27+";
-}
+// Age bands come from AGE_BANDS in lib/analyticsFilters.ts (the one definition).
+const getAgeGroup = ageBandOf;
 
 // The "Format" of an IEC material for the exports, from its type (the format column is empty).
 const MATERIAL_FORMAT_LABELS: Record<string, string> = {
@@ -917,12 +910,11 @@ export default function AnalyticsDashboard() {
     ).sort();
   }, [profiles]);
 
-  // Fixed bucket order (not sorted alphabetically) so "Below 18" and
-  // "27+" land at the ends instead of wherever they'd fall as strings —
-  // same buckets ageAnalytics charts, minus "Not Specified" since that
+  // Fixed bucket order (the order of AGE_BANDS), not sorted alphabetically.
+  // Same buckets ageAnalytics charts, minus "Not specified" since that
   // isn't something you can filter down to meaningfully.
   const ageGroupOptions = useMemo(() => {
-    const order = ["Below 18", "18–20", "21–22", "23–24", "25–26", "27+"];
+    const order = AGE_BANDS.map((band) => band.label);
     const present = new Set(profiles.map((p) => getAgeGroup(p.age)));
     return order.filter((group) => present.has(group));
   }, [profiles]);
@@ -1449,15 +1441,7 @@ export default function AnalyticsDashboard() {
   ======================================================= */
 
   const ageAnalytics = useMemo(() => {
-    const groups = [
-      "Below 18",
-      "18–20",
-      "21–22",
-      "23–24",
-      "25–26",
-      "27+",
-      "Not Specified",
-    ];
+    const groups = [...AGE_BANDS.map((band) => band.label), AGE_NOT_SPECIFIED];
 
     const counts: Record<
       string,
