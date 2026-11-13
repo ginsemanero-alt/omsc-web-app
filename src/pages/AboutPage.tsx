@@ -79,7 +79,7 @@ const AboutPage: React.FC = () => {
                   src={heroUrl}
                   alt={`${content.heading_title}`}
                   onError={() => setHeroFailed(true)}
-                  className="w-full aspect-[4/3] object-cover rounded-[28px] lg:rounded-[32px] bg-white/10"
+                  className="w-full aspect-[4/5] md:max-h-[520px] object-cover object-[center_15%] rounded-[28px] lg:rounded-[32px] bg-white/10"
                 />
               )}
               <div className="rounded-[28px] lg:rounded-[32px] bg-white text-[#1E293B] p-6 lg:p-7 flex flex-col gap-4">

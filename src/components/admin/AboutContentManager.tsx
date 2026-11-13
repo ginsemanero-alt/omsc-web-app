@@ -541,7 +541,7 @@ export default function AboutContentManager() {
               {content.heading_title || 'Heading'}
             </h2>
 
-            {heroShown && <img src={heroShown} alt="" className="w-full aspect-[4/3] object-cover rounded-2xl mb-4" />}
+            {heroShown && <img src={heroShown} alt="" className="w-full aspect-[4/5] md:max-h-[520px] object-cover object-[center_15%] rounded-2xl mb-4" />}
 
             <div className="bg-[#F5F6FB] p-4 rounded-2xl flex items-center gap-3 mb-4">
               <div className="w-11 h-11 rounded-xl bg-[#4F46E5] flex items-center justify-center font-bricolage font-extrabold text-white text-base shrink-0">
