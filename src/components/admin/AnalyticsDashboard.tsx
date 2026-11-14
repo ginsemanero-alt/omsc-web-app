@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import StatTile from "./StatTile";
 import { supabase } from "../../lib/supabase";
@@ -61,7 +61,14 @@ import {
 } from "recharts";
 
 import { motion } from "framer-motion";
-import { fetchAnalyticsInsight, type AnalyticsInsightResult } from "../../lib/analyticsInsight";
+import {
+  fetchAnalyticsInsight,
+  fetchLatestInsight,
+  insightBrowserKey,
+  readSavedInsight,
+  saveInsightInBrowser,
+  type AnalyticsInsightResult,
+} from "../../lib/analyticsInsight";
 import { buildInsightPayload } from "../../lib/insightPayload";
 import { fetchStudentLevelTest } from "../../lib/learningGainStudents";
 import { campusLabel } from "../../lib/campuses";
@@ -660,6 +667,12 @@ export default function AnalyticsDashboard() {
   const [insight, setInsight] = useState<AnalyticsInsightResult | null>(null);
   const [insightLoading, setInsightLoading] = useState(false);
   const [insightError, setInsightError] = useState<string | null>(null);
+  // True when the shown insight came from this browser's own saved copy because the server could not be asked.
+  const [insightFromBrowser, setInsightFromBrowser] = useState(false);
+  // The unfiltered material reach sent with the insight: fetched once per visit and refreshed on each generation.
+  const insightReachRef = useRef<MaterialReachSummary | null | undefined>(undefined);
+  // Bumped whenever the figures/filters change or a generation starts, so a late lookup never overwrites newer state.
+  const insightRunId = useRef(0);
 
   /* =======================================================
      FETCH DATA
@@ -2992,22 +3005,84 @@ export default function AnalyticsDashboard() {
     }
 
     setInsightLoading(true);
+    insightRunId.current += 1; // a lookup still in flight must not replace what is about to be generated
 
     try {
-      const result = await fetchAnalyticsInsight(
-        "full_dashboard",
-        "Full Analytics Dashboard",
-        buildInsightMetrics(await fetchMaterialReachForInsight()),
-        regenerate,
-        AGE_BRACKETS
-      );
+      const reach = await fetchMaterialReachForInsight();
+      insightReachRef.current = reach;
+      const metrics = buildInsightMetrics(reach);
+      const result = await fetchAnalyticsInsight("full_dashboard", "Full Analytics Dashboard", metrics, regenerate, AGE_BRACKETS);
       setInsight(result);
+      setInsightFromBrowser(false);
+      saveInsightInBrowser(await insightBrowserKey("full_dashboard", metrics, AGE_BRACKETS), result);
     } catch (err: any) {
       setInsightError(err.message || "Failed to generate insight.");
     } finally {
       setInsightLoading(false);
     }
   };
+
+  /* =======================================================
+     SAVED AI INSIGHT
+     The insight lives in the database cache (analytics_insights), not only in this component, so it is still
+     here after the admin leaves the page and comes back. When the page has loaded or the filters change, the
+     server is asked (read-only, no AI call) for the saved insight that matches EXACTLY these figures; if there
+     is none, nothing is shown and the AI Insight button generates one. Anything from other filters or older
+     data is cleared first, so it is never shown as current.
+  ======================================================= */
+
+  const buildInsightMetricsRef = useRef(buildInsightMetrics);
+  buildInsightMetricsRef.current = buildInsightMetrics;
+  const filtersKey = JSON.stringify(filters);
+
+  useEffect(() => {
+    if (loading) return;
+    insightRunId.current += 1;
+    const run = insightRunId.current;
+    let cancelled = false;
+    const stale = () => cancelled || run !== insightRunId.current;
+
+    setInsight(null);
+    setInsightError(null);
+    setInsightFromBrowser(false);
+
+    // Filters that leave fewer than 5 students cannot be sent to the AI, so there is nothing to look up.
+    if (hasActiveFilters && isSmallGroup(totalStudents)) return;
+
+    const timer = window.setTimeout(async () => {
+      let reach = insightReachRef.current;
+      if (reach === undefined) {
+        reach = await fetchMaterialReachForInsight();
+        insightReachRef.current = reach;
+        if (stale()) return;
+      }
+      const metrics = buildInsightMetricsRef.current(reach);
+      const key = await insightBrowserKey("full_dashboard", metrics, AGE_BRACKETS);
+      if (stale()) return;
+      try {
+        const { insight: saved } = await fetchLatestInsight("full_dashboard", metrics, AGE_BRACKETS);
+        if (stale()) return;
+        if (saved) {
+          setInsight(saved);
+          saveInsightInBrowser(key, saved);
+        }
+      } catch {
+        // The server could not be asked: fall back to this browser's copy for exactly these figures, if any.
+        if (stale()) return;
+        const fallback = readSavedInsight(key);
+        if (fallback) {
+          setInsight({ ...fallback, cached: true });
+          setInsightFromBrowser(true);
+        }
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, filtersKey]);
 
   /* =======================================================
      LOADING
@@ -3208,7 +3283,7 @@ export default function AnalyticsDashboard() {
                 </div>
                 <p className="m-0 text-xs text-[#A5A8E0]">
                   Generated {new Date(insight.generatedAt).toLocaleString()}
-                  {insight.cached ? " · cached" : ""}. Generated from the figures on this page. Check before using in a report.
+                  {insight.cached ? " · cached" : ""}{insightFromBrowser ? " · saved in this browser, could not be checked against the latest figures" : ""}. Generated from the figures on this page. Check before using in a report.
                 </p>
               </>
             ) : null}

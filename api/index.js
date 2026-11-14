@@ -160,6 +160,16 @@ const analyticsInsightLimiter = rateLimit({
     handler: rateLimitHandler,
 });
 
+// The read-only "latest insight" lookup never calls the AI. It does the same server-side figures as a
+// generation (to get the same hash), so it is capped on its own and does NOT count against the 40 a day above.
+const insightPeekLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
+});
+
 // Light blanket cap on every /api/* route as a general safety net against
 // scripted abuse/scraping, on top of the stricter limiters above.
 const globalApiLimiter = rateLimit({
@@ -300,6 +310,20 @@ function findPII(value, path = 'metrics') {
         return path;
     }
     return null;
+}
+
+// The Learning gain figures for the insight are worked out here, from the same tables and rules as the
+// Learning gain card, because telling students from records and the student-level t-test need per-student
+// data the browser does not have. Only aggregates are added. Read-only. Used by BOTH the generating endpoint and
+// the "latest" lookup, so they hash exactly the same figures.
+async function addServerFigures(section, metrics, ageBrackets) {
+    if (section !== 'full_dashboard') return;
+    try {
+        metrics.learningGain = buildLearningGainForInsight(await loadLearningGainRaw(supabase), ageBrackets);
+    } catch (lgError) {
+        console.warn('analytics-insight: learning gain figures unavailable:', lgError.message);
+        metrics.learningGain = { unavailable: true };
+    }
 }
 
 async function callOpenRouter(model, metrics, sectionLabel) {
@@ -1372,17 +1396,7 @@ app.post('/api/analytics-insight', analyticsInsightLimiter, async (req, res) => 
             return res.status(400).json({ message: "metrics must be an object of aggregate figures" });
         }
 
-        // The Learning gain figures for the insight are worked out here, from the same tables and rules as the
-        // Learning gain card, because telling students from records and the student-level t-test need per-student
-        // data the browser does not have. Only aggregates are added. Read-only.
-        if (section === 'full_dashboard') {
-            try {
-                metrics.learningGain = buildLearningGainForInsight(await loadLearningGainRaw(supabase), req.body.ageBrackets);
-            } catch (lgError) {
-                console.warn('analytics-insight: learning gain figures unavailable:', lgError.message);
-                metrics.learningGain = { unavailable: true };
-            }
-        }
+        await addServerFigures(section, metrics, req.body.ageBrackets);
 
         const piiPath = findPII(metrics);
         if (piiPath) {
@@ -1408,6 +1422,7 @@ app.post('/api/analytics-insight', analyticsInsightLimiter, async (req, res) => 
                     generatedAt: cached.generated_at,
                     cached: true,
                     model: cached.model_used,
+                    dataHash,
                 });
             }
         }
@@ -1448,10 +1463,50 @@ app.post('/api/analytics-insight', analyticsInsightLimiter, async (req, res) => 
             generatedAt,
             cached: false,
             model: modelUsed,
+            dataHash,
         });
     } catch (error) {
         console.error("Analytics Insight Error:", error.message);
         res.status(500).json({ message: error.message });
+    }
+});
+
+// The latest saved insight for EXACTLY these figures, so it survives leaving the Analytics page and coming back.
+// Read-only: it never calls OpenRouter and never writes. The same admin check as the generating endpoint, and the
+// same preparation and hash, so a saved insight is returned only when the figures and filters are identical;
+// otherwise insight is null. The cache holds one row per section (the last insight generated).
+app.post('/api/admin/analytics-insight/latest', insightPeekLimiter, async (req, res) => {
+    try {
+        const admin = await requireActiveAdmin(req, res, 'Only admins can view analytics insights');
+        if (!admin) return;
+        const { section, metrics, ageBrackets } = req.body || {};
+        if (typeof section !== 'string' || !section.trim()) {
+            return res.status(400).json({ message: 'section is required' });
+        }
+        if (!metrics || typeof metrics !== 'object' || Array.isArray(metrics)) {
+            return res.status(400).json({ message: 'metrics must be an object of aggregate figures' });
+        }
+        if (findPII(metrics)) {
+            return res.status(400).json({ message: 'Payload rejected: only aggregate figures are allowed.' });
+        }
+        await addServerFigures(section, metrics, ageBrackets);
+        const dataHash = hashMetrics(metrics);
+        const { data: cached, error } = await supabase
+            .from('analytics_insights')
+            .select('insight, data_hash, model_used, generated_at')
+            .eq('section', section)
+            .maybeSingle();
+        if (error) throw error;
+        if (!cached || cached.data_hash !== dataHash) {
+            return res.status(200).json({ hash: dataHash, insight: null });
+        }
+        res.status(200).json({
+            hash: dataHash,
+            insight: { section, insight: cached.insight, generatedAt: cached.generated_at, cached: true, model: cached.model_used, dataHash },
+        });
+    } catch (error) {
+        console.error('analytics-insight latest error:', error.message);
+        res.status(500).json({ message: 'Could not look up the saved insight.' });
     }
 });
 
