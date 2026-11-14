@@ -62,6 +62,8 @@ import {
 
 import { motion } from "framer-motion";
 import { fetchAnalyticsInsight, type AnalyticsInsightResult } from "../../lib/analyticsInsight";
+import { buildInsightPayload } from "../../lib/insightPayload";
+import { fetchStudentLevelTest } from "../../lib/learningGainStudents";
 import { campusLabel } from "../../lib/campuses";
 import LearningGainSection from "./LearningGainSection";
 import {
@@ -92,7 +94,6 @@ import {
 import {
   AGE_BRACKETS,
   SMALL_SAMPLE_N,
-  T_TEST_CAUTION_N,
   pairedTTest,
   formatPValue,
   yearLevelLabel,
@@ -2670,7 +2671,11 @@ export default function AnalyticsDashboard() {
   };
 
   const buildLearningSection = async (): Promise<ReportSection | null> => {
-    const { data, error } = await supabase.rpc("learning_gain_summary", buildLearningGainParams(filters));
+    const learningParams = buildLearningGainParams(filters);
+    const [{ data, error }, studentTest] = await Promise.all([
+      supabase.rpc("learning_gain_summary", learningParams),
+      fetchStudentLevelTest(learningParams),
+    ]);
     if (error || !data) return null;
 
     const payload = data as any;
@@ -2701,10 +2706,19 @@ export default function AnalyticsDashboard() {
             gain,
             // Same values as the Learning gain card: group-level (post - pre) / (100 - pre) and the paired t-test p.
             row.norm_gain === null || row.norm_gain === undefined ? "—" : Number(row.norm_gain).toFixed(2),
-            pairedPCell(row),
+            // The overall row is tested across students (each counts once); a program row has one record per student.
+            row.dimension === "overall"
+              ? studentTest?.pairedTTest
+                ? studentTest.pairedTTest.pValue
+                : "n/a"
+              : pairedPCell(row),
           ];
         }),
-      note: "Paired students only (both a pre-test and a post-test). A group under 5 paired students is shown with a caution note.",
+      note: `Paired students only (both a pre-test and a post-test). A group under 5 paired students is shown with a caution note.${
+        studentTest?.pairedTTest
+          ? ` Overall paired t-test (${studentTest.pairedTTest.students} students): t(${studentTest.pairedTTest.df}) = ${studentTest.pairedTTest.t.toFixed(2)}, ${studentTest.pairedTTest.pValue}. Means are from matched records; the test averages each student's records so each student counts once.`
+          : ""
+      }`,
     };
   };
 
@@ -2918,138 +2932,51 @@ export default function AnalyticsDashboard() {
      themselves — nothing here reaches into raw rows.
   ======================================================= */
 
-  const buildInsightMetrics = () => ({
-    overview: {
-      studentsCovered: totalStudents,
-      guidancePrograms: totalGuidancePrograms,
-      activeSurveys,
-      uniqueSurveyParticipants: surveyParticipants,
-      surveyResponses: totalSurveyResponses,
-      totalMaterials,
-      totalIECMaterials,
-      iecMaterialsThisMonth,
-      materialsThisMonth,
-      materialsThisYear,
-      totalIECDownloads: totalIECDowloads,
-      downloadsThisMonth,
-      pwdStudents: inclusionAnalytics.pwd,
-      ipStudents: inclusionAnalytics.ip,
-    },
-    materials: {
-      byCategory: iecCategoryAnalytics,
-      byType: materialTypeAnalytics,
-      byFormat: materialFormatAnalytics,
-    },
-    knowledgeAwareness: {
-      overallAverageScorePercent: awarenessAnalytics.overall,
-      scoredResponses: awarenessAnalytics.totalResponses,
-      byProgram: programAwarenessAnalytics,
-      byYearLevel: awarenessAnalytics.byYearLevel,
-      byGender: awarenessAnalytics.byGender,
-      byPwdStatus: awarenessAnalytics.byPwd,
-      byIpStatus: awarenessAnalytics.byIp,
-      guidanceServiceCoverage,
+  // What the AI is sent: see lib/insightPayload.ts (students vs records, labelled percentages). The Learning
+  // gain figures are added by the server (api/insightLearningGain.js), from the same rules as the card.
+  const buildInsightMetrics = (reach: MaterialReachSummary | null) =>
+    buildInsightPayload({
+      filtersActive: hasActiveFilters,
+      overview: {
+        studentsMatchingTheFilters: totalStudents,
+        guidancePrograms: totalGuidancePrograms,
+        activeSurveys,
+        studentsWhoAnsweredAnAssessment: surveyParticipants,
+        assessmentRecords: totalSurveyResponses,
+        scoredAssessmentRecords: awarenessAnalytics.totalResponses,
+        pwdStudents: inclusionAnalytics.pwd,
+        ipStudents: inclusionAnalytics.ip,
+      },
+      materials: {
+        total: totalMaterials,
+        iec: totalIECMaterials,
+        iecCreatedThisMonth: iecMaterialsThisMonth,
+        createdThisMonth: materialsThisMonth,
+        createdThisYear: materialsThisYear,
+        iecDownloads: totalIECDowloads,
+        downloadsFromThisMonthsUploads: downloadsThisMonth,
+        iecByCategory: iecCategoryAnalytics,
+        byType: materialTypeAnalytics,
+        byFormat: materialFormatAnalytics.map((row) => ({ name: row.format, value: row.count })),
+      },
+      studentCounts: {
+        byCourse: courseAnalytics,
+        byYearLevel: yearLevelAnalytics,
+        byGender: genderAnalytics,
+        byAgeBand: ageAnalytics.map((row) => ({ group: row.group, count: row.count })),
+        byCampus: campusAnalytics,
+      },
       programParticipationByCourse,
-      awarenessByMaterialExposure: materialExposureAwareness,
-    },
-    demographics: {
-      byCourse: courseAnalytics,
-      byYearLevel: yearLevelAnalytics,
-      byGender: genderAnalytics,
-      byAgeBand: ageAnalytics,
-      byCampus: campusAnalytics,
-    },
-  });
-
-  // Learning Gain lives in its own section with its own data source
-  // (learning_gain_summary RPC) and filters, so it's fetched here
-  // separately — unfiltered, all dimensions — for the AI Insight. Only
-  // aggregates, same as everything else sent. If it can't be loaded the
-  // insight still generates without it.
-  const fetchLearningGainForInsight = async () => {
-    const { data, error } = await supabase.rpc("learning_gain_summary", {
-      p_age_brackets: AGE_BRACKETS,
+      materialReach: reach,
     });
 
-    if (error || !data) {
-      return { unavailable: true };
-    }
-
-    const payload = data as any;
-    const programTitles = new Map<string, string>(
-      (payload.options?.programs || []).map((p: any) => [String(p.id), p.title])
-    );
-    const round = (value: unknown, digits: number) =>
-      value === null || value === undefined ? null : Number(Number(value).toFixed(digits));
-
-    const shape = (row: any) => {
-      const n = Number(row.paired_n) || 0;
-      const test = pairedTTest(
-        n,
-        row.mean_gain === null ? null : Number(row.mean_gain),
-        row.sd_diff === null ? null : Number(row.sd_diff)
-      );
-      const group =
-        row.dimension === "program"
-          ? programTitles.get(String(row.key)) || `Program ${row.key}`
-          : row.dimension === "year_level"
-            ? yearLevelLabel(String(row.key))
-            : String(row.key);
-
-      return {
-        group,
-        pairedStudents: n,
-        incompleteStudents: Number(row.incomplete_n) || 0,
-        meanPreTestPercent: round(row.mean_pre, 1),
-        meanPostTestPercent: round(row.mean_post, 1),
-        meanGainPoints: round(row.mean_gain, 1),
-        normalizedGain: round(row.norm_gain, 2),
-        pairedTTest: test
-          ? { t: round(test.t, 2), df: test.df, p: round(test.p, 4), significantAtP05: test.significant }
-          : null,
-        smallSample: n > 0 && n < SMALL_SAMPLE_N,
-        interpretWithCaution: n > 0 && n < T_TEST_CAUTION_N,
-      };
-    };
-
-    const rows: any[] = Array.isArray(payload.rows) ? payload.rows : [];
-    const byDimension = (dimension: string) =>
-      rows.filter((row) => row.dimension === dimension).map(shape);
-    const overall = rows.find((row) => row.dimension === "overall");
-
-    return {
-      about:
-        "Pre-test vs post-test on each program's knowledge assessment (one-group pretest-posttest). Paired students only; incomplete = pre-test only. Gain is in percentage points; normalizedGain = (post - pre) / (100 - pre). A paired t-test p below 0.05 means the difference is significant. Not affected by the dashboard filters.",
-      overall: overall ? shape(overall) : null,
-      byProgram: byDimension("program"),
-      byCourse: byDimension("course"),
-      byGender: byDimension("gender"),
-      byAgeBracket: byDimension("age_bracket"),
-      byYearLevel: byDimension("year_level"),
-      byPwdStatus: byDimension("pwd"),
-      byIpStatus: byDimension("ip"),
-    };
-  };
-
-  // Material reach by course for the AI Insight: counts only, unfiltered,
-  // test accounts excluded (not the on-screen toggle), all IEC programs.
-  const fetchMaterialReachForInsight = async () => {
+  // Material reach by course for the AI Insight: counts only, unfiltered (all IEC programs), test accounts
+  // left out. This is the Material reach card with no filters, so the denominator is the same.
+  const fetchMaterialReachForInsight = async (): Promise<MaterialReachSummary | null> => {
     try {
-      const reach = await fetchMaterialReach(UNFILTERED_REACH);
-      return {
-        about:
-          "Share of students (with an account in the system, not total enrollment) who opened at least one linked IEC material, per course. Counts only. Views were only recorded since materials were linked to programs, so earlier students may be understated. Not affected by the dashboard filters.",
-        overall: reach.overall,
-        byCourse: reach.by_course.map((row) => ({
-          course: row.key,
-          students: row.students,
-          openedAtLeastOne: row.reached,
-          percentReached: row.pct,
-          smallSample: row.students < SMALL_SAMPLE_N,
-        })),
-      };
+      return await fetchMaterialReach(UNFILTERED_REACH);
     } catch {
-      return { unavailable: true };
+      return null;
     }
   };
 
@@ -3070,12 +2997,9 @@ export default function AnalyticsDashboard() {
       const result = await fetchAnalyticsInsight(
         "full_dashboard",
         "Full Analytics Dashboard",
-        {
-          ...buildInsightMetrics(),
-          learningGain: await fetchLearningGainForInsight(),
-          materialReach: await fetchMaterialReachForInsight(),
-        },
-        regenerate
+        buildInsightMetrics(await fetchMaterialReachForInsight()),
+        regenerate,
+        AGE_BRACKETS
       );
       setInsight(result);
     } catch (err: any) {

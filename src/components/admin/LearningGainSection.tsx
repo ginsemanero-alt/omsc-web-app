@@ -39,6 +39,7 @@ import {
   type LearningGainSummary,
 } from "../../lib/learningGain";
 import { ALL, MIN_GROUP_SIZE, isSmallGroup, smallGroupNote, type AnalyticsFilters } from "../../lib/analyticsFilters";
+import { fetchStudentLevelTest, type StudentLevelTest } from "../../lib/learningGainStudents";
 
 /* =========================================================
    LEARNING GAIN (pre-test vs post-test)
@@ -138,12 +139,18 @@ export default function LearningGainSection({ filters }: { filters: AnalyticsFil
   });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // The student-level paired t-test (PHASE 57+): each student counts once. null = not loaded or unavailable.
+  // undefined = still loading.
+  const [studentTest, setStudentTest] = useState<StudentLevelTest | null | undefined>(undefined);
 
   const fetchSummary = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    setStudentTest(undefined);
 
-    const { data, error } = await supabase.rpc("learning_gain_summary", buildLearningGainParams(filters));
+    const params = buildLearningGainParams(filters);
+    const studentTestPromise = fetchStudentLevelTest(params);
+    const { data, error } = await supabase.rpc("learning_gain_summary", params);
 
     if (error) {
       console.error("Learning gain:", error);
@@ -170,6 +177,7 @@ export default function LearningGainSection({ filters }: { filters: AnalyticsFil
       },
     });
     setLoading(false);
+    setStudentTest(await studentTestPromise);
   }, [filters]);
 
   useEffect(() => {
@@ -288,7 +296,6 @@ export default function LearningGainSection({ filters }: { filters: AnalyticsFil
       n: row.paired_n,
     }));
 
-  const overallTest = pairedTTest(overall.paired_n, overall.mean_gain, overall.sd_diff);
   const overallLevel = normalizedGainLevel(overall.norm_gain);
   const attempted = overall.paired_n + overall.incomplete_n;
   const attritionPct = attempted > 0 ? (overall.incomplete_n / attempted) * 100 : 0;
@@ -382,20 +389,33 @@ export default function LearningGainSection({ filters }: { filters: AnalyticsFil
               {overallLevel && <span className="self-start mt-1"><GainLevelBadge level={overallLevel} /></span>}
             </div>
             <div className="col-span-2 lg:col-span-1 px-[22px] py-5 rounded-[26px] bg-[#1E1B4B] text-white flex flex-col gap-1 min-w-0">
-              <span className="text-[13px] font-semibold text-[#FBBF24]">Paired t-test</span>
-              <span className="font-bricolage font-extrabold text-[28px] leading-tight">
-                {overallTest
-                  ? overallTest.p < 0.001
-                    ? "p < .001"
-                    : `p = ${formatPValue(overallTest.p)}`
-                  : "Not enough data"}
+              {/* The significance test counts each STUDENT once (their records are averaged), so it is not the
+                  record-level test the means above come from. */}
+              <span className="text-[13px] font-semibold text-[#FBBF24]">
+                {studentTest?.pairedTTest ? `Paired t-test (${studentTest.pairedTTest.students} students)` : "Paired t-test"}
+              </span>
+              <span className="font-bricolage font-extrabold text-[22px] leading-tight">
+                {studentTest === undefined
+                  ? "Working it out…"
+                  : studentTest === null
+                    ? "Not available right now"
+                    : studentTest.pairedTTest
+                      ? `t(${studentTest.pairedTTest.df}) = ${studentTest.pairedTTest.t.toFixed(2)}, ${studentTest.pairedTTest.pValue}`
+                      : "Not enough data"}
               </span>
               <span className="text-xs text-[#C7C9F2]">
-                {overallTest
-                  ? `t(${overallTest.df}) = ${overallTest.t.toFixed(2)} · ${overallTest.significant ? "Significant at 0.05" : "Not significant at 0.05"}`
-                  : "Needs at least 2 paired students with differing gains"}
+                {studentTest?.pairedTTest
+                  ? studentTest.pairedTTest.significantAtP05 ? "Significant at 0.05" : "Not significant at 0.05"
+                  : studentTest === undefined
+                    ? ""
+                    : "Needs at least 2 students with differing gains"}
               </span>
-              {overall.paired_n > 0 && overall.paired_n < T_TEST_CAUTION_N && (
+              {studentTest?.pairedTTest && (
+                <span className="text-xs text-[#C7C9F2] leading-snug">
+                  Means are from {overall.paired_n} matched records; the t-test averages each student's records so each student counts once.
+                </span>
+              )}
+              {studentTest?.pairedTTest && studentTest.students < T_TEST_CAUTION_N && (
                 <span className="self-start mt-1"><CautionBadge compact /></span>
               )}
             </div>

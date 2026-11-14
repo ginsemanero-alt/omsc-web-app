@@ -8,6 +8,8 @@ import { Resend } from 'resend';
 import crypto from 'crypto';
 import { createRetention, registerRetentionRoutes } from './retention.js';
 import { createReminders } from './reminders.js';
+import { SYSTEM_PROMPT, buildUserPrompt } from './insightPrompt.js';
+import { buildLearningGainForInsight, buildStudentLevelTest, loadLearningGainRaw } from './insightLearningGain.js';
 
 
 const app = express();
@@ -211,13 +213,13 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 // primary) was still listed but answered 404 "Function not found", and
 // google/gemma-4-31b-it:free was rate-limited upstream, so the button failed
 // for everyone. The models below were checked on 2026-10-28 with the real
-// prompt: laguna answers in ~3-7 s, nemotron-ultra in ~8-12 s. They are tried
+// prompt: nemotron-ultra answers in ~8-12 s. (poolside/laguna-s-2.1:free was dropped on 2026-11-14: OpenRouter
+// answers 404 "no longer available".) They are tried
 // in order, each ONCE (a failed attempt still counts against the free daily
 // quota), and the first that answers wins. To swap models WITHOUT a code
 // change, set OPENROUTER_MODELS in Vercel to a comma-separated list of
 // OpenRouter ids (most preferred first).
 const DEFAULT_OPENROUTER_MODELS = [
-    'poolside/laguna-s-2.1:free',
     'nvidia/nemotron-3-ultra-550b-a55b:free',
     'google/gemma-4-26b-a4b-it:free',
 ];
@@ -301,17 +303,9 @@ function findPII(value, path = 'metrics') {
 }
 
 async function callOpenRouter(model, metrics, sectionLabel) {
-    const systemPrompt = [
-        'You are explaining guidance-office analytics data to a school guidance counselor who is not a developer or data analyst.',
-        'Summarize it as a short, concise bulleted list of the most important findings — not flowing paragraphs.',
-        'Write between 4 and 8 bullet points. Each bullet is one short, plain-language sentence — get straight to the point, no filler, no restating the section title.',
-        'Only ever refer to numbers that literally appear in the JSON data you are given. Never invent, estimate, or round a number that is not present in that data.',
-        'If a figure is missing or zero, say so plainly in its own bullet instead of guessing.',
-        'If learningGain data is present, state whether scores improved from pre-test to post-test and whether the paired t-test is significant (p below 0.05), and flag any result marked smallSample or interpretWithCaution as based on few students.',
-        'Start every bullet on its own line with a dash and a space, like "- your point here". Do not use any other markdown — no asterisks for bold or italics, no # headers, no numbered lists, no backticks.',
-    ].join(' ');
-
-    const userPrompt = `Section: ${sectionLabel}\n\nAggregated data (JSON):\n${JSON.stringify(metrics, null, 2)}\n\nSummarize what this data means for the guidance office.`;
+    // The wording lives in insightPrompt.js (students vs records, labelled percentages, student-level test...).
+    const systemPrompt = SYSTEM_PROMPT;
+    const userPrompt = buildUserPrompt(metrics, sectionLabel);
 
     // A hung provider (no response, ever) is worse than a fast error — it
     // would stall this request indefinitely instead of moving on to the
@@ -1378,6 +1372,18 @@ app.post('/api/analytics-insight', analyticsInsightLimiter, async (req, res) => 
             return res.status(400).json({ message: "metrics must be an object of aggregate figures" });
         }
 
+        // The Learning gain figures for the insight are worked out here, from the same tables and rules as the
+        // Learning gain card, because telling students from records and the student-level t-test need per-student
+        // data the browser does not have. Only aggregates are added. Read-only.
+        if (section === 'full_dashboard') {
+            try {
+                metrics.learningGain = buildLearningGainForInsight(await loadLearningGainRaw(supabase), req.body.ageBrackets);
+            } catch (lgError) {
+                console.warn('analytics-insight: learning gain figures unavailable:', lgError.message);
+                metrics.learningGain = { unavailable: true };
+            }
+        }
+
         const piiPath = findPII(metrics);
         if (piiPath) {
             // Logged, not detailed to the client — the exact path could
@@ -1833,6 +1839,28 @@ registerRetentionRoutes(app, {
     requireActiveAdmin,
     limiter: retentionAdminLimiter,
     reminders: createReminders({ supabase }),
+});
+
+// The student-level paired t-test shown on the Learning gain card. The card's SQL gives record-level numbers
+// (one record = one student in one program); this counts each student once, under the card's own filters.
+// Read-only, aggregates only (a count, two means, t, df, p), admin only.
+app.post('/api/admin/learning-gain-students', retentionAdminLimiter, async (req, res) => {
+    try {
+        const admin = await requireActiveAdmin(req, res, 'Only administrators can view this.');
+        if (!admin) return;
+        const b = req.body && typeof req.body === 'object' ? req.body : {};
+        const num = (v) => (v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
+        const str = (v) => (typeof v === 'string' && v.trim() && v.length <= 200 ? v : null);
+        const bool = (v) => (typeof v === 'boolean' ? v : null);
+        const params = {
+            p_program_id: num(b.p_program_id), p_course: str(b.p_course), p_year_level: str(b.p_year_level), p_gender: str(b.p_gender),
+            p_age_min: num(b.p_age_min), p_age_max: num(b.p_age_max), p_campus: str(b.p_campus), p_pwd: bool(b.p_pwd), p_ip: bool(b.p_ip), p_academic_year: num(b.p_academic_year),
+        };
+        res.status(200).json(buildStudentLevelTest(await loadLearningGainRaw(supabase), params));
+    } catch (error) {
+        console.error('learning-gain-students error:', error.message);
+        res.status(500).json({ message: 'Could not work out the student-level test.' });
+    }
 });
 
 // PHASE 55: the "Send email notifications" switch. Only an active administrator

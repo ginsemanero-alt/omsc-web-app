@@ -22,7 +22,9 @@ export async function fetchAnalyticsInsight(
   section: string,
   sectionLabel: string,
   metrics: Record<string, unknown>,
-  regenerate = false
+  regenerate = false,
+  // The age bands the page uses, so the server groups the Learning gain figures the same way.
+  ageBrackets?: { label: string; min: number; max: number | null }[]
 ): Promise<AnalyticsInsightResult> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) {
@@ -37,7 +39,7 @@ export async function fetchAnalyticsInsight(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ section, sectionLabel, metrics, regenerate }),
+      body: JSON.stringify({ section, sectionLabel, metrics, regenerate, ageBrackets }),
     });
   } catch {
     // Offline / blocked: still one clear sentence.
